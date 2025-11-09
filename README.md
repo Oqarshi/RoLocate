@@ -1,5 +1,27 @@
-# 🌍 RoLocate – Free Roblox Server Filtering  
-A powerful, **100% free** alternative to paid Roblox extensions.
+<div align="center">
+
+  <img src="https://oqarshi.github.io/Invite/rolocate/assets/logo.svg" width="128" alt="RoLocate Logo">
+
+  <h3>🌍 RoLocate</h3>
+
+  <p><strong>Free Roblox Server Filtering</strong><br>
+  A powerful, <strong>100% free</strong> alternative to paid Roblox extensions.</p>
+
+  [![Website][website-badge]][website-link]
+  [![GreasyFork][greasyfork-badge]][greasyfork-link]
+  [![License][license-badge]][license-link]
+  [![Open Source][opensource-badge]][github-link]
+
+  <br><br>
+  <strong>Version 43.3</strong> · Created & maintained by <strong>Oqarshi</strong>
+  <br><br>
+  [Official Website][website-link]
+  ·
+  [Report issue][greasyfork-feedback-link]
+  ·
+  [View Source][github-link]
+
+</div>
 
 ---
 
@@ -9,29 +31,25 @@ A powerful, **100% free** alternative to paid Roblox extensions.
 
 🔥 **RECOMMENDED:** Install **[Violentmonkey](https://violentmonkey.github.io/)** for the best experience and fastest server region searching!
 
-📍 **If Violentmonkey is blocked on your browser:** Use **[ScriptCat](https://docs.scriptcat.org/en/)** as your alternative!
+📍 **If Violentmonkey is blocked:** Use **[ScriptCat](https://docs.scriptcat.org/en/)** as an alternative!
 
-⚠️ **AVOID Tampermonkey** - It has known bugs that can slow down server searching by up to 100 times!
+⚠️ **AVOID Tampermonkey** – It can slow down server searching by up to **100×**!
 
 ---
 
 ## 🌐 Official Website & Credits  
-🔗 [**RoLocate Official Page**](https://oqarshi.github.io/Invite/rolocate)  
-🔗 [**RoLocate Website Repository and other stuff**](https://github.com/Oqarshi/Invite)  
-> 🚨 Greasyfork and The Github Repository are the **only official source** to install RoLocate.  
-> Do **not trust** third-party versions or reuploads.  
+
+🔗 [**RoLocate Official Page**][website-link]  
+🔗 [**RoLocate Source Code**][github-link]  
+
+> 🚨 **GreasyFork** and the **GitHub Repository** are the *only official sources* to install RoLocate.  
+> Do **not trust** third-party versions or reuploads.
 
 ---
 
-## 🏆 Credits
+## 🧠 What is RoLocate?
 
-🛠️ Created & maintained by **Oqarshi**
-
----
-
-
-## 🧠 What is RoLocate?  
-**RoLocate** is a **Roblox userscript** that adds a ton of features, with most popular being **server filtering** and the **SmartSearch** functionality.
+**RoLocate** is a **Roblox userscript** that adds tons of useful features — most notably **server filtering** and **SmartSearch**, helping you find the best servers faster and smoother.
 
 ---
 
@@ -40,99 +58,85 @@ A powerful, **100% free** alternative to paid Roblox extensions.
 ### 💡 Server Filter Demo  
 ![Server Filter Demo](https://raw.githubusercontent.com/Oqarshi/Invite/191cdc17ced81de87e552cd31e7981d09b34f025/rolocate/assets/ServerFilterDemo.gif)
 
----
-
 ### 💡 Smart Search Demo  
 ![Smart Search Demo](https://raw.githubusercontent.com/Oqarshi/Invite/191cdc17ced81de87e552cd31e7981d09b34f025/rolocate/assets/smartsearch-demo.gif)
 
 ---
 
 ## 🚀 Features
-   
-### ⚙️ General Tab
-- 🔍 **SmartSearch** – Instantly search for games, users, and groups directly from the Roblox search bar.
-- 🌍 **Auto Server Regions** – Replaces Roblox's 8 default servers with enhanced servers showing region and ping info.
-- ⚡ **Fast Server Search** – Increases server list loading speed up to 100x. Replaces avatars with static icons to reduce load time.
-- 🔄 **Invert Player Count** – Shows lowest-population servers first when enabled, highest when disabled. Works across both region and server popups.
-- 🕓 **Recent Servers** – Displays servers you've joined in the past 3 days for quick access.
 
----
+### ⚙️ General Tab
+- 🔍 **SmartSearch** – Instantly search for games, users, and groups right from the Roblox search bar.  
+- 🌍 **Auto Server Regions** – Shows enhanced servers with region and ping info.  
+- ⚡ **Fast Server Search** – Loads server lists up to **100× faster** by optimizing assets.  
+- 🔄 **Invert Player Count** – View lowest or highest population servers first.  
+- 🕓 **Recent Servers** – Quickly rejoin servers you’ve visited in the last 3 days.
 
 ### 🎨 Appearance Tab
-- 🎬 **Disable Trailer Autoplay** – Stops trailers from auto-playing on game pages.
-- 📍 **Smart Join Popup** – Displays a custom join popup with server location and details before you join.
-- ❌ **Remove All Roblox Ads** – Blocks most ads sitewide on the Roblox platform.
-- 🔄 **Restore Classic Terms** – Reverts corporate buzzwords Roblox has added. Example: “Connections” becomes “Friends”.
-- 🧭 **Quick Nav** – Adds customizable quick navigation buttons to the left panel of the Roblox site.
-- 🖼️ **Custom Backgrounds** – Allows you to change the background of your roblox page and customize the colors of other stuff on the page.
-
----
+- 🎬 **Disable Trailer Autoplay** – Stops trailers from auto-playing.  
+- 📍 **Smart Join Popup** – Shows server region and details before joining.  
+- ❌ **Remove All Roblox Ads** – Removes most ads across Roblox.  
+- 🔄 **Restore Classic Terms** – Changes words like “Connections” → “Friends.”  
+- 🧭 **Quick Nav** – Adds customizable navigation shortcuts.  
+- 🖼️ **Custom Backgrounds** – Lets you style the Roblox site your way.
 
 ### 🚀 Advanced Tab
-- 🛠️ **Enable Console Logs** – Enables script logs in your browser's console for debugging or monitoring.
-- ✅ **Enable Server Filters** – Activates the advanced server filtering UI on game pages.
-- 🔁 **Enable Server Hop Button** – Adds a button to quickly hop to a new server on game pages.
-- 🔔 **Enable Notifications** – Enables in-browser notifications for script actions and updates.
-- 📌 **Set Default Location** – Lets you set a fallback region manually if your location can't be detected automatically.
-
----
+- 🛠️ **Enable Console Logs** – See what the script’s doing in your browser console.  
+- ✅ **Enable Server Filters** – Turn on the advanced filtering UI on game pages.  
+- 🔁 **Enable Server Hop Button** – Instantly hop to a new game server.  
+- 🔔 **Enable Notifications** – Get in-browser alerts for updates and actions.  
+- 📌 **Set Default Location** – Manually choose a fallback region.
 
 ### ✨ Extra Tab
-- 🧹 **Game Quality Filter** – Automatically removes low-quality games from the discover and charts pages based on your personal settings.
-- 🧑‍🤝‍🧑 **Mutual Friends** – Shows mutual friends when viewing another user's profile.
-- 💬 **Disable Chat** – Completely removes the chat feature from the Roblox website.
-- 🚀 **Quick Launch Games** – Lets you instantly launch your favorite games from the Roblox homepage.
-- 👋 **Show Old Greeting** – Brings back the classic Roblox homepage greeting.
-- 👤 **Better Friends** – Improves the look of the friends section on the homepage and adds Best Friends option.
+- 🧹 **Game Quality Filter** – Hide low-quality games automatically.  
+- 🧑‍🤝‍🧑 **Mutual Friends** – View mutual friends on user profiles.  
+- 💬 **Disable Chat** – Completely remove chat from Roblox.  
+- 🚀 **Quick Launch Games** – Start your favorite games instantly.  
+- 👋 **Show Old Greeting** – Bring back the classic Roblox homepage greeting.  
+- 👤 **Better Friends** – Redesigns the friends list and adds Best Friends.
 
 ---
 
 ## 📥 Installation
 
-### 1. Install a Userscript Manager Extension
+1. **Install a Userscript Manager**  
+   Recommended: **[Violentmonkey](https://violentmonkey.github.io/)** for fastest performance.  
+   If blocked, use **[ScriptCat](https://docs.scriptcat.org/en/)**.
 
-You'll need a **userscript manager** to get started. I recommend **Violentmonkey** because it helps with **faster server region searching**.
+2. **Go to GreasyFork**  
+   [Install from GreasyFork][greasyfork-link] – a trusted userscript repository.
 
-If you're using **Chrome** and Violentmonkey is blocked, you can try **ScriptCat** instead. Just keep in mind that its **English translation isn't fully complete**.
+3. **Install the Script**  
+   Click **Install**, confirm the popup, and you’re good to go.  
+   You can view the full source code under the **Code** tab.
 
-⚠️ **AVOID Tampermonkey** - It has known bugs that can slow down server searching by up to 100 times!
-
-### 2. Go to Greasyfork
-
-Click the "Install from GreasyFork" button above. Note: GreasyFork is a trusted repository for userscripts.
-
-### 3. Install the Script
-
-On the GreasyFork page, click the install button. Confirm the action if your userscript manager shows a popup. Note: You can see the source code if you click the code tab on the top.
-
-### 4. Visit Roblox
-
-Go to Roblox.com and enjoy the free features!
+4. **Visit Roblox**  
+   Go to [Roblox.com](https://roblox.com) and enjoy all the new features!
 
 ---
 
 ## ❓ FAQ
 
-### 🔹 Does RoLocate work on all browsers?
-Almost, RoLocate does work on all major browsers except Safari which I have not tested it on yet so there is no garantee it will work.
+**🔹 Does RoLocate work on all browsers?**  
+Almost — it works on all major browsers except Safari (untested).
 
-### 🔹 Is RoLocate free to use?
-Yes, RoLocate is completely free to use and open-source.
+**🔹 Is RoLocate free to use?**  
+Yes, RoLocate is completely free and open-source.
 
-### 🔹 How do I update RoLocate?
-If you installed from GreasyFork, updates are automatic!
+**🔹 How do I update RoLocate?**  
+If installed via GreasyFork, updates are automatic.
 
-### 🔹 I don't see the filter button!
-Firstly try refreshing the page. If that does not work then try reinstalling everything again. As a last resort ask a question on [GreasyFork](https://greasyfork.org/en/scripts/523727-rolocate/feedback).
+**🔹 I don’t see the filter button!**  
+Try refreshing first. If that fails, reinstall everything or ask on [GreasyFork Feedback][greasyfork-feedback-link].
 
-### 🔹 Can I use RoLocate on mobile?
-RoLocate is designed for desktop browsers. It is possible however on android devices if you have the Firefox/Edge browser installed.
+**🔹 Can I use RoLocate on mobile?**  
+It’s designed for desktop, but may work on Android browsers like Firefox or Edge.
 
-### 🔹 How does RoLocate find server locations?
-RoLocate uses this modified technique for finding server locations: [Roblox dev Forums](https://devforum.roblox.com/t/server-region-from-website/2862705).
+**🔹 How does RoLocate find server locations?**  
+It uses a modified [Roblox DevForum method][roblox-devforum-link].
 
-### 🔹 My question isn't answered here!
-Go to [GreasyFork](https://greasyfork.org/en/scripts/523727-rolocate/feedback) to get more help or the [troubleshooting page](https://oqarshi.github.io/Invite/rolocate/docs/#troubleshooting).
+**🔹 My question isn’t answered here!**  
+Visit the [Troubleshooting Page][troubleshooting-link] or leave a message on [GreasyFork Feedback][greasyfork-feedback-link].
 
 ---
 
@@ -152,3 +156,18 @@ Go to [GreasyFork](https://greasyfork.org/en/scripts/523727-rolocate/feedback) t
 ---
 
 🎉 **Enjoy RoLocate!** Feedback and suggestions are always welcome!
+
+---
+
+[website-link]: https://oqarshi.github.io/Invite/rolocate
+[github-link]: https://github.com/Oqarshi/RoLocate
+[greasyfork-link]: https://greasyfork.org/en/scripts/523727-rolocate
+[greasyfork-feedback-link]: https://greasyfork.org/en/scripts/523727-rolocate/feedback
+[license-link]: https://oqarshi.github.io/Invite/rolocate/license
+[troubleshooting-link]: https://oqarshi.github.io/Invite/rolocate/docs/#troubleshooting
+[roblox-devforum-link]: https://devforum.roblox.com/t/server-region-from-website/2862705
+
+[website-badge]: https://img.shields.io/website?style=for-the-badge&down_color=red&down_message=Offline&label=Website&up_color=success&up_message=Online&url=https%3A%2F%2Foqarshi.github.io%2FInvite%2Frolocate
+[greasyfork-badge]: https://img.shields.io/badge/GreasyFork-Install%20Now-blueviolet?style=for-the-badge
+[license-badge]: https://img.shields.io/badge/License-Personal%20Use%20Only-orange?style=for-the-badge
+[opensource-badge]: https://img.shields.io/badge/Open%20Source-Code-green?style=for-the-badge
