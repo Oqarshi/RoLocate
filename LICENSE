@@ -1,0 +1,34 @@
+RoLocate Userscript License
+Author: Oqarshi
+Copyright (c) 2025 Oqarshi
+License: Custom - Personal Use Only
+
+This license grants limited rights to end users and does not imply
+any transfer of copyright ownership.
+
+You MAY:
+  * Use and modify this script for personal, non-commercial use only.
+
+You MAY NOT:
+  * Redistribute or reupload this script (original or modified)
+  * Publish it on any website (GreasyFork, GitHub, UserScripts.org, etc.)
+  * Include it in commercial, monetized, or donation-based tools
+  * Remove or alter this license or attribution
+
+Attribution to the original author (Oqarshi) must always be preserved.
+Violations may result in takedown notices under DMCA or applicable law.
+
+Dependencies:
+  * All dependencies listed below are created by Oqarshi (RoLocate).
+
+  * Base64 Images & Icons:
+    https://update.greasyfork.org/scripts/535590/1586769/Rolocate%20Base64%20Image%20Library%2020.js
+
+  * Server Regions Data:
+    https://update.greasyfork.org/scripts/547134/1652105/Rolocate%20Server%20Region%20Data%20%28Data%20Saving%29.js
+
+  * Flag Icons (Base64):
+    https://update.greasyfork.org/scripts/540553/1648593/Rolocate%20Flag%20Base64%20Data.js
+
+  * Classic Terms Replacements:
+    https://update.greasyfork.org/scripts/544437/1642116/Rolocate%20Restore%20Classic%20Terms%20All%20Languages.js
