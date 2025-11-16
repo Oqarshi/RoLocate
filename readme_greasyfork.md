@@ -19,7 +19,7 @@
         <img src="https://img.shields.io/badge/GreasyFork-Install%20Now-blueviolet?style=for-the-badge" alt="GreasyFork Badge">
       </a>
 
-      <a href="https://oqarshi.github.io/Invite/rolocate/license">
+      <a href="https://github.com/Oqarshi/RoLocate?tab=License-1-ov-file">
         <img src="https://img.shields.io/badge/License-Personal%20Use%20Only-orange?style=for-the-badge" alt="License Badge">
       </a>
 
