@@ -160,7 +160,7 @@ Visit the [Troubleshooting Page][troubleshooting-link] or leave a message on [Gr
 ---
 
 [website-link]: https://oqarshi.github.io/Invite/rolocate
-[github-link]: https://github.com/Oqarshi/RoLocate
+[github-link]: https://greasyfork.org/en/scripts/523727-rolocate/code
 [greasyfork-link]: https://greasyfork.org/en/scripts/523727-rolocate
 [greasyfork-feedback-link]: https://greasyfork.org/en/scripts/523727-rolocate/feedback
 [license-link]: https://oqarshi.github.io/Invite/rolocate/license
