@@ -13,7 +13,7 @@
   [![Open Source][opensource-badge]][github-link]
 
   <br><br>
-  <strong>Version 43.3</strong> · Created & maintained by <strong>Oqarshi</strong>
+  <strong>Version 44.3</strong> · Created & maintained by <strong>Oqarshi</strong>
   <br><br>
   [Official Website][website-link]
   ·
