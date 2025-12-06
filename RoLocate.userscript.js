@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RoLocate
 // @namespace    https://oqarshi.github.io/
-// @version      43.3
+// @version      44.3
 // @description  Adds filter options to roblox server page. Alternative to paid extensions like RoPro, RoGold®, RoQol, and RoKit.
 // @author       Oqarshi
 // @match        https://www.roblox.com/*
@@ -73,7 +73,7 @@
 
     /*******************************************************
     name of function: ConsoleLogEnabled
-    description: console.logs eveyrthing if settings is turned
+    description: console.logs everything if settings is turned
     on
     *******************************************************/
     function ConsoleLogEnabled(...args) {
@@ -87,217 +87,202 @@
     description: notifications function
     *******************************************************/
     function notifications(message, type = 'info', emoji = '', duration = 3000) {
-        if (localStorage.getItem('ROLOCATE_enablenotifications') !== 'true') return;
+            if (localStorage.getItem('ROLOCATE_enablenotifications') !== 'true') return;
 
-        // Inject CSS once
-        if (!document.getElementById('toast-styles')) {
-            const style = document.createElement('style');
-            style.id = 'toast-styles';
-            style.innerHTML = `
-        @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
-        @keyframes slideOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(100%); } }
-        @keyframes shrink { from { width: 100%; } to { width: 0%; } }
+            if (!document.getElementById('toast-styles')) {
+                const style = document.createElement('style');
+                style.id = 'toast-styles';
+                style.innerHTML = `
+            @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
+            @keyframes slideOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(100%); } }
+            @keyframes shrink { from { width: 100%; } to { width: 0%; } }
 
-        #toast-container {
-            position: fixed; top: 20px; right: 20px; z-index: 999999999999999999;
-            display: flex; flex-direction: column; gap: 8px; pointer-events: none;
-        }
-
-        .toast {
-            background: #2d2d2d; color: #e8e8e8; padding: 12px 16px; border-radius: 8px;
-            font: 500 14px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            min-width: 280px; max-width: 400px; border: 1px solid rgba(255,255,255,0.15);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.25); animation: slideIn 0.3s ease-out;
-            pointer-events: auto; position: relative; overflow: hidden; will-change: transform;
-        }
-
-        .toast.removing { animation: slideOut 0.3s ease-in forwards; }
-        .toast:hover { background: #373737; }
-
-        .toast-content { display: flex; align-items: center; gap: 10px; }
-        .toast-icon { width: 16px; height: 16px; flex-shrink: 0; }
-        .toast-emoji { font-size: 16px; flex-shrink: 0; }
-        .toast-message { flex: 1; line-height: 1.4; }
-
-        .toast-close {
-            position: absolute; top: 4px; right: 6px; width: 20px; height: 20px;
-            cursor: pointer; opacity: 0.6; display: flex; align-items: center;
-            justify-content: center; border-radius: 4px; transition: opacity 0.2s;
-        }
-        .toast-close:hover { opacity: 1; background: rgba(255,255,255,0.1); }
-        .toast-close::before, .toast-close::after {
-            content: ''; position: absolute; width: 10px; height: 1px; background: #ccc;
-        }
-        .toast-close::before { transform: rotate(45deg); }
-        .toast-close::after { transform: rotate(-45deg); }
-
-        .progress-bar {
-            position: absolute; bottom: 0; left: 0; height: 2px;
-            background: rgba(255,255,255,0.25); animation: shrink linear forwards;
-        }
-
-        .toast.success { border-left: 3px solid #4CAF50; }
-        .toast.error { border-left: 3px solid #F44336; }
-        .toast.warning { border-left: 3px solid #FF9800; }
-        .toast.info { border-left: 3px solid #2196F3; }
-        `;
-            document.head.appendChild(style);
-        }
-
-        // Get or create container
-        let container = document.getElementById('toast-container');
-        if (!container) {
-            container = document.createElement('div');
-            container.id = 'toast-container';
-            document.body.appendChild(container);
-        }
-
-        // Create toast
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-
-        // Icon map
-        const icons = {
-            success: '<svg width="16" height="16" fill="none" stroke="#4CAF50" stroke-width="2" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>',
-            error: '<svg width="16" height="16" fill="none" stroke="#F44336" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>',
-            warning: '<svg width="16" height="16" fill="none" stroke="#FF9800" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>',
-            info: '<svg width="16" height="16" fill="none" stroke="#2196F3" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>'
-        };
-
-        // Build content
-        toast.innerHTML = `
-        <div class="toast-content">
-            <div class="toast-icon">${icons[type] || icons.info}</div>
-            ${emoji ? `<span class="toast-emoji">${emoji}</span>` : ''}
-            <span class="toast-message">${message.replace(/\n/g, '<br>')}</span>
-        </div>
-        <div class="toast-close"></div>
-        <div class="progress-bar" style="animation-duration: ${duration}ms;"></div>
-    `;
-
-        container.appendChild(toast);
-
-        // Auto remove functionality
-        let timeout = setTimeout(removeToast, duration);
-        const progressBar = toast.querySelector('.progress-bar');
-
-        // Hover pause/resume
-        toast.addEventListener('mouseenter', () => {
-            progressBar.style.animationPlayState = 'paused';
-            clearTimeout(timeout);
-        });
-
-        toast.addEventListener('mouseleave', () => {
-            progressBar.style.animationPlayState = 'running';
-            const remaining = (progressBar.offsetWidth / toast.offsetWidth) * duration;
-            timeout = setTimeout(removeToast, remaining);
-        });
-
-        // Close button
-        toast.querySelector('.toast-close').addEventListener('click', removeToast);
-
-        function removeToast() {
-            clearTimeout(timeout);
-            toast.classList.add('removing');
-            setTimeout(() => toast.remove(), 300);
-        }
-
-        // Return control object
-        return {
-            remove: removeToast,
-            update: (newMessage) => {
-                toast.querySelector('.toast-message').innerHTML = newMessage.replace(/\n/g, '<br>');
-            },
-            setType: (newType) => {
-                toast.className = `toast ${newType}`;
-                toast.querySelector('.toast-icon').innerHTML = icons[newType] || icons.info;
-            },
-            setDuration: (newDuration) => {
-                clearTimeout(timeout);
-                progressBar.style.animation = `shrink ${newDuration}ms linear forwards`;
-                timeout = setTimeout(removeToast, newDuration);
-            },
-            updateEmoji: (newEmoji) => {
-                const emojiEl = toast.querySelector('.toast-emoji');
-                if (emojiEl) emojiEl.textContent = newEmoji;
+            #toast-container {
+                position: fixed; top: 20px; right: 20px; z-index: 999999999999999999;
+                display: flex; flex-direction: column; gap: 8px; pointer-events: none;
             }
-        };
-    }
 
+            .toast {
+                background: #2d2d2d; color: #e8e8e8; padding: 12px 16px; border-radius: 8px;
+                font: 500 14px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                min-width: 280px; max-width: 400px; border: 1px solid rgba(255,255,255,0.15);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.25); animation: slideIn 0.3s ease-out;
+                pointer-events: auto; position: relative; overflow: hidden; will-change: transform;
+            }
 
+            .toast.removing { animation: slideOut 0.3s ease-in forwards; }
+            .toast:hover { background: #373737; }
+
+            .toast-content { display: flex; align-items: center; gap: 10px; }
+            .toast-icon { width: 16px; height: 16px; flex-shrink: 0; }
+            .toast-emoji { font-size: 16px; flex-shrink: 0; }
+            .toast-message { flex: 1; line-height: 1.4; }
+
+            .toast-close {
+                position: absolute; top: 4px; right: 6px; width: 20px; height: 20px;
+                cursor: pointer; opacity: 0.6; display: flex; align-items: center;
+                justify-content: center; border-radius: 4px; transition: opacity 0.2s;
+            }
+            .toast-close:hover { opacity: 1; background: rgba(255,255,255,0.1); }
+            .toast-close::before, .toast-close::after {
+                content: ''; position: absolute; width: 10px; height: 1px; background: #ccc;
+            }
+            .toast-close::before { transform: rotate(45deg); }
+            .toast-close::after { transform: rotate(-45deg); }
+
+            .progress-bar {
+                position: absolute; bottom: 0; left: 0; height: 2px;
+                background: rgba(255,255,255,0.25); animation: shrink linear forwards;
+            }
+
+            .toast.success { border-left: 3px solid #4CAF50; }
+            .toast.error { border-left: 3px solid #F44336; }
+            .toast.warning { border-left: 3px solid #FF9800; }
+            .toast.info { border-left: 3px solid #2196F3; }
+            `;
+                document.head.appendChild(style);
+            }
+
+            let container = document.getElementById('toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toast-container';
+                document.body.appendChild(container);
+            }
+
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+
+            const icons = {
+                success: '<svg width="16" height="16" fill="none" stroke="#4CAF50" stroke-width="2" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>',
+                error: '<svg width="16" height="16" fill="none" stroke="#F44336" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+                warning: '<svg width="16" height="16" fill="none" stroke="#FF9800" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>',
+                info: '<svg width="16" height="16" fill="none" stroke="#2196F3" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>'
+            };
+
+            toast.innerHTML = `
+            <div class="toast-content">
+                <div class="toast-icon">${icons[type] || icons.info}</div>
+                ${emoji ? `<span class="toast-emoji">${emoji}</span>` : ''}
+                <span class="toast-message">${message.replace(/\n/g, '<br>')}</span>
+            </div>
+            <div class="toast-close"></div>
+            <div class="progress-bar" style="animation-duration: ${duration}ms;"></div>
+        `;
+
+            container.appendChild(toast);
+
+            let timeout = setTimeout(removeToast, duration);
+            const progressBar = toast.querySelector('.progress-bar');
+
+            toast.addEventListener('mouseenter', () => {
+                progressBar.style.animationPlayState = 'paused';
+                clearTimeout(timeout);
+            });
+
+            toast.addEventListener('mouseleave', () => {
+                progressBar.style.animationPlayState = 'running';
+                const remaining = (progressBar.offsetWidth / toast.offsetWidth) * duration;
+                timeout = setTimeout(removeToast, remaining);
+            });
+
+            toast.querySelector('.toast-close').addEventListener('click', removeToast);
+
+            function removeToast() {
+                clearTimeout(timeout);
+                toast.classList.add('removing');
+                setTimeout(() => toast.remove(), 300);
+            }
+
+            return {
+                remove: removeToast,
+                update: (newMessage) => {
+                    toast.querySelector('.toast-message').innerHTML = newMessage.replace(/\n/g, '<br>');
+                },
+                setType: (newType) => {
+                    toast.className = `toast ${newType}`;
+                    toast.querySelector('.toast-icon').innerHTML = icons[newType] || icons.info;
+                },
+                setDuration: (newDuration) => {
+                    clearTimeout(timeout);
+                    progressBar.style.animation = `shrink ${newDuration}ms linear forwards`;
+                    timeout = setTimeout(removeToast, newDuration);
+                },
+                updateEmoji: (newEmoji) => {
+                    const emojiEl = toast.querySelector('.toast-emoji');
+                    if (emojiEl) emojiEl.textContent = newEmoji;
+                }
+            };
+        }
+
+    /*******************************************************
+    name of function: Update_Popup
+    description: basically update for every upodate
+    *******************************************************/
     function Update_Popup() {
 
-        const VERSION = "V43.3";
-        const PREV_VERSION = "V42.3";
+        const VERSION = "V44.3";
+        const PREV_VERSION = "V43.3";
 
         const CHANGELOG = {
-            custombackgrounds: {
-                title: "Custom Backgrounds",
-                icon: "🖼️",
-                subtitle: "Custom Backgrounds",
-                description: "This allows you to change the background of the roblox website to any image or video you want. Find it in the appearance tab.",
-                badge: "New",
-                settings: [
-                    { label: "Enabled by default", value: "True" },
-                    { label: "Toggle Location", value: "Appearance Tab" },
-                    { label: "Scope", value: "Roblox.com/*" }
-                ]
-            },
-            compactprivateservers: {
-                title: "Compact Private Servers",
-                icon: "📦",
-                subtitle: "Compact Private Servers",
-                description: "Compact Private Servers have been added. Enabled by default.",
-                badge: "New",
-                settings: [
-                    { label: "Enabled by default", value: "True" },
-                    { label: "Toggle Location", value: "Appearance Tab" },
-                    { label: "Scope", value: "Roblox.com/games/*" }
-                ]
-            },
-            removeads: {
-                title: "Remove All Roblox Ads",
-                icon: "🚫",
-                subtitle: "Adblocker",
-                description: "You can now choose what the adblocker blocks/hides. Available in settings.",
-                badge: "Updated",
-                settings: [
-                    { label: "Enabled by default", value: "True" },
-                    { label: "Toggle Location", value: "Appearance Tab" },
-                    { label: "Scope", value: "Roblox.com/*" }
-                ]
-            },
-            serverregions: {
+            Serverversions: {
                 title: "Server Regions",
-                icon: "🗺️",
+                icon: "🌐",
                 subtitle: "Server Regions",
-                description: "Also thumbnails should load in during fast search. Also fixed a bug which causes a lot of lag. Added more server regions.",
-                badge: "Updated",
+                description: "Server Versions have been added. Now allows you to find the oldest and newest servers and inbetween!",
+                badge: "Updated", // badges: New, Updated, Removed
                 settings: [
                     { label: "Enabled by default", value: "True" },
                     { label: "Toggle Location", value: "Advanced Tab" },
                     { label: "Scope", value: "Roblox.com/games/*" }
                 ]
             },
-            gamequalityfilter: {
-                title: "GameQualityFilter",
-                icon: "🔍",
-                subtitle: "Quality",
-                description: "Fixed some bugs.",
-                badge: "Updated",
+            btrobloxfix: {
+                title: "BTRoblox Comptatability",
+                icon: "✔️",
+                subtitle: "BTRoblox Comptatability",
+                description: "Fix server filters not working wityh BTRoblox. Go to settings -> Advanced -> Fix BTRoblox compatability",
+                badge: "Updated", // badges: New, Updated, Removed
                 settings: [
                     { label: "Enabled by default", value: "True" },
-                    { label: "Toggle Location", value: "Extras Tab" },
-                    { label: "Scope", value: "Roblox.com/*" }
+                    { label: "Toggle Location", value: "Advanced Tab" },
+                    { label: "Scope", value: "Roblox.com/games/*" }
                 ]
             },
-            removequicknav: {
-                title: "Quick Navigation",
-                icon: "🧭",
-                subtitle: "Removed",
-                description: "Removed it because it didn't work well.",
-                badge: "Removed",
+            QuickLaunch: {
+                title: "Quick Launch Games",
+                icon: "⚡",
+                subtitle: "Quick Launch Games",
+                description: "You can now move games around in Quick Launch Games.",
+                badge: "Updated", // badges: New, Updated, Removed
                 settings: [
+                    { label: "Enabled by default", value: "True" },
+                    { label: "Toggle Location", value: "Advanced Tab" },
+                    { label: "Scope", value: "Roblox.com/home" }
+                ]
+            },
+            CompactServer: {
+                title: "CompactServer",
+                icon: "🤏",
+                subtitle: "CompactServer",
+                description: "Compact Private Servers UI improvements.",
+                badge: "Updated", // badges: New, Updated, Removed
+                settings: [
+                    { label: "Enabled by default", value: "True" },
+                    { label: "Toggle Location", value: "Advanced Tab" },
+                    { label: "Scope", value: "Roblox.com/games/*" }
+                ]
+            },
+            mutualfriends: {
+                title: "Mutual Friends",
+                icon: "😎",
+                subtitle: "Mutual Friends",
+                description: "Mutual Friends has been fixed. (Broken by BTRoblox). It also shows profile pictures now.",
+                badge: "Updated", // badges: New, Updated, Removed
+                settings: [
+                    { label: "Enabled by default", value: "True" },
+                    { label: "Toggle Location", value: "Appearance Tab" },
+                    { label: "Scope", value: "Roblox.com/users/*" }
                 ]
             }
         };
@@ -307,7 +292,7 @@
         localStorage.setItem('version', VERSION);
         if (localStorage.getItem(PREV_VERSION)) localStorage.removeItem(PREV_VERSION);
 
-        const style = document.createElement('style');
+        const style = document.createElement('style'); // compact css in readablt format so it can save space.
         style.innerHTML = `
     .rup-popup {
         display: flex; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5);
@@ -619,7 +604,7 @@
         ShowOldGreeting: true, // enabled by default
         togglerecentserverbutton: true, // enable by default
         prioritylocation: "automatic", // automatic by default
-        fastservers: false, // disabled by default
+        fastservers: false, // enabled by default
         invertplayercount: false, // disabled by default
         enablenotifications: true, // enabled by default
         disabletrailer: true, // enabled by default
@@ -632,7 +617,8 @@
         betterfriends: true, // enabled by default
         restoreclassicterms: true, // enabled by default
         compactprivateservers: true, // enabled by default
-        custombackgrounds: false // disabled by default
+        custombackgrounds: false, // disabled by default
+        btrobloxfix: false // disabled by default
     };
 
     const presetConfigurations = {
@@ -660,7 +646,8 @@
                 betterfriends: true,
                 restoreclassicterms: true,
                 compactprivateservers: true,
-                custombackgrounds: false
+                custombackgrounds: false,
+                btrobloxfix: false
             }
         },
         serverfiltersonly: {
@@ -674,7 +661,7 @@
                 ShowOldGreeting: false,
                 togglerecentserverbutton: false,
                 prioritylocation: "automatic",
-                fastservers: true,
+                fastservers: false,
                 invertplayercount: false,
                 enablenotifications: true,
                 disabletrailer: false,
@@ -687,7 +674,8 @@
                 betterfriends: false,
                 restoreclassicterms: false,
                 compactprivateservers: false,
-                custombackgrounds: false
+                custombackgrounds: false,
+                btrobloxfix: false
             }
         },
         developerpref: {
@@ -714,7 +702,8 @@
                 betterfriends: true,
                 restoreclassicterms: true,
                 compactprivateservers: true,
-                custombackgrounds: false
+                custombackgrounds: false,
+                btrobloxfix: false
             }
         },
         disablerolocate: {
@@ -741,7 +730,8 @@
                 betterfriends: false,
                 restoreclassicterms: false,
                 compactprivateservers: false,
-                custombackgrounds: false
+                custombackgrounds: false,
+                btrobloxfix: false
             }
         }
     };
@@ -798,7 +788,7 @@
             return `
         <div class="home-section">
             <img class="rolocate-logo" src="${window.Base64Images.logo}" alt="ROLOCATE Logo">
-            <div class="version">Rolocate: Version 43.3</div>
+            <div class="version">Rolocate: Version 44.3</div>
             <div class="section-separator"></div>
             <p>Rolocate by Oqarshi.</p>
             <p class="license-note">
@@ -932,6 +922,13 @@
                 <span class="slider"></span>
                 Enable Notifications
                 <span class="help-icon" data-help="Enable Notifications">?</span>
+            </label>
+
+            <label class="toggle-slider">
+                <input type="checkbox" id="btrobloxfix">
+                <span class="slider"></span>
+                Fix BTRoblox Compatability
+                <span class="help-icon" data-help="Fix BTRoblox">?</span>
             </label>
 
             <div class="location-settings">
@@ -1097,6 +1094,7 @@
                 <li id="help-Enable Server Filters"><strong>Enable Server Filters:</strong> <span>Enables server filter features on the game page.</span></li>
                 <li id="help-Enable Server Hop Button"><strong>Enable Server Hop Button:</strong> <span>Enables server hop feature on the game page.</span></li>
                 <li id="help-Enable Notifications"><strong>Enable Notifications:</strong> <span>Enables helpful notifications from the script.</span></li>
+                <li id="help-Fix BTRoblox"><strong>Fix Btroblox Compatability:</strong> <span>Uses alternative methods to make the script compatible with BTRoblox.</span></li>
                 <li id="help-Set default location"><strong>Set default location:</strong> <span>Enables the user to set a default location for Roblox server regions. Turn this on if the script cannot automatically detect your location.</span></li>
             </ul>
 
@@ -2932,6 +2930,7 @@ li a.about-link:hover::after {
     description: menu to manage the custom backgrounds
     *******************************************************/
     function showSettingsPopup_background() {
+        notifications('Uh maybe i will work on this later but its kinda hard to update this', 'info', 'ℹ️', 4000);
         // === FILE HELPERS ===
         const fileToBase64 = (file) => new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -2941,15 +2940,32 @@ li a.about-link:hover::after {
         });
 
         const saveFile = async (key, file) => {
-            const MAX_SIZE = 5 * 1024 * 1024;
-            if (file.size > MAX_SIZE) {
-                notifications(`File exceeds 5MB (${(file.size / 1024 / 1024).toFixed(2)}MB)`, 'error', '⚠️', '8000');
+            // validate file type
+            const validImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/bmp']; // yea gif is considered an image.
+            const validVideoTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'];
+            const isImage = validImageTypes.includes(file.type);
+            const isVideo = validVideoTypes.includes(file.type);
+            if ((key === 'image' && !isImage) || (key === 'video' && !isVideo)) {
+                notifications(`Invalid file type: ${file.type}. Please upload a valid ${key === 'image' ? 'image (JPG, PNG, GIF, WebP)' : 'video (MP4, WebM, OGG)'} file.`, 'error', '⚠️', 8000);
+                return;
+            }
+
+            const SOFT_LIMIT = 5 * 1024 * 1024;   // 5MB - warning
+            const HARD_LIMIT = 20 * 1024 * 1024;  // 20MB - blocked
+            if (file.size > HARD_LIMIT) {
+                notifications(`File exceeds hard limit of ${(HARD_LIMIT / 1024 / 1024).toFixed(0)}MB (${(file.size / 1024 / 1024).toFixed(2)}MB). Please use a direct URL for larger files.`, 'error', '⚠️', 8000);
+                return;
+            }
+            if (file.size > SOFT_LIMIT) {
+                notifications(`Warning: File size is ${(file.size / 1024 / 1024).toFixed(2)}MB. Files over ${(SOFT_LIMIT / 1024 / 1024).toFixed(0)}MB may cause lag or slow page loads. Consider using a direct URL instead.`, 'warning', '⚠️', 10000);
+            }
+            if (typeof GM_setValue === 'undefined') {
+                notifications('Userscript storage (GM_setValue) not available. Cannot save file.', 'error', '⚠️', 8000);
                 return;
             }
             const base64Data = await fileToBase64(file);
             const fileData = { name: file.name, size: file.size, type: file.type, data: base64Data };
-            const storage = typeof GM_setValue !== 'undefined' ? GM_setValue : (k, v) => localStorage.setItem(k, v);
-            storage(`ROLOCATE_FILE_${key}`, JSON.stringify(fileData));
+            GM_setValue(`ROLOCATE_FILE_${key}`, JSON.stringify(fileData));
         };
 
         const getFile = (key) => {
@@ -4516,12 +4532,13 @@ li a.about-link:hover::after {
                       border-color: rgba(255, 255, 255, 0.3) !important;
                       color: white !important;
                       font-weight: 700 !important;
-                      box-shadow: 0 4px 15px rgba(255, 107, 53, 0.4) !important;
+                      padding-top: 13.5px;
+                      box-shadow: 0 4px 15px rgba(255, 107, 53, 0.2) !important;
                     }
                     .mutual-friends-more:hover {
                       background: linear-gradient(45deg, #ff5722, #e68900) !important;
                       border-color: rgba(255, 255, 255, 0.5) !important;
-                      box-shadow: 0 6px 20px rgba(255, 107, 53, 0.6) !important;
+                      box-shadow: 0 6px 20px rgba(255, 107, 53, 0.4) !important;
                     }
                     .mutual-friends-overlay {
                       position: fixed;
@@ -4832,14 +4849,33 @@ li a.about-link:hover::after {
             const friendsList = document.createElement('div');
             friendsList.className = 'mutual-friends-list';
 
-            const maxVisible = 6;
+            const maxVisible = 4;
             const friendsToShow = mutualFriends.slice(0, maxVisible);
+
+            // Get avatar map from cache
+            const avatarMap = localAvatarCache;
 
             friendsToShow.forEach(friend => {
                 const friendTag = document.createElement('div');
                 friendTag.className = 'mutual-friend-tag';
+
+                // Add avatar to the tag
+                const avatarUrl = avatarMap[friend.id];
                 const displayName = friend.displayName || friend.name || `User${friend.id}`;
-                friendTag.textContent = displayName;
+
+                if (avatarUrl) {
+                    // Create tag with avatar
+                    friendTag.innerHTML = `
+                        <div class="mutual-friend-avatar" style="width: 32px; height: 32px; margin-right: 10px; display: inline-block; vertical-align: middle;">
+                            <img src="${avatarUrl}" alt="${displayName}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+                        </div>
+                        <span style="vertical-align: middle;">${displayName}</span>
+                    `;
+                } else {
+                    // Fallback without avatar
+                    friendTag.textContent = displayName;
+                }
+
                 friendTag.onclick = () => {
                     window.open(`https://www.roblox.com/users/${friend.id}/profile`, '_blank');
                 };
@@ -4860,14 +4896,12 @@ li a.about-link:hover::after {
             contentElement.appendChild(friendsList);
         };
 
-        // Function to find profile insertion point
+        // function to find profile insertion point
         const findProfileInsertionPoint = () => {
-            const profileHeader = document.querySelector('.profile-header-main');
-            if (profileHeader) return profileHeader.parentElement;
-            return document.querySelector('[class*="profile"]');
+            return document.querySelector('ul.profile-tabs.flex');
         };
 
-        // Main execution logic
+        // main execution logic
         try {
             const currentUserId = getCurrentUserId();
             if (!currentUserId) return;
@@ -4878,7 +4912,7 @@ li a.about-link:hover::after {
             const otherUserId = urlMatch[1];
             if (otherUserId === String(currentUserId)) return;
 
-            // Clear local cache for new page visit
+            // clear local cache for new page visit
             localAvatarCache = {};
 
             const mutualFriendsElement = createMutualFriendsElement();
@@ -4889,7 +4923,7 @@ li a.about-link:hover::after {
                 return;
             }
 
-            insertionPoint.appendChild(mutualFriendsElement);
+            insertionPoint.insertAdjacentElement('afterend', mutualFriendsElement);
             mutualFriendsElement.style.display = 'block';
 
             const contentElement = mutualFriendsElement.querySelector('.mutual-friends-content');
@@ -6278,779 +6312,879 @@ li a.about-link:hover::after {
     name of function: quicklaunchgamesfunction
     description: adds quick launch
     *******************************************************/
-
     function quicklaunchgamesfunction() {
         if (!/^https?:\/\/(www\.)?roblox\.com(\/[a-z]{2})?\/home\/?$/i.test(window.location.href)) return;
-        if (localStorage.getItem('ROLOCATE_quicklaunchgames') === 'true') {
-            const observer = new MutationObserver((mutations, obs) => {
-                const friendsSection = document.querySelector('.friend-carousel-container');
-                const friendTiles = document.querySelectorAll('.friends-carousel-tile');
-
-                if (friendsSection && friendTiles.length > 1) {
-                    obs.disconnect();
-
-                    // Create new games section with premium styling
-                    const newGamesContainer = document.createElement('div');
-                    newGamesContainer.className = 'ROLOCATE_QUICKLAUNCHGAMES_new-games-container';
-                    newGamesContainer.innerHTML = `
-          <div class="container-header people-list-header">
-            <div class="ROLOCATE_QUICKLAUNCHGAMES_header-content">
-              <div class="ROLOCATE_QUICKLAUNCHGAMES_title">Quick Launch Games</div>
-              <div class="ROLOCATE_QUICKLAUNCHGAMES_subtitle">Quickly play your games from here!</div>
-            </div>
-          </div>
-          <div class="ROLOCATE_QUICKLAUNCHGAMES_game-grid-container">
-            <div class="ROLOCATE_QUICKLAUNCHGAMES_game-grid">
-              <div class="ROLOCATE_QUICKLAUNCHGAMES_add-tile" id="ROLOCATE_QUICKLAUNCHGAMES_add-button">
-                <div class="ROLOCATE_QUICKLAUNCHGAMES_add-content">
-                  <svg class="ROLOCATE_QUICKLAUNCHGAMES_add-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 5V19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                  <div class="ROLOCATE_QUICKLAUNCHGAMES_add-text">Add Game</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        `;
-                    // CSS styles
-                    const style = document.createElement('style');
-                    style.textContent = `
-          .ROLOCATE_QUICKLAUNCHGAMES_new-games-container {
-            background: #1a1c23;
-            padding: 20px;
-            margin: 16px 0;
-            margin-bottom: 32px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-            border-radius: 12px;
-            border: 1px solid #2a2a30;
-          }
-
-          .container-header.people-list-header {
-            margin-bottom: 18px;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_header-content {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_title {
-            font-size: 22px !important;
-            font-weight: 700 !important;
-            color: #f7f8fa !important;
-            margin: 0 !important;
-            letter-spacing: -0.3px !important;
-            background: linear-gradient(to right, #8a9cff, #5d78ff) !important;
-            -webkit-background-clip: text !important;
-            -webkit-text-fill-color: transparent !important;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_subtitle {
-            font-size: 12px !important;
-            color: #a0a5b1 !important;
-            font-weight: 500 !important;
-            letter-spacing: 0.2px !important;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_game-grid-container {
-            margin-top: 16px;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_game-grid {
-            display: flex;
-            gap: 20px;
-            overflow-x: auto;
-            padding-bottom: 12px;
-            scrollbar-width: thin;
-            scrollbar-color: #5d78ff #2d2f36;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_game-grid::-webkit-scrollbar {
-            height: 6px;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_game-grid::-webkit-scrollbar-track {
-            background: #23252d;
-            border-radius: 3px;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_game-grid::-webkit-scrollbar-thumb {
-            background: linear-gradient(to right, #5d78ff, #8a9cff);
-            border-radius: 3px;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_game-grid::-webkit-scrollbar-thumb:hover {
-            background: linear-gradient(to right, #6d85ff, #9aabff);
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_add-tile {
-            flex: 0 0 auto;
-            width: 170px;
-            height: 230px;
-            background: linear-gradient(145deg, #23252d, #1e2028);
-            border-radius: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
-            position: relative;
-            overflow: hidden;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_add-tile::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(135deg, rgba(93, 120, 255, 0.1), rgba(138, 156, 255, 0.05));
-            opacity: 0;
-            transition: opacity 0.3s ease;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_add-tile:hover {
-            transform: translateY(4px) scale(1.03);
-            box-shadow: 0 14px 28px rgba(0, 0, 0, 0.35);
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_add-tile:hover::before {
-            opacity: 1;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_add-content {
-            text-align: center;
-            color: #8b8d94;
-            z-index: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 12px;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_add-icon {
-            width: 32px;
-            height: 32px;
-            stroke-width: 2;
-            color: #5d78ff;
-            transition: all 0.3s ease;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_add-tile:hover .ROLOCATE_QUICKLAUNCHGAMES_add-icon {
-            color: #8a9cff;
-            transform: scale(1.2) rotate(90deg);
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_add-text {
-            font-size: 15px;
-            font-weight: 600;
-            color: #d0d4e0;
-            letter-spacing: 0.3px;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_game-tile {
-            flex: 0 0 auto;
-            width: 170px;
-            background: linear-gradient(145deg, #23252d, #1e2028);
-            border-radius: 14px;
-            overflow: hidden;
-            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease;
-            cursor: pointer;
-            position: relative;
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_game-tile:hover {
-            transform: translateY(-7px) scale(1.04);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
-            z-index: 10;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_game-tile .thumbnail-container {
-            width: 100%;
-            height: 150px;
-            display: block;
-            position: relative;
-            overflow: hidden;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_game-tile img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            transition: transform 0.6s ease;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_game-tile:hover img {
-            transform: scale(1.12);
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_game-name {
-            padding: 14px 16px;
-            font-size: 14px;
-            font-weight: 600;
-            color: #f0f2f6;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            background: transparent;
-            position: relative;
-            z-index: 1;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_game-info {
-            padding: 10px 16px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: rgba(28, 30, 38, 0.85);
-            position: relative;
-            border-top: 1px solid rgba(255, 255, 255, 0.05);
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_game-stat {
-            display: flex;
-            align-items: center;
-            font-size: 12px;
-            color: #b8b9bf;
-            gap: 4px;
-            font-weight: 500;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_player-count::before {
-            content: "👤";
-            margin-right: 4px;
-            filter: drop-shadow(0 1px 1px rgba(0,0,0,0.3));
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_like-ratio {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_like-ratio .thumb {
-            font-size: 12px;
-            filter: drop-shadow(0 1px 1px rgba(0,0,0,0.3));
-          }
-
-          /* Premium X Button Styles */
-          .ROLOCATE_QUICKLAUNCHGAMES_remove-button {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            width: 26px;
-            height: 26px;
-            background: rgba(20, 22, 30, 0.85);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            opacity: 0;
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            z-index: 2;
-            border: 1px solid rgba(255,255,255,0.1);
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_remove-button::before,
-          .ROLOCATE_QUICKLAUNCHGAMES_remove-button::after {
-            content: '';
-            position: absolute;
-            width: 14px;
-            height: 2px;
-            background: #f0f2f6;
-            border-radius: 1px;
-            transition: all 0.2s ease;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_remove-button::before {
-            transform: rotate(45deg);
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_remove-button::after {
-            transform: rotate(-45deg);
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_remove-button:hover {
-            background: rgba(255, 75, 66, 0.95);
-            transform: rotate(90deg) scale(1.1);
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_remove-button:hover::before,
-          .ROLOCATE_QUICKLAUNCHGAMES_remove-button:hover::after {
-            background: white;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_game-tile:hover .ROLOCATE_QUICKLAUNCHGAMES_remove-button {
-            opacity: 1;
-          }
-
-          /* Animations */
-          @keyframes fadeIn {
-            to { opacity: 1; }
-          }
-
-          @keyframes popupIn {
-            to { transform: scale(1); opacity: 1; }
-          }
-
-          @keyframes popupOut {
-            to { transform: scale(0.9); opacity: 0; }
-          }
-
-          @keyframes tileAppear {
-            0% { transform: translateY(10px) scale(0.95); opacity: 0; }
-            100% { transform: translateY(0) scale(1); opacity: 1; }
-          }
-
-          @keyframes tileRemove {
-            0% { transform: translateY(0) scale(1); opacity: 1; }
-            50% { transform: translateY(-20px) scale(0.9); opacity: 0.5; }
-            100% { transform: translateY(40px) scale(0.8); opacity: 0; }
-          }
-
-          @keyframes buttonClick {
-            0% { transform: scale(1); }
-            50% { transform: scale(0.95); }
-            100% { transform: scale(1); }
-          }
-
-          @keyframes cancelButtonPulse {
-            0% { background: rgba(60, 64, 78, 0.5); }
-            50% { background: rgba(100, 104, 118, 0.7); }
-            100% { background: rgba(60, 64, 78, 0.5); }
-          }
-
-          @keyframes cancelButtonClick {
-            0% { transform: scale(1); }
-            50% { transform: scale(0.95); background: rgba(100, 104, 118, 0.8); }
-            100% { transform: scale(1); }
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_game-tile {
-            animation: tileAppear 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_game-tile.removing {
-            animation: tileRemove 0.4s cubic-bezier(0.55, 0.085, 0.68, 0.53) forwards;
-            pointer-events: none;
-          }
-
-          /* Popup Styles */
-          .ROLOCATE_QUICKLAUNCHGAMES_popup-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.3);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 10000;
-            opacity: 0;
-            animation: fadeIn 0.3s ease forwards;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_popup {
-            background: linear-gradient(to bottom, #1f2128, #1a1c23);
-            border-radius: 18px;
-            padding: 32px;
-            width: 440px;
-            max-width: 90vw;
-            box-shadow: 0 40px 70px rgba(0, 0, 0, 0.7);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            transform: scale(0.9);
-            animation: popupIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-            position: relative;
-            overflow: hidden;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_popup::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(to right, #5d78ff, #8a9cff);
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_popup h3 {
-            color: #f7f8fa;
-            font-size: 22px;
-            font-weight: 700;
-            margin: 0 0 24px 0;
-            text-align: center;
-            letter-spacing: -0.3px;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_popup label {
-            color: #a0a5b1;
-            font-size: 15px;
-            font-weight: 500;
-            display: block;
-            margin-bottom: 10px;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_popup input {
-            width: 100%;
-            padding: 15px;
-            background: rgba(40, 42, 50, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            color: #f7f8fa;
-            font-size: 15px;
-            margin-bottom: 28px;
-            outline: none;
-            transition: border-color 0.3s ease, box-shadow 0.3s ease;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_popup input::placeholder {
-            color: #6a6e7d;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_popup input:focus {
-            border-color: #5d78ff;
-            box-shadow: 0 0 0 4px rgba(93, 120, 255, 0.25);
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_popup-buttons {
-            display: flex;
-            gap: 16px;
-            justify-content: flex-end;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_popup-button {
-            padding: 14px 28px;
-            border: none;
-            border-radius: 12px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            letter-spacing: 0.3px;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_popup-button.cancel {
-            background: rgba(60, 64, 78, 0.5);
-            color: #d0d4e0;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_popup-button.cancel:hover {
-            background: rgba(80, 84, 98, 0.7);
-            transform: translateY(-3px);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.25);
-            animation: cancelButtonPulse 1.5s infinite;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_popup-button.confirm {
-            background: linear-gradient(135deg, #5d78ff, #8a9cff);
-            color: white;
-            box-shadow: 0 6px 16px rgba(93, 120, 255, 0.4);
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_popup-button.confirm:hover {
-            background: linear-gradient(135deg, #6d85ff, #9aabff);
-            transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(93, 120, 255, 0.5);
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_popup-button:active {
-            transform: translateY(1px);
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_popup-button.cancel:active {
-            animation: cancelButtonClick 0.3s ease;
-            background: rgba(80, 84, 98, 0.8) !important;
-          }
-
-          @keyframes popupFadeOut {
-            0% {
-              transform: scale(1);
-              opacity: 1;
-            }
-            100% {
-              transform: scale(0.95);
-              opacity: 0;
-            }
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_popup.fade-out {
-            animation: popupFadeOut 0.3s ease forwards;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_add-tile:active {
-            transform: translateY(2px) scale(0.97) !important;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
-          }
-
-          .ROLOCATE_QUICKLAUNCHGAMES_add-tile.clicked {
-            animation: buttonClick 0.3s ease;
-          }
-        `;
-                    document.head.appendChild(style);
-
-                    // Insert after friends section
-                    friendsSection.parentNode.insertBefore(newGamesContainer, friendsSection.nextSibling);
-
-                    async function getGameDetails(universeId) {
-                        return new Promise((resolve, reject) => {
-                            GM_xmlhttpRequest({
-                                method: "GET",
-                                url: `https://games.roblox.com/v1/games?universeIds=${universeId}`,
-                                headers: {
-                                    "Accept": "application/json"
-                                },
-                                onload: function(response) {
-                                    if (response.status === 200) {
-                                        try {
-                                            const data = JSON.parse(response.responseText);
-                                            if (data.data && data.data.length > 0) {
-                                                resolve(data.data[0]);
-                                            } else {
-                                                reject(new Error("Game data not found"));
-                                            }
-                                        } catch (e) {
-                                            reject(e);
-                                        }
-                                    } else {
-                                        reject(new Error(`HTTP error: ${response.status}`));
+        if (localStorage.getItem('ROLOCATE_quicklaunchgames') !== 'true') return;
+
+        const observer = new MutationObserver((mutations, obs) => {
+            const friendsSection = document.querySelector('.friend-carousel-container');
+            const friendTiles = document.querySelectorAll('.friends-carousel-tile');
+
+            if (friendsSection && friendTiles.length > 1) {
+                obs.disconnect();
+
+                const newGamesContainer = document.createElement('div');
+                newGamesContainer.className = 'ROLOCATE_QUICKLAUNCHGAMES_new-games-container';
+                newGamesContainer.innerHTML = `
+                    <div class="container-header people-list-header">
+                        <div class="ROLOCATE_QUICKLAUNCHGAMES_header-content">
+                            <div class="ROLOCATE_QUICKLAUNCHGAMES_title">Quick Launch Games</div>
+                            <div class="ROLOCATE_QUICKLAUNCHGAMES_subtitle">Click ◀ ▶ to reorder • Click to play</div>
+                        </div>
+                    </div>
+                    <div class="ROLOCATE_QUICKLAUNCHGAMES_game-grid-container">
+                        <div class="ROLOCATE_QUICKLAUNCHGAMES_game-grid">
+                            <div class="ROLOCATE_QUICKLAUNCHGAMES_add-tile" id="ROLOCATE_QUICKLAUNCHGAMES_add-button">
+                                <div class="ROLOCATE_QUICKLAUNCHGAMES_add-content">
+                                    <svg class="ROLOCATE_QUICKLAUNCHGAMES_add-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M12 5V19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    <div class="ROLOCATE_QUICKLAUNCHGAMES_add-text">Add Game</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                const style = document.createElement('style');
+                style.textContent = `
+                    .ROLOCATE_QUICKLAUNCHGAMES_new-games-container {
+                        background: #1a1c23;
+                        padding: 20px;
+                        margin: 16px 0;
+                        margin-bottom: 32px;
+                        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+                        border-radius: 12px;
+                        border: 1px solid #2a2a30;
+                    }
+
+                    .container-header.people-list-header {
+                        margin-bottom: 18px;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_header-content {
+                        display: flex;
+                        flex-direction: column;
+                        gap: 4px;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_title {
+                        font-size: 22px !important;
+                        font-weight: 700 !important;
+                        color: #f7f8fa !important;
+                        margin: 0 !important;
+                        letter-spacing: -0.3px !important;
+                        background: linear-gradient(to right, #8a9cff, #5d78ff) !important;
+                        -webkit-background-clip: text !important;
+                        -webkit-text-fill-color: transparent !important;
+                        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_subtitle {
+                        font-size: 12px !important;
+                        color: #a0a5b1 !important;
+                        font-weight: 500 !important;
+                        letter-spacing: 0.2px !important;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-grid-container {
+                        margin-top: 16px;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-grid {
+                        display: flex;
+                        gap: 20px;
+                        overflow-x: auto;
+                        padding-bottom: 12px;
+                        scrollbar-width: thin;
+                        scrollbar-color: #5d78ff #2d2f36;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-grid::-webkit-scrollbar {
+                        height: 6px;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-grid::-webkit-scrollbar-track {
+                        background: #23252d;
+                        border-radius: 3px;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-grid::-webkit-scrollbar-thumb {
+                        background: linear-gradient(to right, #5d78ff, #8a9cff);
+                        border-radius: 3px;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-grid::-webkit-scrollbar-thumb:hover {
+                        background: linear-gradient(to right, #6d85ff, #9aabff);
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_add-tile {
+                        flex: 0 0 auto;
+                        width: 170px;
+                        height: 230px;
+                        background: linear-gradient(145deg, #23252d, #1e2028);
+                        border-radius: 14px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        cursor: pointer;
+                        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+                        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+                        position: relative;
+                        overflow: hidden;
+                        border: 1px solid rgba(255, 255, 255, 0.05);
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_add-tile::before {
+                        content: '';
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background: linear-gradient(135deg, rgba(93, 120, 255, 0.1), rgba(138, 156, 255, 0.05));
+                        opacity: 0;
+                        transition: opacity 0.3s ease;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_add-tile:hover {
+                        transform: translateY(4px) scale(1.03);
+                        box-shadow: 0 14px 28px rgba(0, 0, 0, 0.35);
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_add-tile:hover::before {
+                        opacity: 1;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_add-content {
+                        text-align: center;
+                        color: #8b8d94;
+                        z-index: 1;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        gap: 12px;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_add-icon {
+                        width: 32px;
+                        height: 32px;
+                        stroke-width: 2;
+                        color: #5d78ff;
+                        transition: all 0.3s ease;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_add-tile:hover .ROLOCATE_QUICKLAUNCHGAMES_add-icon {
+                        color: #8a9cff;
+                        transform: scale(1.2) rotate(90deg);
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_add-text {
+                        font-size: 15px;
+                        font-weight: 600;
+                        color: #d0d4e0;
+                        letter-spacing: 0.3px;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-tile {
+                        flex: 0 0 auto;
+                        width: 170px;
+                        background: linear-gradient(145deg, #23252d, #1e2028);
+                        border-radius: 14px;
+                        overflow: hidden;
+                        transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease;
+                        cursor: pointer;
+                        position: relative;
+                        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+                        border: 1px solid rgba(255, 255, 255, 0.05);
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-tile:hover {
+                        transform: translateY(-7px) scale(1.04);
+                        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+                        z-index: 10;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-tile .thumbnail-container {
+                        width: 100%;
+                        height: 150px;
+                        display: block;
+                        position: relative;
+                        overflow: hidden;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-tile img {
+                        width: 100%;
+                        height: 100%;
+                        object-fit: cover;
+                        transition: transform 0.6s ease;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-tile:hover img {
+                        transform: scale(1.12);
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-name {
+                        padding: 14px 16px;
+                        font-size: 14px;
+                        font-weight: 600;
+                        color: #f0f2f6;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        background: transparent;
+                        position: relative;
+                        z-index: 1;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-info {
+                        padding: 10px 16px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        background: rgba(28, 30, 38, 0.85);
+                        position: relative;
+                        border-top: 1px solid rgba(255, 255, 255, 0.05);
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-stat {
+                        display: flex;
+                        align-items: center;
+                        font-size: 12px;
+                        color: #b8b9bf;
+                        gap: 4px;
+                        font-weight: 500;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_player-count::before {
+                        content: "👤";
+                        margin-right: 4px;
+                        filter: drop-shadow(0 1px 1px rgba(0,0,0,0.3));
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_like-ratio {
+                        display: flex;
+                        align-items: center;
+                        gap: 4px;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_like-ratio .thumb {
+                        font-size: 12px;
+                        filter: drop-shadow(0 1px 1px rgba(0,0,0,0.3));
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_arrow-controls {
+                        position: absolute;
+                        top: 55%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        display: flex;
+                        flex-direction: row;
+                        gap: 8px;
+                        opacity: 0;
+                        transition: opacity 0.2s ease;
+                        z-index: 3;
+                        pointer-events: none;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-tile:hover .ROLOCATE_QUICKLAUNCHGAMES_arrow-controls {
+                        opacity: 1;
+                        pointer-events: auto;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_arrow-btn {
+                        width: 25px;
+                        height: 25px;
+                        border-radius: 8px;
+                        background: rgba(20, 22, 30, 0.92);
+                        border: 1px solid rgba(255, 255, 255, 0.12);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        cursor: pointer;
+                        color: #a0a5b1;
+                        font-size: 16px;
+                        font-weight: bold;
+                        transition: all 0.25s ease;
+                        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_arrow-btn:hover {
+                        background: rgba(93, 120, 255, 0.45);
+                        color: #ffffff;
+                        transform: scale(1.15) translateY(-2px);
+                        box-shadow: 0 4px 10px rgba(93, 120, 255, 0.3);
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_arrow-btn:disabled {
+                        opacity: 0.4;
+                        cursor: not-allowed;
+                        transform: none;
+                        background: rgba(60, 64, 78, 0.6);
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_remove-button {
+                        position: absolute;
+                        top: 10px;
+                        right: 10px;
+                        width: 25px;
+                        height: 25px;
+                        background: rgba(20, 22, 30, 0.85);
+                        border-radius: 8px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        cursor: pointer;
+                        opacity: 0;
+                        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+                        z-index: 2;
+                        border: 1px solid rgba(255,255,255,0.1);
+                        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_remove-button::before,
+                    .ROLOCATE_QUICKLAUNCHGAMES_remove-button::after {
+                        content: '';
+                        position: absolute;
+                        width: 14px;
+                        height: 2px;
+                        background: #f0f2f6;
+                        border-radius: 1px;
+                        transition: all 0.2s ease;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_remove-button::before {
+                        transform: rotate(45deg);
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_remove-button::after {
+                        transform: rotate(-45deg);
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_remove-button:hover {
+                        background: rgba(255, 75, 66, 0.95);
+                        transform: rotate(90deg) scale(1.1);
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_remove-button:hover::before,
+                    .ROLOCATE_QUICKLAUNCHGAMES_remove-button:hover::after {
+                        background: white;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-tile:hover .ROLOCATE_QUICKLAUNCHGAMES_remove-button {
+                        opacity: 1;
+                    }
+
+                    @keyframes tileAppear {
+                        0% { transform: translateY(10px) scale(0.95); opacity: 0; }
+                        100% { transform: translateY(0) scale(1); opacity: 1; }
+                    }
+
+                    @keyframes tileRemove {
+                        0% { transform: translateY(0) scale(1); opacity: 1; }
+                        50% { transform: translateY(-20px) scale(0.9); opacity: 0.5; }
+                        100% { transform: translateY(40px) scale(0.8); opacity: 0; }
+                    }
+
+                    @keyframes moveTile {
+                        0% { transform: translateY(0); }
+                        50% { transform: translateY(-8px); }
+                        100% { transform: translateY(0); }
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-tile {
+                        animation: tileAppear 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-tile.removing {
+                        animation: tileRemove 0.4s cubic-bezier(0.55, 0.085, 0.68, 0.53) forwards;
+                        pointer-events: none;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-tile.moving {
+                        animation: moveTile 0.4s ease;
+                    }
+
+                    /* Popup styles (unchanged) */
+                    .ROLOCATE_QUICKLAUNCHGAMES_popup-overlay {
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: rgba(0, 0, 0, 0.3);
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        z-index: 10000;
+                        opacity: 0;
+                        animation: fadeIn 0.3s ease forwards;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_popup {
+                        background: linear-gradient(to bottom, #1f2128, #1a1c23);
+                        border-radius: 18px;
+                        padding: 32px;
+                        width: 440px;
+                        max-width: 90vw;
+                        box-shadow: 0 40px 70px rgba(0, 0, 0, 0.7);
+                        border: 1px solid rgba(255, 255, 255, 0.08);
+                        transform: scale(0.9);
+                        animation: popupIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+                        position: relative;
+                        overflow: hidden;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_popup::before {
+                        content: '';
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        height: 4px;
+                        background: linear-gradient(to right, #5d78ff, #8a9cff);
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_popup h3 {
+                        color: #f7f8fa;
+                        font-size: 22px;
+                        font-weight: 700;
+                        margin: 0 0 24px 0;
+                        text-align: center;
+                        letter-spacing: -0.3px;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_popup label {
+                        color: #a0a5b1;
+                        font-size: 15px;
+                        font-weight: 500;
+                        display: block;
+                        margin-bottom: 10px;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_popup input {
+                        width: 100%;
+                        padding: 15px;
+                        background: rgba(40, 42, 50, 0.6);
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                        border-radius: 12px;
+                        color: #f7f8fa;
+                        font-size: 15px;
+                        margin-bottom: 28px;
+                        outline: none;
+                        transition: border-color 0.3s ease, box-shadow 0.3s ease;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_popup input::placeholder {
+                        color: #6a6e7d;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_popup input:focus {
+                        border-color: #5d78ff;
+                        box-shadow: 0 0 0 4px rgba(93, 120, 255, 0.25);
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_popup-buttons {
+                        display: flex;
+                        gap: 16px;
+                        justify-content: flex-end;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_popup-button {
+                        padding: 14px 28px;
+                        border: none;
+                        border-radius: 12px;
+                        font-size: 14px;
+                        font-weight: 600;
+                        cursor: pointer;
+                        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+                        letter-spacing: 0.3px;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_popup-button.cancel {
+                        background: rgba(60, 64, 78, 0.5);
+                        color: #d0d4e0;
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_popup-button.cancel:hover {
+                        background: rgba(80, 84, 98, 0.7);
+                        transform: translateY(-3px);
+                        box-shadow: 0 6px 12px rgba(0,0,0,0.25);
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_popup-button.confirm {
+                        background: linear-gradient(135deg, #5d78ff, #8a9cff);
+                        color: white;
+                        box-shadow: 0 6px 16px rgba(93, 120, 255, 0.4);
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_popup-button.confirm:hover {
+                        background: linear-gradient(135deg, #6d85ff, #9aabff);
+                        transform: translateY(-3px);
+                        box-shadow: 0 8px 20px rgba(93, 120, 255, 0.5);
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_popup-button:active {
+                        transform: translateY(1px);
+                    }
+
+                    @keyframes fadeIn {
+                        to { opacity: 1; }
+                    }
+
+                    @keyframes popupIn {
+                        to { transform: scale(1); opacity: 1; }
+                    }
+
+                    @keyframes popupFadeOut {
+                        0% { transform: scale(1); opacity: 1; }
+                        100% { transform: scale(0.95); opacity: 0; }
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_popup.fade-out {
+                        animation: popupFadeOut 0.3s ease forwards;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_add-tile:active {
+                        transform: translateY(2px) scale(0.97) !important;
+                        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_add-tile.clicked {
+                        animation: buttonClick 0.3s ease;
+                    }
+
+                    @keyframes buttonClick {
+                        0% { transform: scale(1); }
+                        50% { transform: scale(0.95); }
+                        100% { transform: scale(1); }
+                    }
+                `;
+                document.head.appendChild(style);
+
+                friendsSection.parentNode.insertBefore(newGamesContainer, friendsSection.nextSibling);
+
+                // =============== HELPER FUNCTIONS ===============
+                async function getGameDetails(universeId) {
+                    return new Promise((resolve, reject) => {
+                        GM_xmlhttpRequest({
+                            method: "GET",
+                            url: `https://games.roblox.com/v1/games?universeIds=${universeId}`,
+                            headers: { "Accept": "application/json" },
+                            onload: function(response) {
+                                if (response.status === 200) {
+                                    try {
+                                        const data = JSON.parse(response.responseText);
+                                        resolve(data.data && data.data.length > 0 ? data.data[0] : null);
+                                    } catch (e) {
+                                        reject(e);
                                     }
-                                },
-                                onerror: function(err) {
-                                    reject(err);
+                                } else {
+                                    reject(new Error(`HTTP ${response.status}`));
                                 }
-                            });
+                            },
+                            onerror: function(err) {
+                                reject(err);
+                            }
                         });
+                    });
+                }
+
+                async function getUniverseIdFromPlaceId(placeId) {
+                    return new Promise((resolve, reject) => {
+                        GM_xmlhttpRequest({
+                            method: "GET",
+                            url: `https://games.roblox.com/v1/games/multiget-place-details?placeIds=${placeId}`,
+                            headers: { "Accept": "application/json" },
+                            onload: function(response) {
+                                if (response.status === 200) {
+                                    try {
+                                        const data = JSON.parse(response.responseText);
+                                        if (data && data.length && data[0].universeId) {
+                                            resolve(data[0].universeId);
+                                        } else {
+                                            reject(new Error("Universe ID not found"));
+                                        }
+                                    } catch (e) {
+                                        reject(e);
+                                    }
+                                } else {
+                                    reject(new Error(`HTTP ${response.status}`));
+                                }
+                            },
+                            onerror: function(err) {
+                                reject(err);
+                            }
+                        });
+                    });
+                }
+
+                async function getGameIconFromUniverseId(universeId) {
+                    return new Promise((resolve) => {
+                        GM_xmlhttpRequest({
+                            method: "GET",
+                            url: `https://thumbnails.roblox.com/v1/games/icons?universeIds=${universeId}&size=150x150&format=Png&isCircular=false`,
+                            headers: { "Accept": "application/json" },
+                            onload: function(response) {
+                                if (response.status === 200) {
+                                    try {
+                                        const data = JSON.parse(response.responseText);
+                                        if (data.data && data.data[0] && data.data[0].imageUrl) {
+                                            resolve(data.data[0].imageUrl);
+                                        } else {
+                                            resolve('https://via.placeholder.com/150x150?text=No+Image');
+                                        }
+                                    } catch (e) {
+                                        resolve('https://via.placeholder.com/150x150?text=Err');
+                                    }
+                                } else {
+                                    resolve('https://via.placeholder.com/150x150?text=No+Icon');
+                                }
+                            },
+                            onerror: function() {
+                                resolve('https://via.placeholder.com/150x150?text=Icon+Fail');
+                            }
+                        });
+                    });
+                }
+
+                function formatNumber(num) {
+                    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+                    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+                    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+                }
+
+                function saveCurrentOrder() {
+                    const tiles = document.querySelectorAll('.ROLOCATE_QUICKLAUNCHGAMES_game-tile');
+                    const order = Array.from(tiles).map(tile => tile.dataset.gameId);
+                    localStorage.setItem('ROLOCATE_quicklaunch_games_storage', JSON.stringify(order));
+                }
+
+                function moveTile(tile, direction) {
+                    const gameGrid = document.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_game-grid');
+                    const tiles = Array.from(gameGrid.querySelectorAll('.ROLOCATE_QUICKLAUNCHGAMES_game-tile'));
+                    const index = tiles.indexOf(tile);
+
+                    if (direction === 'left' && index > 0) {
+                        const target = tiles[index - 1];
+                        gameGrid.insertBefore(tile, target);
+                        tile.classList.add('moving');
+                        setTimeout(() => tile.classList.remove('moving'), 400);
+                    } else if (direction === 'right' && index < tiles.length - 1) {
+                        const target = tiles[index + 1];
+                        gameGrid.insertBefore(tile, target.nextSibling);
+                        tile.classList.add('moving');
+                        setTimeout(() => tile.classList.remove('moving'), 400);
                     }
 
-                    function formatNumber(num) {
-                        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-                        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-                        return num;
+                    saveCurrentOrder();
+                }
+
+                function addGameTile(gameId, gameDetails = null) {
+                    const gameGrid = document.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_game-grid');
+                    if (!gameGrid) return;
+
+                    const gameTile = document.createElement('div');
+                    gameTile.className = 'ROLOCATE_QUICKLAUNCHGAMES_game-tile';
+                    gameTile.dataset.gameId = gameId;
+
+                    gameTile.innerHTML = `
+                        <a href="https://www.roblox.com/games/${gameId}#?ROLOCATE_QUICKJOIN" target="_blank">
+                            <div class="thumbnail-container">
+                                <div style="width:100%;height:100%;background:linear-gradient(135deg,#23252d,#1e2028);display:flex;align-items:center;justify-content:center;">
+                                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M4 8H20V16H4V8Z" stroke="#4a4d56" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M8 4V8" stroke="#4a4d56" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M16 4V8" stroke="#4a4d56" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="ROLOCATE_QUICKLAUNCHGAMES_game-name">Loading...</div>
+                            <div class="ROLOCATE_QUICKLAUNCHGAMES_game-info">
+                                <div class="ROLOCATE_QUICKLAUNCHGAMES_like-ratio">
+                                    <span class="thumb">👍</span> -
+                                </div>
+                                <div class="ROLOCATE_QUICKLAUNCHGAMES_game-stat ROLOCATE_QUICKLAUNCHGAMES_player-count">-</div>
+                            </div>
+                        </a>
+                        <div class="ROLOCATE_QUICKLAUNCHGAMES_remove-button"></div>
+                        <div class="ROLOCATE_QUICKLAUNCHGAMES_arrow-controls">
+                            <button class="ROLOCATE_QUICKLAUNCHGAMES_arrow-btn left" title="Move left">◀</button>
+                            <button class="ROLOCATE_QUICKLAUNCHGAMES_arrow-btn right" title="Move right">▶</button>
+                        </div>
+                    `;
+
+                    gameGrid.insertBefore(gameTile, gameGrid.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_add-tile'));
+
+                    // Remove button
+                    const removeBtn = gameTile.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_remove-button');
+                    removeBtn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        gameTile.classList.add('removing');
+                        setTimeout(() => {
+                            const games = JSON.parse(localStorage.getItem('ROLOCATE_quicklaunch_games_storage') || '[]');
+                            const updatedGames = games.filter(id => id !== gameId);
+                            localStorage.setItem('ROLOCATE_quicklaunch_games_storage', JSON.stringify(updatedGames));
+                            gameTile.remove();
+                        }, 400);
+                    });
+
+                    // Arrow buttons (horizontal)
+                    const leftBtn = gameTile.querySelector('.left');
+                    const rightBtn = gameTile.querySelector('.right');
+
+                    leftBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        moveTile(gameTile, 'left');
+                    });
+
+                    rightBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        moveTile(gameTile, 'right');
+                    });
+
+                    // Update button states on hover
+                    gameTile.addEventListener('mouseenter', () => {
+                        const tiles = Array.from(document.querySelectorAll('.ROLOCATE_QUICKLAUNCHGAMES_game-tile'));
+                        const index = tiles.indexOf(gameTile);
+                        leftBtn.disabled = index === 0;
+                        rightBtn.disabled = index === tiles.length - 1;
+                    });
+
+                    // Load details
+                    (async () => {
+                        try {
+                            const universeId = await getUniverseIdFromPlaceId(gameId);
+                            const [iconUrl, details] = await Promise.all([
+                                getGameIconFromUniverseId(universeId),
+                                gameDetails || getGameDetails(universeId)
+                            ]);
+
+                            const thumbContainer = gameTile.querySelector('.thumbnail-container');
+                            thumbContainer.innerHTML = `<img src="${iconUrl}" alt="${details?.name || 'Game'}" onerror="this.src='https://via.placeholder.com/150x150?text=No+Image'">`;
+
+                            const gameName = gameTile.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_game-name');
+                            gameName.textContent = details?.name || 'Unknown Game';
+
+                            const playerCount = gameTile.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_player-count');
+                            const likeRatio = gameTile.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_like-ratio');
+
+                            playerCount.textContent = formatNumber(details?.playing || 0);
+                            const ratio = details?.favoritedCount > 0 ?
+                                Math.min(100, Math.round((details.favoritedCount / (details.favoritedCount + details.favoritedCount * 0.1)) * 100)) : 0;
+                            likeRatio.innerHTML = `<span class="thumb">👍</span> ${ratio}%`;
+                        } catch (err) {
+                            ConsoleLogEnabled('Game load err:', err);
+                            const gameName = gameTile.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_game-name');
+                            gameName.textContent = 'Load Failed';
+                        }
+                    })();
+                }
+
+                function showAddGamePopup() {
+                    const existingGames = document.querySelectorAll('.ROLOCATE_QUICKLAUNCHGAMES_game-tile').length;
+                    if (existingGames >= 10) {
+                        notifications('Maximum 10 games allowed', 'error', '⚠️', '4000');
+                        return;
                     }
 
-                    // Show add game popup
-                    function showAddGamePopup() {
-                        const existingGames = document.querySelectorAll('.ROLOCATE_QUICKLAUNCHGAMES_game-tile').length;
-                        if (existingGames >= 10) {
-                            notifications('Maximum 10 games allowed', 'error', '⚠️', '4000');
+                    const addButton = document.getElementById('ROLOCATE_QUICKLAUNCHGAMES_add-button');
+                    addButton.classList.add('clicked');
+                    setTimeout(() => addButton.classList.remove('clicked'), 300);
+
+                    const overlay = document.createElement('div');
+                    overlay.className = 'ROLOCATE_QUICKLAUNCHGAMES_popup-overlay';
+                    overlay.innerHTML = `
+                        <div class="ROLOCATE_QUICKLAUNCHGAMES_popup">
+                            <h3>Add New Game</h3>
+                            <label for="gameIdInput">Game ID:</label>
+                            <input type="text" id="gameIdInput" placeholder="Enter game ID | RoLocate by Oqarshi">
+                            <small style="display:block; margin-top:4px; color:#aaa;">
+                                Example: roblox.com/games/<b style="color:#4da6ff;">17625359962</b>/RIVALS
+                            </small>
+                            <div class="ROLOCATE_QUICKLAUNCHGAMES_popup-buttons" style="margin-top:12px;">
+                                <button class="ROLOCATE_QUICKLAUNCHGAMES_popup-button cancel">Cancel</button>
+                                <button class="ROLOCATE_QUICKLAUNCHGAMES_popup-button confirm">Add Game</button>
+                            </div>
+                        </div>
+                    `;
+                    document.body.appendChild(overlay);
+
+                    setTimeout(() => document.getElementById('gameIdInput').focus(), 100);
+
+                    const cancelBtn = overlay.querySelector('.cancel');
+                    const confirmBtn = overlay.querySelector('.confirm');
+                    const input = document.getElementById('gameIdInput');
+
+                    cancelBtn.onclick = () => {
+                        overlay.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_popup').classList.add('fade-out');
+                        setTimeout(() => overlay.remove(), 300);
+                    };
+
+                    confirmBtn.onclick = async () => {
+                        const gameId = input.value.trim();
+                        if (!gameId) {
+                            notifications('Please enter a game ID', 'error', '⚠️', '4000');
+                            return;
+                        }
+                        if (!/^\d+$/.test(gameId)) {
+                            notifications('Game ID must be numeric', 'error', '⚠️', '4000');
                             return;
                         }
 
-                        // Add click animation to add button
-                        const addButton = document.getElementById('ROLOCATE_QUICKLAUNCHGAMES_add-button');
-                        addButton.classList.add('clicked');
-                        setTimeout(() => {
-                            addButton.classList.remove('clicked');
-                        }, 300);
+                        const games = JSON.parse(localStorage.getItem('ROLOCATE_quicklaunch_games_storage') || '[]');
+                        if (games.includes(gameId)) {
+                            notifications('Game already added!', 'error', '⚠️', '4000');
+                            return;
+                        }
 
-                        const overlay = document.createElement('div');
-                        overlay.className = 'ROLOCATE_QUICKLAUNCHGAMES_popup-overlay';
-                        overlay.innerHTML = `
-              <div class="ROLOCATE_QUICKLAUNCHGAMES_popup">
-                  <h3>Add New Game</h3>
-                  <label for="gameIdInput">Game ID:</label>
-                  <input type="text" id="gameIdInput" placeholder="Enter game ID | RoLocate by Oqarshi">
-                      <small style="display:block; margin-top:4px; color:#aaa;">
-                          Example: roblox.com/games/<b style="color:#4da6ff;">17625359962</b>/RIVALS
-                      </small>
-                  <div class="ROLOCATE_QUICKLAUNCHGAMES_popup-buttons" style="margin-top:12px;">
-                      <button class="ROLOCATE_QUICKLAUNCHGAMES_popup-button cancel">Cancel</button>
-                      <button class="ROLOCATE_QUICKLAUNCHGAMES_popup-button confirm">Add Game</button>
-                  </div>
-              </div>
-            `;
-                        document.body.appendChild(overlay);
+                        confirmBtn.textContent = 'Adding...';
+                        confirmBtn.disabled = true;
 
-                        setTimeout(() => {
-                            document.getElementById('gameIdInput').focus();
-                        }, 100);
+                        try {
+                            const universeId = await getUniverseIdFromPlaceId(gameId);
+                            const gameDetails = await getGameDetails(universeId);
+                            games.push(gameId);
+                            localStorage.setItem('ROLOCATE_quicklaunch_games_storage', JSON.stringify(games));
+                            addGameTile(gameId, gameDetails);
 
-                        // Event listeners
-                        const cancelBtn = overlay.querySelector('.cancel');
-                        const confirmBtn = overlay.querySelector('.confirm');
-
-                        cancelBtn.addEventListener('click', () => {
                             overlay.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_popup').classList.add('fade-out');
                             setTimeout(() => overlay.remove(), 300);
-                        });
-
-                        confirmBtn.addEventListener('click', async () => {
-                            const gameId = document.getElementById('gameIdInput').value.trim();
-                            if (!gameId) {
-                                notifications('Please enter a game ID', 'error', '⚠️', '4000');
-                                return;
-                            }
-                            if (!/^\d+$/.test(gameId)) {
-                                notifications('Game ID must be numeric', 'error', '⚠️', '4000');
-                                return;
-                            }
-                            const games = JSON.parse(localStorage.getItem('ROLOCATE_quicklaunch_games_storage') || '[]');
-                            if (games.includes(gameId)) {
-                                notifications('Game already added!', 'error', '⚠️', '4000');
-                                return;
-                            }
-                            // Show loading state
-                            confirmBtn.textContent = 'Adding...';
-                            confirmBtn.disabled = true;
-                            try {
-                                // Get game details
-                                const universeId = await getUniverseIdFromPlaceId(gameId);
-                                const gameDetails = await getGameDetails(universeId);
-                                games.push(gameId);
-                                localStorage.setItem('ROLOCATE_quicklaunch_games_storage', JSON.stringify(games));
-                                addGameTile(gameId, gameDetails);
-
-                                // Only fade out on success
-                                overlay.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_popup').classList.add('fade-out');
-                                setTimeout(() => overlay.remove(), 300);
-                            } catch (error) {
-                                notifications('Error adding game: ' + error.message, 'error', '⚠️', '4000');
-                                confirmBtn.textContent = 'Add Game';
-                                confirmBtn.disabled = false;
-                            }
-                            // Remove these two lines - they were causing the problem
-                        });
-                    }
-
-                    // Add game tile with animations and API data
-                    function addGameTile(gameId, gameDetails = null) {
-                        const gameGrid = document.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_game-grid');
-                        if (!gameGrid) return;
-
-                        const gameTile = document.createElement('div');
-                        gameTile.className = 'ROLOCATE_QUICKLAUNCHGAMES_game-tile';
-                        gameTile.dataset.gameId = gameId;
-
-                        // Create tile with placeholder content
-                        gameTile.innerHTML = `
-                <a href="https://www.roblox.com/games/${gameId}#?ROLOCATE_QUICKJOIN" target="_blank">
-                    <div class="thumbnail-container">
-                        <div style="width:100%;height:100%;background:linear-gradient(135deg,#23252d,#1e2028);display:flex;align-items:center;justify-content:center;">
-                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M4 8H20V16H4V8Z" stroke="#4a4d56" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                <path d="M8 4V8" stroke="#4a4d56" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                <path d="M16 4V8" stroke="#4a4d56" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                        </div>
-                    </div>
-                    <div class="ROLOCATE_QUICKLAUNCHGAMES_game-name">Loading...</div>
-                    <div class="ROLOCATE_QUICKLAUNCHGAMES_game-info">
-                        <div class="ROLOCATE_QUICKLAUNCHGAMES_like-ratio">
-                            <span class="thumb">👍</span> -
-                        </div>
-                        <div class="ROLOCATE_QUICKLAUNCHGAMES_game-stat ROLOCATE_QUICKLAUNCHGAMES_player-count">-</div>
-                    </div>
-                </a>
-                <div class="ROLOCATE_QUICKLAUNCHGAMES_remove-button"></div>
-            `;
-
-                        gameGrid.insertBefore(gameTile, gameGrid.firstChild);
-
-                        // Add remove functionality
-                        const removeBtn = gameTile.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_remove-button');
-                        removeBtn.addEventListener('click', function(e) {
-                            e.preventDefault();
-                            e.stopPropagation();
-
-                            // Animated removal with bounce effect
-                            gameTile.classList.add('removing');
-                            setTimeout(() => {
-                                const games = JSON.parse(localStorage.getItem('ROLOCATE_quicklaunch_games_storage') || '[]');
-                                const updatedGames = games.filter(id => id !== gameId);
-                                localStorage.setItem('ROLOCATE_quicklaunch_games_storage', JSON.stringify(updatedGames));
-                                gameTile.remove();
-                            }, 400);
-                        });
-
-                        // Load game details asynchronously
-                        const loadGameDetails = async () => {
-                            try {
-                                const universeId = await getUniverseIdFromPlaceId(gameId);
-                                const [iconUrl, details] = await Promise.all([
-                                    getGameIconFromUniverseId(universeId),
-                                    gameDetails || getGameDetails(universeId)
-                                ]);
-
-                                // Update thumbnail
-                                const thumbContainer = gameTile.querySelector('.thumbnail-container');
-                                thumbContainer.innerHTML = `<img src="${iconUrl}" alt="${details.name}" onerror="this.src='https://via.placeholder.com/160x160?text=No+Image'">`;
-
-                                // Update game name
-                                const gameName = gameTile.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_game-name');
-                                gameName.textContent = details.name || 'Unknown Game';
-
-                                // Update stats
-                                const playerCount = gameTile.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_player-count');
-                                const likeRatio = gameTile.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_like-ratio');
-
-                                playerCount.textContent = formatNumber(details.playing);
-
-                                // Calculate like ratio (using favorites as proxy)
-                                const ratio = details.favoritedCount > 0 ?
-                                    Math.round((details.favoritedCount / (details.favoritedCount + (details.favoritedCount * 0.1))) * 100) : 0;
-                                likeRatio.innerHTML = `<span class="thumb">👍</span> ${ratio}%`;
-
-                            } catch (error) {
-                                ConsoleLogEnabled('Error loading game details:', error);
-                                const playerCount = gameTile.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_player-count');
-                                playerCount.textContent = 'Error';
-                            }
-                        };
-
-                        loadGameDetails();
-                    }
-
-                    // Add event to add button
-                    const addButton = document.getElementById('ROLOCATE_QUICKLAUNCHGAMES_add-button');
-                    addButton.addEventListener('click', showAddGamePopup);
-                    addButton.addEventListener('mousedown', function() {
-                        this.classList.add('active');
-                    });
-                    addButton.addEventListener('mouseup', function() {
-                        this.classList.remove('active');
-                    });
-                    addButton.addEventListener('mouseleave', function() {
-                        this.classList.remove('active');
-                    });
-
-                    // Load saved games
-                    function loadSavedGames() {
-                        const savedGames = JSON.parse(localStorage.getItem('ROLOCATE_quicklaunch_games_storage') || '[]');
-                        savedGames.forEach(gameId => {
-                            addGameTile(gameId);
-                        });
-                    }
-
-                    // Initial load
-                    setTimeout(loadSavedGames, 100);
+                        } catch (error) {
+                            notifications('Error: ' + (error.message || 'Failed to add game'), 'error', '⚠️', '4000');
+                            confirmBtn.textContent = 'Add Game';
+                            confirmBtn.disabled = false;
+                        }
+                    };
                 }
-            });
 
-            observer.observe(document.body, {
-                childList: true,
-                subtree: true
-            });
-
-            setTimeout(() => {
-                observer.disconnect();
-                if (!document.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_new-games-container')) {
-                    quicklaunchgamesfunction();
+                function loadSavedGames() {
+                    const savedGames = JSON.parse(localStorage.getItem('ROLOCATE_quicklaunch_games_storage') || '[]');
+                    savedGames.forEach(gameId => {
+                        addGameTile(gameId);
+                    });
                 }
-            }, 5000);
-        }
+
+                // Event: Add button
+                const addButton = document.getElementById('ROLOCATE_QUICKLAUNCHGAMES_add-button');
+                addButton.addEventListener('click', showAddGamePopup);
+
+                // Initial load
+                setTimeout(loadSavedGames, 100);
+            }
+        });
+
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        setTimeout(() => {
+            observer.disconnect();
+            if (!document.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_new-games-container')) {
+                quicklaunchgamesfunction();
+            }
+        }, 5000);
     }
 
 
@@ -8577,7 +8711,8 @@ li a.about-link:hover::after {
                 .games-list-header,
                 .catalog-header,
                 .chat-search-input,
-                .select-friends-input
+                .select-friends-input,
+                .content-action-utility
             `.replace(/\s+/g, ''));
         }
 
@@ -8810,25 +8945,35 @@ li a.about-link:hover::after {
                 ConsoleLogEnabled("Failed to load server regions data.");
             }
             getFlagEmoji(); // lazy loads the flag emoji base64 to save some ram i guess
-            InitRobloxLaunchHandler(); // listens for game join and if true shows popup.
         }
 
         /*******************************************************
-        name of function: InitRobloxLaunchHandler
-        description: Detects when the user joins a Roblox server,
-        adds it to recent servers (if enabled), and—only when
-        SmartSearch is on—shows a loading overlay and waits 1.5s.
+        name of function: JoinServer
+        description: a function to join servers. has btroblox comptabaility
         *******************************************************/
-        // WARNING: Do not republish this script. Licensed for personal use only.
-        function InitRobloxLaunchHandler() {
+        async function JoinServer(placeId, serverId) {
             if (!/^https:\/\/www\.roblox\.com(\/[a-z]{2})?\/games\//.test(window.location.href)) return;
-            if (window._robloxJoinInterceptorInitialized) return;
-            window._robloxJoinInterceptorInitialized = true;
 
-            const originalJoin = Roblox.GameLauncher.joinGameInstance;
+            if (localStorage.getItem("ROLOCATE_btrobloxfix") === "true") {
 
-            Roblox.GameLauncher.joinGameInstance = async function(gameId, serverId) {
-                ConsoleLogEnabled(`Intercepted join: Game ID = ${gameId}, Server ID = ${serverId}`);
+                /* ---------- recent‑servers handling (always runs) ---------- */
+                if (localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true") {
+                    await HandleRecentServersAddGames(placeId, serverId);
+                    document.querySelector(".recent-servers-section")?.remove();
+                    HandleRecentServers();
+                }
+
+                /* ---------- smartserver join---------- */
+                if (localStorage.getItem("ROLOCATE_smartjoinpopup") === "true") {
+                    showLoadingOverlay(placeId, serverId); // visual feedback
+                    await new Promise(res => setTimeout(res, 1500)); // 1.5s delay
+                }
+                //join via deeplink
+                ConsoleLogEnabled(`Joining via deeplink: placeId=${placeId}, serverId=${serverId}`);
+                window.location.href = `roblox://experiences/start?placeId=${placeId}&gameInstanceId=${serverId}`;
+            } else {
+                // join via roblox launcher
+                ConsoleLogEnabled(`Joining via Roblox launcher: placeId=${placeId}, serverId=${serverId}`);
 
                 /* ---------- recent‑servers handling (always runs) ---------- */
                 if (localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true") {
@@ -8843,11 +8988,9 @@ li a.about-link:hover::after {
                     await new Promise(res => setTimeout(res, 1500)); // 1.5s delay
                 }
 
-                /* ---------- finally join the game ---------- */
-                return originalJoin.apply(this, arguments);
-            };
+                Roblox.GameLauncher.joinGameInstance(placeId, serverId);
+            }
         }
-
 
         /*******************************************************
         name of function: HandleRecentServersAddGames
@@ -9717,7 +9860,7 @@ li a.about-link:hover::after {
 
                     joinButton.addEventListener('click', function() {
                         try {
-                            Roblox.GameLauncher.joinGameInstance(gameId, serverId);
+                            JoinServer(gameId, serverId);
                         } catch (error) {
                             ConsoleLogEnabled("Error joining game:", error);
                         }
@@ -10217,6 +10360,7 @@ li a.about-link:hover::after {
             });
             return observer;
         }
+
         /*******************************************************
         name of function: cleanupPrivateServerCards
         Description:
@@ -10237,7 +10381,7 @@ li a.about-link:hover::after {
 
             const box = document.createElement('div');
             box.className = 'players-popup-content';
-            box.innerHTML = '<h3>Players in Server</h3>';
+            box.innerHTML = '<h3 style="font-size: 1.4em;">Players in Server</h3>';
 
             if (thumbs && thumbs.querySelector('img')) {
               Object.assign(thumbs.style, {
@@ -10245,10 +10389,22 @@ li a.about-link:hover::after {
                 justifyContent: 'center',
                 flexWrap: 'wrap'
               });
+
+              // open in new tab
+              thumbs.querySelectorAll('a').forEach(link => {
+                link.setAttribute('target', '_blank');
+                link.setAttribute('rel', 'noopener noreferrer');
+              });
+
+              // Stop propagation on thumbnail clicks so links work
+              thumbs.addEventListener('click', (e) => {
+                e.stopPropagation();
+              });
+
               box.appendChild(thumbs);
             } else {
               const noP = document.createElement('p');
-              noP.innerHTML = '<b>No players currently in this server.</b><br><span style="color: gray; font-size: 0.8em;">RoLocate: To disable: Settings -> Appearance -> Compact Private Servers.</span>';
+              noP.innerHTML = '<b style="font-size: 1.2em;">No players currently in this server.</b><br><span style="color: gray; font-size: 1.0em;">RoLocate: To disable: Settings -> Appearance -> Compact Private Servers.</span>';
               box.appendChild(noP);
             }
 
@@ -10263,6 +10419,10 @@ li a.about-link:hover::after {
 
             close.onclick = closeOverlay;
             overlay.onclick = e => e.target === overlay && closeOverlay();
+
+            box.addEventListener('click', (e) => {
+              e.stopPropagation();
+            });
 
             box.appendChild(close);
             overlay.appendChild(box);
@@ -10290,7 +10450,7 @@ li a.about-link:hover::after {
                 btn.style.marginTop = '6px';
                 joinBtn.after(btn);
 
-                // ✅ No "once" here — allows multiple uses without leaking
+                // no "once" here allows multiple uses without leaking memory
                 btn.addEventListener('click', () => {
                   const clonedThumbs = thumbs ? thumbs.cloneNode(true) : null;
                   showPlayersPopup(clonedThumbs, card);
@@ -10309,10 +10469,11 @@ li a.about-link:hover::after {
                 #rbx-private-game-server-item-container li{display:inline-block;width:auto!important;float:none}
                 .rbx-private-game-server-item-container{display:flex;flex-wrap:wrap;gap:10px}
                 .players-popup-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:9999;animation:fadeIn .2s ease-out;opacity:1}
-                .players-popup-content{background:#2f2f2f;color:#fff;border-radius:10px;padding:20px;max-width:400px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,.6);text-align:center;transform:scale(.95);animation:popIn .2s ease-out forwards}
-                .players-popup-content h3{margin-top:0}
+                .players-popup-content{background:rgba(20, 22, 26, 0.95);color:#e8ecf3;border-radius:12px;padding:20px;max-width:400px;width:90%;box-shadow:0 10px 25px rgba(0,0,0,.3);border:1px solid rgba(77, 133, 238, 0.2);text-align:center;transform:scale(.95);animation:popIn .2s ease-out forwards}
+                .players-popup-content h3{margin-top:0;color:#e8ecf3;font-size:16px;font-weight:600;margin-bottom:16px}
+                .players-popup-content p{color:#a0a8b8;font-size:13px;line-height:1.5;margin-bottom:24px}
                 .players-popup-content .player-thumbnails-container{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:10px}
-                .players-popup-close{margin-top:15px;padding:6px 12px;cursor:pointer}
+                .players-popup-close{margin-top:15px;padding:8px 20px;cursor:pointer;background:rgba(28, 31, 37, 0.6);color:#e8ecf3;border:1px solid rgba(255, 255, 255, 0.12);border-radius:6px;font-size:13px;font-weight:500;transition:0.2s}
                 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
                 @keyframes popIn{to{transform:scale(1)}}
                 @keyframes fadeOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.95)}}
@@ -10843,7 +11004,7 @@ li a.about-link:hover::after {
                     ConsoleLogEnabled(`Joining server: ${randomServerId}`);
 
                     // Join the game instance with the selected server ID
-                    Roblox.GameLauncher.joinGameInstance(gameId, randomServerId);
+                    JoinServer(gameId, randomServerId);
 
                     // Store the selected server ID with the time and date in localStorage
                     const timestamp = new Date().toISOString();
@@ -11075,19 +11236,15 @@ li a.about-link:hover::after {
                 ConsoleLogEnabled("[Auto] ROLOCATE_AutoRunServerRegions is not true. Script skipped.");
             }
 
-
-
-
             /*******************************************************
             name of function: An observer
-            description: Not a function, but an observer which ads the
+            description: Not a function, but an observer which adds the
             filter button, server hop button, recent servers, and disables
             trailer autoplay if settings are true
             *******************************************************/
             const observer = new MutationObserver((mutations, obs) => {
                 const serverListOptions = document.querySelector('.server-list-options');
                 const playButton = document.querySelector('.btn-common-play-game-lg.btn-primary-md');
-
                 if (serverListOptions && !document.querySelector('.RL-filter-button') && localStorage.getItem("ROLOCATE_togglefilterserversbutton") === "true") {
 
                     ConsoleLogEnabled("Added Filter Button");
@@ -12560,6 +12717,12 @@ select:hover, select:focus {
                                 return;
                             }
 
+                            if (json.status === 23 && json.message.includes('You have been banned from this experience by its creators.')) {
+                                reject('banned_by_creator');
+                                return;
+                            }
+
+
                             const address = json?.joinScript?.UdmuxEndpoints?.[0]?.Address ?? json?.joinScript?.MachineAddress;
                             if (!address) {
                                 ConsoleLogEnabled("API Response (Unknown Location) Which means Full Server!:", json);
@@ -12621,8 +12784,7 @@ select:hover, select:focus {
                                 return;
                             }
 
-
-
+                            location.placeVersion = json.joinScript.PlaceVersion; // not wrapping this in an object cause it breaks stuff. so this should do
                             resolve(location);
                         },
                         onerror: function(error) {
@@ -12675,6 +12837,11 @@ select:hover, select:focus {
 
                                 if (json.status === 12 && json.message === 'Cannot join this non-root place due to join restrictions') {
                                     innerReject('subplace_join_restriction');
+                                    return;
+                                }
+
+                                if (json.status === 23 && json.message.includes('You have been banned from this experience by its creators.')) {
+                                    reject('banned_by_creator');
                                     return;
                                 }
 
@@ -12746,7 +12913,7 @@ select:hover, select:focus {
                                     return;
                                 }
 
-
+                                location.placeVersion = json.joinScript.PlaceVersion; // samething
                                 innerResolve(location);
                             },
                             onerror: function(error) {
@@ -12821,9 +12988,6 @@ select:hover, select:focus {
         function delay(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
         }
-
-
-
 
         /*******************************************************
          name of function: createServerCountPopup
@@ -13114,9 +13278,9 @@ select:hover, select:focus {
             const filterContainer = document.createElement('div');
             Object.assign(filterContainer.style, {
                 display: 'flex',
-                gap: '32px',
+                gap: '16px',
                 alignItems: 'center',
-                padding: '40px 48px',
+                padding: '20px 24px',
                 background: 'linear-gradient(145deg, rgba(12,12,12,0.98) 0%, rgba(8,8,8,0.98) 25%, rgba(15,10,10,0.98) 75%, rgba(10,8,8,0.98) 100%)',
                 borderRadius: '28px',
                 boxShadow: '0 32px 64px rgba(0,0,0,0.6), 0 0 0 1px rgba(200,30,30,0.15), inset 0 1px 0 rgba(255,255,255,0.02)',
@@ -13315,11 +13479,12 @@ select:hover, select:focus {
             logoWrapper.appendChild(logoContainer);
             filterContainer.appendChild(logoWrapper);
 
-            // Function to create premium icon
+            // create icons
             const createIcon = (type) => {
                 const iconMap = {
-                    globe: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="m16 12 4-4-4-4"/><path d="m8 12-4 4 4 4"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
-                    city: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v8h4"/><path d="M18 9h2a2 2 0 0 1 2 2v11h-4"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg>`,
+                    globe: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 2a14.5 14.5 0 0 1 0 20 14.5 14.5 0 0 1 0-20z"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
+                    city: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="6" height="12" rx="1"/><rect x="13" y="5" width="6" height="16" rx="1"/><rect x="5" y="12" width="2" height="2" rx="0.5"/><rect x="5" y="16" width="2" height="2" rx="0.5"/><rect x="15" y="8" width="2" height="2" rx="0.5"/><rect x="15" y="12" width="2" height="2" rx="0.5"/><rect x="15" y="16" width="2" height="2" rx="0.5"/></svg>`,
+                    version: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 2.5v6.527a2 2 0 0 1-.211.896L5.22 19.55a1 1 0 0 0 .9 1.45h11.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 13.5 9.027V2.5"/><path d="M8.5 2.5h7"/><path d="M7 15.5h10"/></svg>`,
                     chevron: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`
                 };
                 return iconMap[type] || '';
@@ -13327,7 +13492,7 @@ select:hover, select:focus {
 
             // function to get country code from country name
             const getCountryCode = (countryName) => {
-                // Common country name to code mappings - extend as needed
+                // name to code name 2 letter name yea daskdha
                 const countryCodeMap = {
                     'Australia': 'AU',
                     'Brazil': 'BR',
@@ -13353,7 +13518,7 @@ select:hover, select:focus {
                 const wrapper = document.createElement('div');
                 Object.assign(wrapper.style, {
                     position: 'relative',
-                    minWidth: '280px',
+                    minWidth: '200px',
                     flex: '1'
                 });
 
@@ -13537,16 +13702,17 @@ select:hover, select:focus {
             // Create premium dropdowns with icons
             const countryDropdown = createDropdown('countryFilter', 'All Countries', 'globe');
             const cityDropdown = createDropdown('cityFilter', 'All Cities', 'city');
+            const versionDropdown = createDropdown('versionFilter', 'Server Versions', 'version'); // glitch somehwre ein the code but idc
 
-            // Populate dropdowns with server data and flags
+            // server data and flasgs
             const countryCounts = {};
-            const countryServerMap = {}; // To store server info for each country
+            const countryServerMap = {}; // store server ifno for each one
 
             servers.forEach(server => {
                 const country = server.location.country.name;
                 countryCounts[country] = (countryCounts[country] || 0) + 1;
                 if (!countryServerMap[country]) {
-                    countryServerMap[country] = server; // Store first server for country code reference
+                    countryServerMap[country] = server; // store first server for country code reference
                 }
             });
 
@@ -13637,12 +13803,12 @@ select:hover, select:focus {
                 return customDisplay;
             };
 
-            // Add custom display to country dropdown
+            // add custom display to country dropdown
             const countryDropdownContainer = countryDropdown.querySelector('.shimmer-effect');
             const countryCustomDisplay = createCustomDropdownDisplay(countrySelect);
             countryDropdownContainer.appendChild(countryCustomDisplay);
 
-            // Make the original select transparent when it has a selection
+            // make it transparent
             countrySelect.addEventListener('change', () => {
                 if (countrySelect.value) {
                     countrySelect.style.color = 'transparent';
@@ -13651,7 +13817,7 @@ select:hover, select:focus {
                 }
             });
 
-            // Premium separator with gradient
+            // premium separator with gradient
             const separator = document.createElement('div');
             Object.assign(separator.style, {
                 height: '80px',
@@ -13734,12 +13900,66 @@ select:hover, select:focus {
                         setTimeout(() => cityDropdown.removeChild(updateRipple), 1000);
                     }, 100);
                 }
+                // update theis
+                populateVersionOptions(countrySelect.value, citySelect.value);
             });
 
-            // Append elements to container
+            // function to do stuff like picmversioin
+            // hopefulyl works no buggy wuggys
+            const versionSelect = versionDropdown.querySelector('select');
+            function populateVersionOptions(countryValue, cityValue) {
+                const prevValue = versionSelect.value;
+                versionSelect.innerHTML = '<option value="">All Versions</option>';
+                let candidateServers = servers;
+                if (countryValue) candidateServers = candidateServers.filter(s => s.location.country.name === countryValue);
+                if (cityValue) {
+                    candidateServers = candidateServers.filter(s => `${s.location.city}${s.location.region?.name ? `, ${s.location.region.name}` : ''}` === cityValue);
+                }
+                const versionsSet = new Set();
+                candidateServers.forEach(s => {
+                    const v = s.location.placeVersion;
+                    if (v != null && v !== 'N/A') versionsSet.add(Number(v));
+                });
+                const versions = Array.from(versionsSet).sort((a,b) => b - a); // newest on top to oldest
+                if (versions.length === 0) return; // safety
+                const min = versions[versions.length - 1];
+                const max = versions[0];
+                versions.forEach(v => {
+                    const option = document.createElement('option');
+                    option.value = String(v);
+                    // label newest and oldest
+                    if (v === max) {
+                        option.textContent = `Newest (${v})`;
+                    } else if (v === min) {
+                        option.textContent = `Oldest (${v})`;
+                    } else {
+                        option.textContent = String(v);
+                    }
+                    Object.assign(option.style, {
+                        background: 'rgba(15,15,15,0.98)',
+                        color: 'rgba(200,30,30,0.9)',
+                        padding: '12px'
+                    });
+                    versionSelect.appendChild(option);
+                });
+                // try to restore previous value if still available
+                if (prevValue && Array.from(versionSelect.options).some(o => o.value === prevValue)) {
+                    versionSelect.value = prevValue;
+                }
+            };
+            // on city change update versions so no bugs
+            const citySelect = cityDropdown.querySelector('select');
+            citySelect.addEventListener('change', () => {
+                populateVersionOptions(countrySelect.value, citySelect.value);
+            });
+
+            // elemtns inside so country city and version
             filterContainer.appendChild(countryDropdown);
-            filterContainer.appendChild(separator);
             filterContainer.appendChild(cityDropdown);
+            filterContainer.appendChild(versionDropdown);
+
+            // add versions in
+            populateVersionOptions('', '');
 
             // Premium container entrance animation
             setTimeout(() => {
@@ -13754,8 +13974,7 @@ select:hover, select:focus {
         name of function: filterServers
         description: Function to filter servers based on selected country and city cause im lazy
         *******************************************************/
-        function filterServers(servers, country, city) { // yay o[1] search finally
-          // build index only once, and reuse it
+        function filterServers(servers, country, city, version) {
           if (!filterServers.index || filterServers.lastServers !== servers) {
             filterServers.index = new Map();
             filterServers.lastServers = servers;
@@ -13764,21 +13983,66 @@ select:hover, select:focus {
               const countryName = s.location.country.name;
               const cityName = `${s.location.city}${s.location.region?.name ? `, ${s.location.region.name}` : ''}`;
 
+              // hopefully i can remember later on what this does
               const cKey = `country:${countryName}`;
               const cityKey = `city:${countryName}:${cityName}`;
+              const placeVersion = s.location.placeVersion;
+              const hasValidVersion = placeVersion != null && placeVersion !== 'N/A';
+              const versionStr = hasValidVersion ? String(placeVersion) : null;
+              const vKey = versionStr ? `version:${versionStr}` : null;
+              const cVKey = versionStr ? `version:${countryName}:${versionStr}` : null;
+              const cityVKey = versionStr ? `version:${countryName}:${cityName}:${versionStr}` : null;
 
-              if (!filterServers.index.has(cKey)) filterServers.index.set(cKey, []);
-              if (!filterServers.index.has(cityKey)) filterServers.index.set(cityKey, []);
+              // holy if spam
+              if (!filterServers.index.has(cKey)) {
+                filterServers.index.set(cKey, []);
+              }
+              if (!filterServers.index.has(cityKey)) {
+                filterServers.index.set(cityKey, []);
+              }
+              if (vKey && !filterServers.index.has(vKey)) {
+                filterServers.index.set(vKey, []);
+              }
+              if (cVKey && !filterServers.index.has(cVKey)) {
+                filterServers.index.set(cVKey, []);
+              }
+              if (cityVKey && !filterServers.index.has(cityVKey)) {
+                filterServers.index.set(cityVKey, []);
+              }
 
               filterServers.index.get(cKey).push(s);
               filterServers.index.get(cityKey).push(s);
+              if (vKey) {
+                filterServers.index.get(vKey).push(s);
+              }
+              if (cVKey) {
+                filterServers.index.get(cVKey).push(s);
+              }
+              if (cityVKey) {
+                filterServers.index.get(cityVKey).push(s);
+              }
             }
           }
 
-          if (country && city) return filterServers.index.get(`city:${country}:${city}`) || [];
-          if (country) return filterServers.index.get(`country:${country}`) || [];
-          return servers; // if no filters, just return all
+          if (country && city && version) {
+            return filterServers.index.get(`version:${country}:${city}:${version}`) || [];
+          }
+          if (country && city) {
+            return filterServers.index.get(`city:${country}:${city}`) || [];
+          }
+          if (country && version) {
+            return filterServers.index.get(`version:${country}:${version}`) || [];
+          }
+          if (version) {
+            return filterServers.index.get(`version:${version}`) || [];
+          }
+          if (country) {
+            return filterServers.index.get(`country:${country}`) || [];
+          }
+
+          return servers;
         }
+
 
 
         /*******************************************************
@@ -13986,10 +14250,97 @@ select:hover, select:focus {
         }
 
         /*******************************************************
+        name of function: getCsrfToken
+        description: get crsf token
+        *******************************************************/
+        async function getCsrfToken() { // look ik this function may get called like a million times. but shouldnt be an issue. :) real men test in production >:)
+            return new Promise((resolve) => {
+                GM_xmlhttpRequest({ // low risk endpoint. hopefully no ratelimit
+                    url: "https://catalog.roblox.com/v1/catalog/items/details",
+                    method: "POST",
+                    withCredentials: true,
+                    onload: function(response) {
+                        const token = response.responseHeaders
+                            .split("\n")
+                            .find(h => h.toLowerCase().startsWith("x-csrf-token"));
+
+                        if (!token) {
+                            ConsoleLogEnabled("Error: Something went wrong getting csrf token!");
+                            resolve(null);
+                            return;
+                        }
+
+                        const value = token.split(":")[1].trim();
+                        resolve(value);
+                    },
+                    onerror: function() {
+                        ConsoleLogEnabled("Error: Request failed while getting csrf token!");
+                        resolve(null);
+                    }
+                });
+            });
+        }
+
+        /*******************************************************
+        name of function: getLatestPlaceVersion
+        description: get the latest published version of a place
+        *******************************************************/
+        async function getLatestPlaceVersion(gameId) { // yea may get called 1 billion times
+            try {
+                const token = await getCsrfToken();
+                if (!token) {
+                    ConsoleLogEnabled("Error: Could not get CSRF token for version check");
+                    return null;
+                }
+
+                return new Promise((resolve, reject) => {
+                    GM_xmlhttpRequest({
+                        method: "POST",
+                        url: "https://develop.roblox.com/v1/assets/latest-versions",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "X-CSRF-TOKEN": token
+                        },
+                        data: JSON.stringify({
+                            assetIds: [parseInt(gameId)],
+                            versionStatus: "Published"
+                        }),
+                        onload: function(response) {
+                            try {
+                                const data = JSON.parse(response.responseText);
+                                if (data.results && data.results.length > 0 && data.results[0].status === "Success") {
+                                    const versionNumber = data.results[0].versionNumber;
+                                    ConsoleLogEnabled(`Latest Published Place Version: ${versionNumber}`);
+                                    resolve(versionNumber);
+                                } else {
+                                    ConsoleLogEnabled("Error: Could not retrieve version number from response");
+                                    resolve(null);
+                                }
+                            } catch (err) {
+                                ConsoleLogEnabled("Error parsing latest version response:", err);
+                                resolve(null);
+                            }
+                        },
+                        onerror: function(err) {
+                            ConsoleLogEnabled("Error fetching latest place version:", err);
+                            resolve(null);
+                        },
+                        withCredentials: true
+                    });
+                });
+
+            } catch (error) {
+                ConsoleLogEnabled("Error fetching latest place version:", error);
+                return null;
+            }
+        }
+
+        /*******************************************************
         name of function: rebuildServerList
-        description: Optimized function to create server cards immediately and load thumbnails async
+        description: function to create server cards immediately and load thumbnails
         *******************************************************/
         async function rebuildServerList(gameId, totalLimit, best_connection, quick_join = false) {
+            const latestPublishedVersion = await getLatestPlaceVersion(gameId);
             const serverListContainer = document.getElementById("rbx-public-game-server-item-container");
             const isJoinMode = best_connection || quick_join;
 
@@ -14107,7 +14458,7 @@ select:hover, select:focus {
                         }
 
                         if (closestServer) {
-                            Roblox.GameLauncher.joinGameInstance(gameId, closestServer.id);
+                            JoinServer(gameId, closestServer.id);
                             notifications(`Joining nearest server! \nDistance: ${Math.round(minDistance / 1.609)} miles | ${Math.round(minDistance)} km`, 'success', '🚀', '5000');
                             foundServer = true;
                         }
@@ -14205,6 +14556,8 @@ select:hover, select:focus {
                                     throw error;
                                 } else if (error === 'subplace_join_restriction') {
                                     throw error;
+                                } else if (error === 'banned_by_creator') {
+                                    throw error;
                                 } else {
                                     ConsoleLogEnabled(error);
                                     skippedServers++;
@@ -14219,7 +14572,7 @@ select:hover, select:focus {
                         serverDetails.push(...validResults);
                         processedCount += batch.length;
 
-                        // Smoothly update the processed count
+                        // smoothly update the processed count
                         function updateProcessedCountSmoothly(startCount, targetCount) {
                             const increment = 1;
                             let currentCount = startCount;
@@ -14239,7 +14592,7 @@ select:hover, select:focus {
                         updateProcessedCountSmoothly(previousProcessedCount, processedCount);
                     }
                 } else {
-                    // Sequential processing
+                    // sequential processing
                     for (let i = 0; i < servers.length; i++) {
                         const server = servers[i];
                         const {
@@ -14256,7 +14609,7 @@ select:hover, select:focus {
                                 if (premium_message) {
                                     premium_message.textContent = "Error: Cannot access server regions because you have not purchased the game.";
                                 }
-                                notifications('Cannot access server regions because you have not purchased the game.', 'error', '⚠️', '15000');
+                                notifications('Error: Cannot access server regions because you have not purchased the game.', 'error', '⚠️', '15000');
                                 Loadingbar(false);
                                 return;
                             } else if (error === 'subplace_join_restriction') {
@@ -14264,6 +14617,13 @@ select:hover, select:focus {
                                     premium_message.textContent = "Error: This game requires users to teleport to a subplace. As a result, server regions cannot be retrieved.";
                                 }
                                 notifications('Error: This game requires users to teleport to a subplace. As a result, server regions cannot be retrieved.', 'error', '⚠️', '15000');
+                                Loadingbar(false);
+                                return;
+                            } else if (error === 'banned_by_creator') {
+                                if (premium_message) {
+                                    premium_message.textContent = "Error: Cannot access server regions because the creator has banned you from the game.";
+                                }
+                                notifications('Error: Cannot access server regions because the creator has banned you from the game.', 'error', '⚠️', '15000');
                                 Loadingbar(false);
                                 return;
                             } else {
@@ -14315,7 +14675,7 @@ select:hover, select:focus {
                     const fastServers = localStorage.getItem('ROLOCATE_fastservers');
 
                     if (handler?.includes('violentmonkey') && fastServers === 'false') {
-                        notifications(`You're using Violentmonkey, itsupports Fast Servers. Turn on "Fast Server Search" in Settings → General → Fast Server Search, to search servers up to 100x faster!`, 'info', '🚀', '12000');
+                        notifications(`You're using Violentmonkey, it supports Fast Servers. Turn on "Fast Server Search" in Settings → General → Fast Server Search, to search servers up to 100x faster!`, 'info', '🚀', '12000');
                     }
 
                     if (handler?.includes('scriptcat') && fastServers === 'false') {
@@ -14323,7 +14683,7 @@ select:hover, select:focus {
                     }
 
                     if (handler?.includes('tampermonkey')) {
-                        notifications(`Server search is slow because of a bug in Tampermonkey that can make it 100x slower. Use Violentmonkey or Scriptcat to make it 100x faster!`, 'info', '🚀', '12000');
+                        notifications(`Server search is slow because of a bug in Tampermonkey. Use Violentmonkey or Scriptcat to make it 100x faster!`, 'info', '🚀', '12000');
                     }
                 }
 
@@ -14339,10 +14699,15 @@ select:hover, select:focus {
                 serverListContainer.style.gridTemplateColumns = "repeat(4, 1fr)";
                 serverListContainer.style.gap = "0px";
 
-                const displayFilteredServers = (country, city) => {
+                // compacted code to save some space. still readable tho. for server version labels (New) and (Old)
+                const serverVersions = serverDetails.map(d => d.location.placeVersion).filter(v => v != null && v !== 'N/A').map(Number);
+                const minVersion = serverVersions.length > 0 ? Math.min(...serverVersions) : null;
+                const maxVersion = serverVersions.length > 0 ? Math.max(...serverVersions) : null;
+
+                const displayFilteredServers = (country, city, version) => {
                     serverListContainer.innerHTML = "";
 
-                    const filteredServers = filterServers(serverDetails, country, city);
+                    const filteredServers = filterServers(serverDetails, country, city, version);
                     const sortedServers = filteredServers.sort((a, b) => {
                         const distanceA = calculateDistance(userLocation.latitude, userLocation.longitude, a.location.latitude, a.location.longitude);
                         const distanceB = calculateDistance(userLocation.latitude, userLocation.longitude, b.location.latitude, b.location.longitude);
@@ -14377,21 +14742,25 @@ select:hover, select:focus {
                         pingLabel.style.textTransform = "uppercase !important";
                         pingLabel.style.letterSpacing = "0.5px !important";
 
-                        // Calculate distance and ping
+                        // calculate distance and ping
                         const distance = calculateDistance(
                             userLocation.latitude,
                             userLocation.longitude,
                             location.latitude,
                             location.longitude
                         );
-                        const calculatedPing = 40 + 0.004 * distance + 1.2 * Math.sqrt(distance);
 
-                        if (distance < 1250) {
+                        // formula derived from regression of 382 data points. restricted domain of distance >= 0
+                        // distance is km
+                        const calculatedPing = 2.05816 * Math.sqrt((1/0.700042) * (Math.max(distance,0) + 2479.47383)) - 72.29266;
+
+
+                        if (Math.max(distance, 0) < 1250) {
                             pingLabel.textContent = "⚡ Fast";
                             pingLabel.style.backgroundColor = "#1a4a3a";
                             pingLabel.style.color = "#4ade80";
                             pingLabel.style.border = "1px solid #22c55e";
-                        } else if (distance < 5000) {
+                        } else if (Math.max(distance, 0) < 5000) {
                             pingLabel.textContent = "⏳ OK";
                             pingLabel.style.backgroundColor = "#4a3a1a";
                             pingLabel.style.color = "#fbbf24";
@@ -14412,7 +14781,7 @@ select:hover, select:focus {
                             thumbnailsContainer = createThumbnailContainer(null, server.maxPlayers, server.playing, true);
                         }
 
-                        // Calculate server health
+                        // calculate server health
                         const healthPercentage = Math.min(100, Math.round((server.fps / 60) * 100));
                         let healthBg, healthIcon;
                         if (healthPercentage >= 90) {
@@ -14425,7 +14794,7 @@ select:hover, select:focus {
                             healthBg = '#4a2a1a';
                             healthIcon = '🟠';
                         } else {
-                            healthBg = '#4a1a1a';
+                            healthBg = '#4a1a1a'; // yea bad server
                             healthIcon = '🔴';
                         }
 
@@ -14437,45 +14806,57 @@ select:hover, select:focus {
                         cardItem.style.height = "100%";
                         cardItem.style.color = "#e5e5e5";
 
+                        const versionDisplay = location.placeVersion && location.placeVersion !== 'N/A'
+                            ? (location.placeVersion === latestPublishedVersion
+                                ? `${location.placeVersion} <span style="display: inline-block; background: rgba(34, 197, 94, 0.12); color: #22c55e; font-weight: 600; font-size: 10px; padding: 3px 10px; border-radius: 6px; margin-left: 8px; text-transform: uppercase; letter-spacing: 0.8px; border: 1px solid rgba(34, 197, 94, 0.25);">NEW</span>`
+                                : location.placeVersion === minVersion
+                                    ? `${location.placeVersion} <span style="display: inline-block; background: rgba(239, 68, 68, 0.12); color: #ef4444; font-weight: 600; font-size: 10px; padding: 3px 10px; border-radius: 6px; margin-left: 8px; text-transform: uppercase; letter-spacing: 0.8px; border: 1px solid rgba(239, 68, 68, 0.25);">OLD</span>`
+                                    : location.placeVersion)
+                            : 'N/A';
+
                         cardItem.innerHTML = `
-            ${thumbnailsContainer.outerHTML}
-            <div class="rbx-game-server-details game-server-details" style="margin-top: 12px;">
-                <div class="text-info rbx-game-status rbx-game-server-status text-overflow" style="color: #b3b3b3; font-size: 16px; margin-bottom: 8px; text-align: center;">
-                    ${server.playing} of ${server.maxPlayers} people max
-                </div>
-                <div class="server-player-count-gauge border" style="background: #1a1a1a; border: 1px solid #404040; border-radius: 6px; height: 8px; overflow: hidden; margin-bottom: 12px;">
-                    <div class="gauge-inner-bar border" style="background: linear-gradient(90deg, #bcbec8, #bcbec8); height: 100%; border: none; transition: width 0.3s ease; width: ${(server.playing / server.maxPlayers) * 100}%;"></div>
-                </div>
-                <span data-placeid="${gameId}">
-                    <button type="button" class="btn-full-width btn-control-xs rbx-game-server-join game-server-join-btn btn-primary-md btn-min-width" style="background: #404040; border: 1px solid #555555; color: #e5e5e5; border-radius: 8px; padding: 10px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; width: 100%; text-transform: uppercase; letter-spacing: 0.5px; font-size: 12px;">Join</button>
-                </span>
-            </div>
-                <div style="margin-top: 12px; text-align: center; color: #b3b3b3;">
-                    ${pingLabel.outerHTML}
-                    <div style="margin-top: 10px; background: #1f1f1f; border-radius: 8px; padding: 12px; border: 1px solid #333333;">
-                        <div style="margin-bottom: 6px; font-size: 14px; color: #888888;">
-                            <span style="color: #e5e5e5; font-weight: 600;">Estimated Ping:</span> ${calculatedPing.toFixed(1)}ms
+                        ${thumbnailsContainer.outerHTML}
+                        <div class="rbx-game-server-details game-server-details" style="margin-top: 12px;">
+                            <div class="text-info rbx-game-status rbx-game-server-status text-overflow" style="color: #b3b3b3; font-size: 16px; margin-bottom: 8px; text-align: center;">
+                                ${server.playing} of ${server.maxPlayers} people max
+                            </div>
+                            <div class="server-player-count-gauge border" style="background: #1a1a1a; border: 1px solid #404040; border-radius: 6px; height: 8px; overflow: hidden; margin-bottom: 12px;">
+                                <div class="gauge-inner-bar border" style="background: linear-gradient(90deg, #bcbec8, #bcbec8); height: 100%; border: none; transition: width 0.3s ease; width: ${(server.playing / server.maxPlayers) * 100}%;"></div>
+                            </div>
+                            <span data-placeid="${gameId}">
+                                <button type="button" class="btn-full-width btn-control-xs rbx-game-server-join game-server-join-btn btn-primary-md btn-min-width" style="background: #404040; border: 1px solid #555555; color: #e5e5e5; border-radius: 8px; padding: 10px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; width: 100%; text-transform: uppercase; letter-spacing: 0.5px; font-size: 12px;">Join</button>
+                            </span>
                         </div>
-                        <hr style="margin: 6px 0; border: none; height: 1px; background: #333333;">
-                        <div style="margin-bottom: 6px; font-size: 14px; color: #888888;">
-                            <span style="color: #e5e5e5; font-weight: 600;">Distance:</span> ${distance.toFixed(1)}km
-                        </div>
-                        <hr style="margin: 6px 0; border: none; height: 1px; background: #333333;">
-                        <div style="margin-bottom: 6px; font-size: 14px; color: #888888;">
-                            <span style="color: #e5e5e5; font-weight: 600;">Location:</span> ${location.city}, ${location.country.name}
-                        </div>
-                        <hr style="margin: 6px 0; border: none; height: 1px; background: #333333;">
-                        <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
-                            <span style="color: #e5e5e5; font-weight: 600; font-size: 14px;">Server Health:</span>
-                            <div style="display: flex; align-items: center; gap: 4px; background: ${healthBg}; padding: 3px 8px; border-radius: 6px;">
-                                <span style="font-size: 12px;">${healthIcon}</span>
-                                <span style="font-weight: 700; font-size: 13px;">${healthPercentage}%</span>
+                            <div style="margin-top: 12px; text-align: center; color: #b3b3b3;">
+                                ${pingLabel.outerHTML}
+                                <div style="margin-top: 10px; background: #1f1f1f; border-radius: 8px; padding: 12px; border: 1px solid #333333;">
+                                    <div style="margin-bottom: 6px; font-size: 14px; color: #888888;">
+                                        <span style="color: #e5e5e5; font-weight: 600;">Estimated Ping:</span> ${calculatedPing.toFixed(1)}ms
+                                    </div>
+                                    <hr style="margin: 6px 0; border: none; height: 1px; background: #333333;">
+                                    <div style="margin-bottom: 6px; font-size: 14px; color: #888888;">
+                                        <span style="color: #e5e5e5; font-weight: 600;">Distance:</span> ${distance.toFixed(1)}km
+                                    </div>
+                                    <hr style="margin: 6px 0; border: none; height: 1px; background: #333333;">
+                                    <div style="margin-bottom: 6px; font-size: 14px; color: #888888;">
+                                        <span style="color: #e5e5e5; font-weight: 600;">Location:</span> ${location.city}, ${location.country.name}
+                                    </div>
+                                    <hr style="margin: 6px 0; border: none; height: 1px; background: #333333;">
+                                    <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+                                        <span style="color: #e5e5e5; font-weight: 600; font-size: 14px;">Server Health:</span>
+                                        <div style="display: flex; align-items: center; gap: 4px; background: ${healthBg}; padding: 3px 8px; border-radius: 6px;">
+                                            <span style="font-size: 12px;">${healthIcon}</span>
+                                            <span style="font-weight: 700; font-size: 13px;">${healthPercentage}%</span>
+                                        </div>
+                                    </div>
+                                    <hr style="margin: 6px 0; border: none; height: 1px; background: #333333;">
+                                    <div style="margin-bottom: 6px; font-size: 14px; color: #888888;">
+                                            <span style="color: #e5e5e5; font-weight: 600;">Version:</span> ${versionDisplay}
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-            </div>
-        `;
+                        `;
 
                         const joinButton = cardItem.querySelector(".rbx-game-server-join");
                         joinButton.addEventListener('mouseenter', () => {
@@ -14490,8 +14871,8 @@ select:hover, select:focus {
                         });
 
                         joinButton.addEventListener("click", () => {
-                            ConsoleLogEnabled(`Roblox.GameLauncher.joinGameInstance(${gameId}, "${server.id}")`);
-                            Roblox.GameLauncher.joinGameInstance(gameId, server.id);
+                            ConsoleLogEnabled(`Roblox.GameLauncher.joinGameInstance(${gameId}, "${server.id}")`); // not anymore
+                            JoinServer(gameId, server.id);
                         });
 
                         const container = adjustJoinButtonContainer(joinButton);
@@ -14544,24 +14925,29 @@ select:hover, select:focus {
                 // Add event listeners to dropdowns
                 const countryFilter = document.getElementById('countryFilter');
                 const cityFilter = document.getElementById('cityFilter');
+                const versionFilter = document.getElementById('versionFilter');
 
                 countryFilter.addEventListener('change', () => {
-                    displayFilteredServers(countryFilter.value, cityFilter.value);
+                    displayFilteredServers(countryFilter.value, cityFilter.value, versionFilter.value);
                 });
 
                 cityFilter.addEventListener('change', () => {
-                    displayFilteredServers(countryFilter.value, cityFilter.value);
+                    displayFilteredServers(countryFilter.value, cityFilter.value, versionFilter.value);
                 });
 
-                // Display all servers initially
-                displayFilteredServers("", "");
+                versionFilter.addEventListener('change', () => {
+                    displayFilteredServers(countryFilter.value, cityFilter.value, versionFilter.value);
+                });
+
+                // countries cities and versions
+                displayFilteredServers("", "", "");
 
             } catch (error) {
                 if (error === 'purchase_required') {
                     if (premium_message) {
                         premium_message.textContent = "Error: Cannot access server regions because you have not purchased the game.";
                     }
-                    notifications('Cannot access server regions because you have not purchased the game.', 'error', '⚠️', '15000');
+                    notifications('Error: Cannot access server regions because you have not purchased the game.', 'error', '⚠️', '15000');
                     Loadingbar(false);
                     return;
                 } else if (error === 'subplace_join_restriction') {
@@ -14569,6 +14955,13 @@ select:hover, select:focus {
                         premium_message.textContent = "Error: This game requires users to teleport to a subplace. As a result, server regions cannot be retrieved.";
                     }
                     notifications('Error: This game requires users to teleport to a subplace. As a result, server regions cannot be retrieved.', 'error', '⚠️', '15000');
+                    Loadingbar(false);
+                    return;
+                } else if (error === 'banned_by_creator') {
+                    if (premium_message) {
+                        premium_message.textContent = "Error: Cannot access server regions because the creator has banned you from the game.";
+                    }
+                    notifications('Error: Cannot access server regions because the creator has banned you from the game.', 'error', '⚠️', '15000');
                     Loadingbar(false);
                     return;
                 } else {
@@ -14585,7 +14978,7 @@ select:hover, select:focus {
             }
         }
 
-        // Game ID extraction remains the same
+        // game id remains the same
         const gameId = /^https:\/\/www\.roblox\.com(\/[a-z]{2})?\/games\//.test(window.location.href) ? (window.location.href.match(/\/games\/(\d+)/) || [])[1] || null : null;
         /*******************************************************
         name of function: createInviteButton
@@ -14939,7 +15332,7 @@ select:hover, select:focus {
                     if (targetServer) {
                         // Join the server with the lowest player count
                         //showLoadingOverlay();
-                        Roblox.GameLauncher.joinGameInstance(gameId, targetServer.id);
+                        JoinServer(gameId, targetServer.id);
                         notifications(`Joining a server with ${targetServer.playing} player(s).`, 'success', '🚀');
                         success = true; // Mark as successful
                     } else {
@@ -15073,15 +15466,18 @@ select:hover, select:focus {
                 }
 
                 // target by the unique select IDs that are created in the component
-                const countryFilter = document.getElementById('countryFilter');
-                const cityFilter = document.getElementById('cityFilter');
+                const countryFilter_remove = document.getElementById('countryFilter');
+                const cityFilter_remove = document.getElementById('cityFilter');
+                const versionFilter_remove = document.getElementById('versionFilter');
 
                 // find the dumb container
                 let outerDiv = null;
-                if (countryFilter) {
-                    outerDiv = countryFilter.closest('div[style*="display: flex"][style*="gap: 32px"]');
-                } else if (cityFilter) {
-                    outerDiv = cityFilter.closest('div[style*="display: flex"][style*="gap: 32px"]');
+                if (countryFilter_remove) {
+                    outerDiv = countryFilter_remove.closest('div[style*="display: flex"][style*="gap: 16px"]');
+                } else if (cityFilter_remove) {
+                    outerDiv = cityFilter_remove.closest('div[style*="display: flex"][style*="gap: 16px"]');
+                } else if (versionFilter_remove) {
+                    outerDiv = versionFilter_remove.closest('div[style*="display: flex"][style*="gap: 16px"]');
                 }
                 // remove it
                 if (outerDiv) {
@@ -15095,7 +15491,8 @@ select:hover, select:focus {
                     const messageText = premiumMessageDiv.textContent.trim();
                     const errorMessages = [
                         "Error: Cannot access server regions because you have not purchased the game.",
-                        "Error: This game requires users to teleport to a subplace. As a result, server regions cannot be retrieved."
+                        "Error: This game requires users to teleport to a subplace. As a result, server regions cannot be retrieved.",
+                        "Error: Cannot access server regions because the creator has banned you from the game."
                     ];
 
                     if (errorMessages.includes(messageText)) {
@@ -15322,7 +15719,7 @@ select:hover, select:focus {
                 type: 'button',
                 className: 'btn-full-width btn-control-xs rbx-game-server-join game-server-join-btn btn-primary-md btn-min-width',
                 textContent: 'Join',
-                onclick: () => Roblox.GameLauncher.joinGameInstance(gameId, serverId)
+                onclick: () => JoinServer(gameId, serverId)
             });
 
             // Invite button with click handler
