@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RoLocate
 // @namespace    https://oqarshi.github.io/
-// @version      44.3
+// @version      44.4
 // @description  Adds filter options to roblox server page. Alternative to paid extensions like RoPro, RoGold®, RoQol, and RoKit.
 // @author       Oqarshi
 // @match        https://www.roblox.com/*
@@ -221,8 +221,8 @@
     *******************************************************/
     function Update_Popup() {
 
-        const VERSION = "V44.3";
-        const PREV_VERSION = "V43.3";
+        const VERSION = "V44.4";
+        const PREV_VERSION = "V44.3";
 
         const CHANGELOG = {
             Serverversions: {
@@ -788,7 +788,7 @@
             return `
         <div class="home-section">
             <img class="rolocate-logo" src="${window.Base64Images.logo}" alt="ROLOCATE Logo">
-            <div class="version">Rolocate: Version 44.3</div>
+            <div class="version">Rolocate: Version 44.4</div>
             <div class="section-separator"></div>
             <p>Rolocate by Oqarshi.</p>
             <p class="license-note">
@@ -8938,6 +8938,7 @@ li a.about-link:hover::after {
 
         if (window.location.href.includes("/games/")) { // saftey check and lazy load data to save the 2mb of ram lmao
             loadServerRegions(); // lazy loads the server region data to save 4mb of ram
+            InitRobloxLaunchHandler();
 
             if (window.serverRegionsByIp) {
                 ConsoleLogEnabled("Server regions data loaded successfully.");
@@ -8977,6 +8978,53 @@ li a.about-link:hover::after {
 
                 /* ---------- recent‑servers handling (always runs) ---------- */
                 if (localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true") {
+                    await HandleRecentServersAddGames(placeId, serverId); // Fixed: was gameId
+                    document.querySelector(".recent-servers-section")?.remove();
+                    HandleRecentServers();
+                }
+
+                /* ---------- smartserver join---------- */
+                if (localStorage.getItem("ROLOCATE_smartjoinpopup") === "true") {
+                    showLoadingOverlay(placeId, serverId); // Fixed: was gameId
+                    await new Promise(res => setTimeout(res, 1500)); // 1.5s delay
+                }
+
+                // Set flag to bypass interceptor
+                window._skipRobloxJoinInterceptor = true;
+                Roblox.GameLauncher.joinGameInstance(placeId, serverId);
+            }
+        }
+
+        /*******************************************************
+        name of function: InitRobloxLaunchHandler
+        description: Detects when the user joins a Roblox server,
+        adds it to recent servers (if enabled), and—only when
+        SmartSearch is on—shows a loading overlay and waits 1.5s.
+        *******************************************************/
+        function InitRobloxLaunchHandler() {
+            if (localStorage.getItem("ROLOCATE_btrobloxfix") === "true") {
+              return;
+            };
+
+            if (!/^https:\/\/www\.roblox\.com(\/[a-z]{2})?\/games\//.test(window.location.href)) return;
+
+            if (window._robloxJoinInterceptorInitialized) return;
+            window._robloxJoinInterceptorInitialized = true;
+
+            const originalJoin = Roblox.GameLauncher.joinGameInstance;
+
+            Roblox.GameLauncher.joinGameInstance = async function(gameId, serverId) {
+
+                // Check if we should skip interception (called from JoinServer)
+                if (window._skipRobloxJoinInterceptor) {
+                    window._skipRobloxJoinInterceptor = false; // Reset flag
+                    return originalJoin.apply(this, arguments);
+                }
+
+                ConsoleLogEnabled(`Intercepted join: Game ID = ${gameId}, Server ID = ${serverId}`);
+
+                /* ---------- recent‑servers handling (always runs) ---------- */
+                if (localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true") {
                     await HandleRecentServersAddGames(gameId, serverId);
                     document.querySelector(".recent-servers-section")?.remove();
                     HandleRecentServers();
@@ -8987,11 +9035,10 @@ li a.about-link:hover::after {
                     showLoadingOverlay(gameId, serverId); // visual feedback
                     await new Promise(res => setTimeout(res, 1500)); // 1.5s delay
                 }
-
-                Roblox.GameLauncher.joinGameInstance(placeId, serverId);
-            }
+                /* ---------- finally join the game ---------- */
+                return originalJoin.apply(this, arguments);
+            };
         }
-
         /*******************************************************
         name of function: HandleRecentServersAddGames
         description: Adds recent servers to localstorage for safe
