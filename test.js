@@ -6,8 +6,11 @@
 // @author       Oqarshi
 // @grant        none
 // ==/UserScript==
+window.serverRegionsByIp = null;
+window.loadServerRegions = function () {
+    if (window.serverRegionsByIp) return; // already loaded
 window.serverRegionsByIp={
-// optimzied
+// Optimized structure: locations defined once, IPs reference them
 _locations:{
 "0":{city:"Singapore",country:{name:"Singapore",code:"SG"},region:{name:"Singapore",code:"Singapore"},latitude:1.3521,longitude:103.8198},
 "1":{city:"Ashburn",country:{name:"United States",code:"US"},region:{name:"Virginia",code:"VA"},latitude:39.0438,longitude:-77.4874},
@@ -74007,7 +74010,7 @@ window.getLocationForIp = function(ip) {
     return null;
 };
 
-// Backward compatibility with script
+// Backward compatibility
 window.getServerRegionsByIp = function() {
     const result = {};
     for (const [ip, locationId] of Object.entries(window.serverRegionsByIp)) {
@@ -74016,4 +74019,5 @@ window.getServerRegionsByIp = function() {
         }
     }
     return result;
+};
 };
