@@ -6,34 +6,33 @@
 // @author       Oqarshi
 // @grant        none
 // ==/UserScript==
-window.countryNames={"SG":"Singapore","US":"United States","GB":"United Kingdom","JP":"Japan","IN":"India","AU":"Australia","DE":"Germany","NL":"Netherlands","FR":"France","BR":"Brazil","SP":"SP","IE":"Ireland"};
 window.serverRegionsByIp={
-// Optimized: c=city, co=country code, r=region name, rc=region code, lat=latitude, lon=longitude
+// optimzied
 _locations:{
-"0":{c:"Singapore",co:"SG",r:"Singapore",rc:"Singapore",lat:1.3521,lon:103.8198},
-"1":{c:"Ashburn",co:"US",r:"Virginia",rc:"VA",lat:39.0438,lon:-77.4874},
-"2":{c:"London",co:"GB",r:"England",rc:"England",lat:51.513,lon:-0.08},
-"3":{c:"Chicago",co:"US",r:"Illinois",rc:"IL",lat:41.85,lon:-87.65},
-"4":{c:"Miami",co:"US",r:"Florida",rc:"FL",lat:25.7743,lon:-80.1937},
-"5":{c:"Tokyo",co:"JP",r:"Tokyo",rc:"Tokyo",lat:35.6895,lon:139.6917},
-"6":{c:"Mumbai",co:"IN",r:"Maharashtra",rc:"Maharashtra",lat:19.076,lon:72.8777},
-"7":{c:"Los Angeles",co:"US",r:"California",rc:"CA",lat:34.0522,lon:-118.2437},
-"8":{c:"Sydney",co:"AU",r:"New South Wales",rc:"New South Wales",lat:-33.8678,lon:151.2073},
-"9":{c:"Dallas",co:"US",r:"Texas",rc:"TX",lat:32.7831,lon:-96.8067},
-"10":{c:"Frankfurt am Main",co:"DE",r:"Hesse",rc:"Hesse",lat:50.1109,lon:8.6821},
-"11":{c:"New York City",co:"US",r:"New York",rc:"NY",lat:40.7143,lon:-74.006},
-"12":{c:"Amsterdam",co:"NL",r:"North Holland",rc:"North Holland",lat:52.374,lon:4.8897},
-"13":{c:"Seattle",co:"US",r:"Washington",rc:"WA",lat:47.6062,lon:-122.3321},
-"14":{c:"Paris",co:"FR",r:"Île-de-France",rc:"Île-de-France",lat:48.8534,lon:2.3488},
-"15":{c:"São Paulo",co:"BR",r:"São Paulo",rc:"São Paulo",lat:-23.5505,lon:-46.6333},
-"16":{c:"Singapore",co:"SP",r:"Singapore",rc:"Singapore",lat:1.3521,lon:103.8198},
-"17":{c:"Atlanta",co:"US",r:"Georgia",rc:"GA",lat:33.749,lon:-84.388},
-"18":{c:"London",co:"GB",r:"England",rc:"England",lat:51.5085,lon:-0.1257},
-"19":{c:"Portland",co:"US",r:"Oregon",rc:"OR",lat:45.5231,lon:-122.6765},
-"20":{c:"Columbus",co:"US",r:"Ohio",rc:"OH",lat:39.9625,lon:-83.0032},
-"21":{c:"San Jose",co:"US",r:"California",rc:"CA",lat:37.3382,lon:-121.8863},
-"22":{c:"Dublin",co:"IE",r:"Leinster",rc:"Leinster",lat:53.3498,lon:-6.2603},
-"23":{c:"Osaka",co:"JP",r:"Osaka",rc:"Osaka",lat:34.6937,lon:135.5023},
+"0":{city:"Singapore",country:{name:"Singapore",code:"SG"},region:{name:"Singapore",code:"Singapore"},latitude:1.3521,longitude:103.8198},
+"1":{city:"Ashburn",country:{name:"United States",code:"US"},region:{name:"Virginia",code:"VA"},latitude:39.0438,longitude:-77.4874},
+"2":{city:"London",country:{name:"United Kingdom",code:"GB"},region:{name:"England",code:"England"},latitude:51.513,longitude:-0.08},
+"3":{city:"Chicago",country:{name:"United States",code:"US"},region:{name:"Illinois",code:"IL"},latitude:41.85,longitude:-87.65},
+"4":{city:"Miami",country:{name:"United States",code:"US"},region:{name:"Florida",code:"FL"},latitude:25.7743,longitude:-80.1937},
+"5":{city:"Tokyo",country:{name:"Japan",code:"JP"},region:{name:"Tokyo",code:"Tokyo"},latitude:35.6895,longitude:139.6917},
+"6":{city:"Mumbai",country:{name:"India",code:"IN"},region:{name:"Maharashtra",code:"Maharashtra"},latitude:19.076,longitude:72.8777},
+"7":{city:"Los Angeles",country:{name:"United States",code:"US"},region:{name:"California",code:"CA"},latitude:34.0522,longitude:-118.2437},
+"8":{city:"Sydney",country:{name:"Australia",code:"AU"},region:{name:"New South Wales",code:"New South Wales"},latitude:-33.8678,longitude:151.2073},
+"9":{city:"Dallas",country:{name:"United States",code:"US"},region:{name:"Texas",code:"TX"},latitude:32.7831,longitude:-96.8067},
+"10":{city:"Frankfurt am Main",country:{name:"Germany",code:"DE"},region:{name:"Hesse",code:"Hesse"},latitude:50.1109,longitude:8.6821},
+"11":{city:"New York City",country:{name:"United States",code:"US"},region:{name:"New York",code:"NY"},latitude:40.7143,longitude:-74.006},
+"12":{city:"Amsterdam",country:{name:"Netherlands",code:"NL"},region:{name:"North Holland",code:"North Holland"},latitude:52.374,longitude:4.8897},
+"13":{city:"Seattle",country:{name:"United States",code:"US"},region:{name:"Washington",code:"WA"},latitude:47.6062,longitude:-122.3321},
+"14":{city:"Paris",country:{name:"France",code:"FR"},region:{name:"Île-de-France",code:"Île-de-France"},latitude:48.8534,longitude:2.3488},
+"15":{city:"São Paulo",country:{name:"Brazil",code:"BR"},region:{name:"São Paulo",code:"São Paulo"},latitude:-23.5505,longitude:-46.6333},
+"16":{city:"Singapore",country:{name:"SP",code:"SP"},region:{name:"Singapore",code:"Singapore"},latitude:1.3521,longitude:103.8198},
+"17":{city:"Atlanta",country:{name:"United States",code:"US"},region:{name:"Georgia",code:"GA"},latitude:33.749,longitude:-84.388},
+"18":{city:"London",country:{name:"United Kingdom",code:"GB"},region:{name:"England",code:"England"},latitude:51.5085,longitude:-0.1257},
+"19":{city:"Portland",country:{name:"United States",code:"US"},region:{name:"Oregon",code:"OR"},latitude:45.5231,longitude:-122.6765},
+"20":{city:"Columbus",country:{name:"United States",code:"US"},region:{name:"Ohio",code:"OH"},latitude:39.9625,longitude:-83.0032},
+"21":{city:"San Jose",country:{name:"United States",code:"US"},region:{name:"California",code:"CA"},latitude:37.3382,longitude:-121.8863},
+"22":{city:"Dublin",country:{name:"Ireland",code:"IE"},region:{name:"Leinster",code:"Leinster"},latitude:53.3498,longitude:-6.26031},
+"23":{city:"Osaka",country:{name:"Japan",code:"JP"},region:{name:"Osaka",code:"Osaka"},latitude:34.6937,longitude:135.5023},
 },
 // IP to location mapping
 "128.116.1.0":"7",
@@ -73999,36 +73998,21 @@ _locations:{
 "98.94.99.0":"1"
 };
 
-// Get location data for an IP (converts compact format to full format)
+// Get location data for an IP
 window.getLocationForIp = function(ip) {
     const locationId = window.serverRegionsByIp[ip];
-    const loc = window.serverRegionsByIp._locations[locationId];
-    if (!loc) return null;
-    
-    return {
-        city: loc.c,
-        country: { name: window.countryNames[loc.co], code: loc.co },
-        region: { name: loc.r, code: loc.rc },
-        latitude: loc.lat,
-        longitude: loc.lon
-    };
+    if (locationId && window.serverRegionsByIp._locations[locationId]) {
+        return window.serverRegionsByIp._locations[locationId];
+    }
+    return null;
 };
 
-// Backward compatibility (returns all IPs with full format)
+// Backward compatibility with script
 window.getServerRegionsByIp = function() {
     const result = {};
     for (const [ip, locationId] of Object.entries(window.serverRegionsByIp)) {
-        if (ip !== '_locations') {
-            const loc = window.serverRegionsByIp._locations[locationId];
-            if (loc) {
-                result[ip] = {
-                    city: loc.c,
-                    country: { name: window.countryNames[loc.co], code: loc.co },
-                    region: { name: loc.r, code: loc.rc },
-                    latitude: loc.lat,
-                    longitude: loc.lon
-                };
-            }
+        if (ip !== '_locations' && window.serverRegionsByIp._locations[locationId]) {
+            result[ip] = window.serverRegionsByIp._locations[locationId];
         }
     }
     return result;
