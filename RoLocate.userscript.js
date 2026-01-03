@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RoLocate
 // @namespace    https://oqarshi.github.io/
-// @version      44.4
+// @version      44.5
 // @description  Adds filter options to roblox server page. Alternative to paid extensions like RoPro, RoGold®, RoQol, and RoKit.
 // @author       Oqarshi
 // @match        https://www.roblox.com/*
@@ -14,7 +14,7 @@
 // @grant        GM_setValue
 // @grant        GM_deleteValue
 // @require      https://update.greasyfork.org/scripts/535590/1586769/Rolocate%20Base64%20Image%20Library%2020.js
-// @require      https://update.greasyfork.org/scripts/547134/1675932/Rolocate%20Server%20Region%20Data%20%28Data%20Saving%29.js
+// @require      https://update.greasyfork.org/scripts/547134/1722939/Rolocate%20Server%20Region%20Data%20%28Data%20Saving%29.js
 // @require      https://update.greasyfork.org/scripts/540553/1648593/Rolocate%20Flag%20Base64%20Data.js
 // @require      https://update.greasyfork.org/scripts/544437/1642116/Rolocate%20Restore%20Classic%20Terms%20All%20Languages.js
 // @connect      thumbnails.roblox.com
@@ -71,6 +71,41 @@
 (function() {
     'use strict';
 
+
+    //---------------XSS Attack Vectors Protection--------------------
+    // ik this should be fixed, but roblox engineers are not the brightest...
+    // so extra protection i guess.
+    // escape the hmtl. Used in consolog function, notifications function, etc.
+    const escapeHtmlnoxssattackvectors = (text) => {
+        const temp = document.createElement('div');
+        temp.textContent = text;
+        return temp.innerHTML;
+    };
+
+    // for numbers. currently used in mutualfriends function
+    const sanitizeUserId = (id) => {
+        const numId = parseInt(id, 10);
+        return (!isNaN(numId) && numId > 0) ? numId : 0; // return 0 install of null yea
+    };
+
+    // for attributes. currenltyy used in custombackgrounds function
+    const sanitizeAttribute = (str) => {
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+    };
+
+    // for hex value colors. currenltyy used in custombackgrounds function
+    const sanitizeColor = (color) => {
+        return /^#[0-9A-Fa-f]{6}$/.test(color) ? color : '#ffffff';
+    };
+
+    // for css values like rgb and rgba. currenltyy used in custombackgrounds function
+    const sanitizeCssValue = (value) => {
+        const rgbaPattern = /^rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*[\d.]+\s*)?\)$/;
+        const hexPattern = /^#[0-9A-Fa-f]{3,6}$/;
+        return (rgbaPattern.test(value) || hexPattern.test(value)) ? value : 'rgba(40,40,40,0.85)';
+    };
+    //----------------------------------------------------------
+
     /*******************************************************
     name of function: ConsoleLogEnabled
     description: console.logs everything if settings is turned
@@ -78,13 +113,13 @@
     *******************************************************/
     function ConsoleLogEnabled(...args) {
         if (localStorage.getItem("ROLOCATE_enableLogs") === "true") {
-            console.log("[ROLOCATE]", ...args);
+            escapeHtmlnoxssattackvectors(console.log("[ROLOCATE]", ...args)); // be safe
         }
     }
 
     /*******************************************************
     name of function: notifications
-    description: notifications function
+    description: notifications function (XSS-safe)
     *******************************************************/
     function notifications(message, type = 'info', emoji = '', duration = 3000) {
             if (localStorage.getItem('ROLOCATE_enablenotifications') !== 'true') return;
@@ -116,7 +151,7 @@
             .toast-content { display: flex; align-items: center; gap: 10px; }
             .toast-icon { width: 16px; height: 16px; flex-shrink: 0; }
             .toast-emoji { font-size: 16px; flex-shrink: 0; }
-            .toast-message { flex: 1; line-height: 1.4; }
+            .toast-message { flex: 1; line-height: 1.4; white-space: pre-wrap; }
 
             .toast-close {
                 position: absolute; top: 4px; right: 6px; width: 20px; height: 20px;
@@ -151,7 +186,9 @@
             }
 
             const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
+            const validTypes = ['success', 'error', 'warning', 'info'];
+            const safeType = validTypes.includes(type) ? type : 'info';
+            toast.className = `toast ${safeType}`;
 
             const icons = {
                 success: '<svg width="16" height="16" fill="none" stroke="#4CAF50" stroke-width="2" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>',
@@ -160,14 +197,18 @@
                 info: '<svg width="16" height="16" fill="none" stroke="#2196F3" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>'
             };
 
+            // escape the user input sduyhgads
+            const safeMessage = escapeHtmlnoxssattackvectors(message);
+            const safeEmoji = escapeHtmlnoxssattackvectors(emoji);
+
             toast.innerHTML = `
             <div class="toast-content">
-                <div class="toast-icon">${icons[type] || icons.info}</div>
-                ${emoji ? `<span class="toast-emoji">${emoji}</span>` : ''}
-                <span class="toast-message">${message.replace(/\n/g, '<br>')}</span>
+                <div class="toast-icon">${icons[safeType]}</div>
+                ${emoji ? `<span class="toast-emoji">${safeEmoji}</span>` : ''}
+                <span class="toast-message">${safeMessage.replace(/\n/g, '<br>')}</span>
             </div>
             <div class="toast-close"></div>
-            <div class="progress-bar" style="animation-duration: ${duration}ms;"></div>
+            <div class="progress-bar" style="animation-duration: ${parseInt(duration)}ms;"></div>
         `;
 
             container.appendChild(toast);
@@ -197,20 +238,23 @@
             return {
                 remove: removeToast,
                 update: (newMessage) => {
-                    toast.querySelector('.toast-message').innerHTML = newMessage.replace(/\n/g, '<br>');
+                    const escaped = escapeHtmlnoxssattackvectors(newMessage);
+                    toast.querySelector('.toast-message').innerHTML = escaped.replace(/\n/g, '<br>');
                 },
                 setType: (newType) => {
-                    toast.className = `toast ${newType}`;
-                    toast.querySelector('.toast-icon').innerHTML = icons[newType] || icons.info;
+                    const validType = validTypes.includes(newType) ? newType : 'info';
+                    toast.className = `toast ${validType}`;
+                    toast.querySelector('.toast-icon').innerHTML = icons[validType];
                 },
                 setDuration: (newDuration) => {
                     clearTimeout(timeout);
-                    progressBar.style.animation = `shrink ${newDuration}ms linear forwards`;
-                    timeout = setTimeout(removeToast, newDuration);
+                    const safeDuration = parseInt(newDuration);
+                    progressBar.style.animation = `shrink ${safeDuration}ms linear forwards`;
+                    timeout = setTimeout(removeToast, safeDuration);
                 },
                 updateEmoji: (newEmoji) => {
                     const emojiEl = toast.querySelector('.toast-emoji');
-                    if (emojiEl) emojiEl.textContent = newEmoji;
+                    if (emojiEl) emojiEl.textContent = escapeHtmlnoxssattackvectors(newEmoji);
                 }
             };
         }
@@ -221,51 +265,27 @@
     *******************************************************/
     function Update_Popup() {
 
-        const VERSION = "V44.4";
-        const PREV_VERSION = "V44.3";
+        const VERSION = "V44.5";
+        const PREV_VERSION = "V44.4";
 
         const CHANGELOG = {
+            Mobilemode: {
+                title: "Mobile Mode",
+                icon: "📱",
+                subtitle: "Mobile Mode (Android Only)",
+                description: "Note: Still very buggy. Mobile users can now use RoLocate on Mobile! Join Server Regions using your phone! A Video is available on how to do this is available here: https://www.youtube.com/watch?v=gz5SHAro08Q",
+                badge: "New", // badges: New, Updated, Removed
+                settings: [
+                    { label: "Enabled by default", value: "False" },
+                    { label: "Toggle Location", value: "Advanced Tab" },
+                    { label: "Scope", value: "Roblox.com/*" }
+                ]
+            },
             Serverversions: {
                 title: "Server Regions",
                 icon: "🌐",
                 subtitle: "Server Regions",
-                description: "Server Versions have been added. Now allows you to find the oldest and newest servers and inbetween!",
-                badge: "Updated", // badges: New, Updated, Removed
-                settings: [
-                    { label: "Enabled by default", value: "True" },
-                    { label: "Toggle Location", value: "Advanced Tab" },
-                    { label: "Scope", value: "Roblox.com/games/*" }
-                ]
-            },
-            btrobloxfix: {
-                title: "BTRoblox Comptatability",
-                icon: "✔️",
-                subtitle: "BTRoblox Comptatability",
-                description: "Fix server filters not working wityh BTRoblox. Go to settings -> Advanced -> Fix BTRoblox compatability",
-                badge: "Updated", // badges: New, Updated, Removed
-                settings: [
-                    { label: "Enabled by default", value: "True" },
-                    { label: "Toggle Location", value: "Advanced Tab" },
-                    { label: "Scope", value: "Roblox.com/games/*" }
-                ]
-            },
-            QuickLaunch: {
-                title: "Quick Launch Games",
-                icon: "⚡",
-                subtitle: "Quick Launch Games",
-                description: "You can now move games around in Quick Launch Games.",
-                badge: "Updated", // badges: New, Updated, Removed
-                settings: [
-                    { label: "Enabled by default", value: "True" },
-                    { label: "Toggle Location", value: "Advanced Tab" },
-                    { label: "Scope", value: "Roblox.com/home" }
-                ]
-            },
-            CompactServer: {
-                title: "CompactServer",
-                icon: "🤏",
-                subtitle: "CompactServer",
-                description: "Compact Private Servers UI improvements.",
+                description: "Fixed some servers being confused between the UK and Poland.",
                 badge: "Updated", // badges: New, Updated, Removed
                 settings: [
                     { label: "Enabled by default", value: "True" },
@@ -277,14 +297,38 @@
                 title: "Mutual Friends",
                 icon: "😎",
                 subtitle: "Mutual Friends",
-                description: "Mutual Friends has been fixed. (Broken by BTRoblox). It also shows profile pictures now.",
+                description: "Mutual Friends has been optimized so now it loads faster.",
                 badge: "Updated", // badges: New, Updated, Removed
                 settings: [
                     { label: "Enabled by default", value: "True" },
-                    { label: "Toggle Location", value: "Appearance Tab" },
+                    { label: "Toggle Location", value: "Extras Tab" },
                     { label: "Scope", value: "Roblox.com/users/*" }
                 ]
-            }
+            },
+            securityupdate: {
+                title: "Security Update",
+                icon: "🛡️",
+                subtitle: "Security Update",
+                description: "Improved the xss attack vectors protection.",
+                badge: "Updated", // badges: New, Updated, Removed
+                settings: [
+                    { label: "Always On (Cannot Disable)", value: "True" },
+                    { label: "User Control", value: "Not Available" },
+                    { label: "Applies To", value: "Roblox.com/*" }
+                ]
+            },
+            autoserverregions: {
+                title: "Auto Server Regions",
+                icon: "🛜",
+                subtitle: "Auto Server Regions",
+                description: "Select how many servers to search. Customizable in settings.",
+                badge: "Updated", // badges: New, Updated, Removed
+                settings: [
+                    { label: "Always On (Cannot Disable)", value: "True" },
+                    { label: "User Control", value: "Not Available" },
+                    { label: "Applies To", value: "Roblox.com/games/*" }
+                ]
+            },
         };
 
         const currentVersion = localStorage.getItem('version') || "V0.0";
@@ -618,7 +662,8 @@
         restoreclassicterms: true, // enabled by default
         compactprivateservers: true, // enabled by default
         custombackgrounds: false, // disabled by default
-        btrobloxfix: false // disabled by default
+        btrobloxfix: false, // disabled by default
+        mobilemode: false // disabled by default
     };
 
     const presetConfigurations = {
@@ -647,35 +692,37 @@
                 restoreclassicterms: true,
                 compactprivateservers: true,
                 custombackgrounds: false,
-                btrobloxfix: false
+                btrobloxfix: false,
+                mobilemode: false
             }
         },
-        serverfiltersonly: {
-            name: "Server Filters",
+        mobilesettings: {
+            name: "Mobile Settings",
             settings: {
                 enableLogs: false,
-                removeads: false,
+                removeads: true,
                 togglefilterserversbutton: true,
-                toggleserverhopbutton: false,
+                toggleserverhopbutton: true,
                 AutoRunServerRegions: false,
-                ShowOldGreeting: false,
+                ShowOldGreeting: true,
                 togglerecentserverbutton: false,
                 prioritylocation: "automatic",
-                fastservers: false,
+                fastservers: true,
                 invertplayercount: false,
                 enablenotifications: true,
-                disabletrailer: false,
+                disabletrailer: true,
                 gamequalityfilter: false,
                 mutualfriends: false,
-                disablechat: false,
+                disablechat: true,
                 smartsearch: false,
-                quicklaunchgames: false,
+                quicklaunchgames: true,
                 smartjoinpopup: false,
-                betterfriends: false,
-                restoreclassicterms: false,
-                compactprivateservers: false,
+                betterfriends: true,
+                restoreclassicterms: true,
+                compactprivateservers: true,
                 custombackgrounds: false,
-                btrobloxfix: false
+                btrobloxfix: false,
+                mobilemode: true
             }
         },
         developerpref: {
@@ -703,7 +750,8 @@
                 restoreclassicterms: true,
                 compactprivateservers: true,
                 custombackgrounds: false,
-                btrobloxfix: false
+                btrobloxfix: false,
+                mobilemode: false
             }
         },
         disablerolocate: {
@@ -731,13 +779,14 @@
                 restoreclassicterms: false,
                 compactprivateservers: false,
                 custombackgrounds: false,
-                btrobloxfix: false
+                btrobloxfix: false,
+                mobilemode: false
             }
         }
     };
 
     function initializeLocalStorage() {
-        // Loop through default settings and set them in localStorage if they don't exist
+        // this loops through the settings and if they dont exist then add them
         Object.entries(defaultSettings).forEach(([key, value]) => {
             const storageKey = `ROLOCATE_${key}`;
             if (localStorage.getItem(storageKey) === null) {
@@ -771,7 +820,7 @@
             }
         } catch (e) {
             ConsoleLogEnabled("Error initializing coordinates storage:", e);
-            // not commenting this cause im bored
+            // used like the userscript manager storage (cannot be accessed by other extensions) to store coordinates.
             GM_setValue("ROLOCATE_coordinates", JSON.stringify({
                 lat: "",
                 lng: ""
@@ -788,7 +837,7 @@
             return `
         <div class="home-section">
             <img class="rolocate-logo" src="${window.Base64Images.logo}" alt="ROLOCATE Logo">
-            <div class="version">Rolocate: Version 44.4</div>
+            <div class="version">Rolocate: Version 44.5</div>
             <div class="section-separator"></div>
             <p>Rolocate by Oqarshi.</p>
             <p class="license-note">
@@ -816,9 +865,9 @@
                             <h4>🛠️ Default</h4>
                             <p>Default settings that RoLocate comes with.</p>
                         </div>
-                        <div class="preset-card" data-preset="serverfiltersonly">
-                            <h4>📡 Server Filters</h4>
-                            <p>Only server filter features will be enabled.</p>
+                        <div class="preset-card" data-preset="mobilesettings">
+                            <h4>📱 Mobile Settings</h4>
+                            <p>Optimized for Mobile Users.</p>
                         </div>
                         <div class="preset-card" data-preset="developerpref">
                             <h4>👑 Dev Settings</h4>
@@ -930,6 +979,18 @@
                 Fix BTRoblox Compatability
                 <span class="help-icon" data-help="Fix BTRoblox">?</span>
             </label>
+
+            <label class="toggle-slider new_label">
+                <input type="checkbox" id="mobilemode">
+                <span class="slider"></span>
+                Mobile Mode
+                <a href="https://www.youtube.com/watch?v=gz5SHAro08Q" target="_blank" style="margin-left:8px;color:#4CAF50;text-decoration:underline;cursor:pointer;font-weight:bold;">Video</a>
+                <span class="new">New
+                    <span class="tooltip">Just Released/Updated</span>
+                </span>
+                <a href="https://example.com/help/mobile-mode" target="_blank" class="help-icon" data-help="Mobile Mode">?</a>
+            </label>
+
 
             <div class="location-settings">
                 <div class="setting-header">
@@ -1095,6 +1156,7 @@
                 <li id="help-Enable Server Hop Button"><strong>Enable Server Hop Button:</strong> <span>Enables server hop feature on the game page.</span></li>
                 <li id="help-Enable Notifications"><strong>Enable Notifications:</strong> <span>Enables helpful notifications from the script.</span></li>
                 <li id="help-Fix BTRoblox"><strong>Fix Btroblox Compatability:</strong> <span>Uses alternative methods to make the script compatible with BTRoblox.</span></li>
+                <li id="help-Mobile Mode"><strong>Mobile Mode:</strong> <span>Allows you to join server regions on mobile devices.</span></li>
                 <li id="help-Set default location"><strong>Set default location:</strong> <span>Enables the user to set a default location for Roblox server regions. Turn this on if the script cannot automatically detect your location.</span></li>
             </ul>
 
@@ -1119,7 +1181,7 @@
     `;
         }
 
-        // General tab (default)
+        // general tab which is the default
         return `
     <div class="general-section">
 
@@ -1137,6 +1199,7 @@
             <input type="checkbox" id="AutoRunServerRegions">
             <span class="slider"></span>
             Auto Server Regions
+            <button id="edit-autoserverregionsbutton-btn" class="edit-button" type="button" style="display: none;">Edit</button>
             <span class="help-icon" data-help="Auto Server Regions">?</span>
         </label>
 
@@ -2077,9 +2140,24 @@ li a.about-link:hover::after {
                     // aniamtions stuff
                     settingsTitle.textContent = section.charAt(0).toUpperCase() + section.slice(1);
                     settingsBody.innerHTML = getSettingsContent(section);
+
+
+                    if (section === "general") {
+                        const autoserverregionscheckbox = document.getElementById("AutoRunServerRegions");
+                        const editButton_autoserverregionsbtn = document.getElementById("edit-autoserverregionsbutton-btn");
+                        if (autoserverregionscheckbox && editButton_autoserverregionsbtn) {
+                            // show edit button
+                            editButton_autoserverregionsbtn.style.display = localStorage.getItem("ROLOCATE_AutoRunServerRegions") === "true" ? "block" : "none";
+                            // uhh on and off for edit buttoin
+                            autoserverregionscheckbox.addEventListener("change", function() {
+                                const isEnabled = this.checked;
+                                editButton_autoserverregionsbtn.style.display = isEnabled ? "block" : "none";
+                            });
+                        }
+                    }
                     // quick nav and removeads stuff
                     if (section === "appearance") {
-                        // Remove Ads
+                        // remove the ads
                         const removeAdsCheckbox = document.getElementById("removeads");
                         const editRemoveAdsButton = document.getElementById("edit-removeads-btn");
                         if (removeAdsCheckbox && editRemoveAdsButton) {
@@ -2091,14 +2169,14 @@ li a.about-link:hover::after {
                             });
                         }
 
-                        // Custom Backgrounds
+                        // custom backtgrounds
                         const customBackgroundsCheckbox = document.getElementById("custombackgrounds");
                         const editBackgroundsButton = document.getElementById("edit-backgrounds-btn");
                         if (customBackgroundsCheckbox && editBackgroundsButton) {
-                            // Set initial display based on localStorage
+
                             editBackgroundsButton.style.display = localStorage.getItem("ROLOCATE_custombackgrounds") === "true" ? "block" : "none";
 
-                            // Update localStorage and edit button visibility when checkbox changes
+                            // update localstorage and show edit button if button has any
                             customBackgroundsCheckbox.addEventListener("change", function() {
                                 const isEnabled = this.checked;
                                 localStorage.setItem("ROLOCATE_custombackgrounds", isEnabled);
@@ -2112,9 +2190,9 @@ li a.about-link:hover::after {
                         const gameQualityCheckbox = document.getElementById("gamequalityfilter");
                         const editButton = document.getElementById("edit-gamequality-btn");
                         if (gameQualityCheckbox && editButton) {
-                            // Set visibility on load
+                            // show edit button
                             editButton.style.display = localStorage.getItem("ROLOCATE_gamequalityfilter") === "true" ? "block" : "none";
-                            // Toggle visibility when the checkbox changes
+                            // uhh on and off for edit buttoin
                             gameQualityCheckbox.addEventListener("change", function() {
                                 const isEnabled = this.checked;
                                 editButton.style.display = isEnabled ? "block" : "none";
@@ -2133,33 +2211,32 @@ li a.about-link:hover::after {
                 }, 200);
             });
         });
-        // Close button with enhanced animation
+        // close button
         document.getElementById("close-settings").addEventListener("click", function() {
-            // Check if manual mode is selected with empty coordinates
             const priorityLocation = localStorage.getItem("ROLOCATE_prioritylocation");
             if (priorityLocation === "manual") {
                 try {
                     const coords = JSON.parse(GM_getValue("ROLOCATE_coordinates", '{"lat":"","lng":""}'));
                     if (!coords.lat || !coords.lng) {
                         notifications('Please set the latitude and longitude values for the manual location, or set it to automatic.', 'error', '⚠️', 8000);
-                        return; // Prevent closing
+                        return; // prevent closing if no coordiantes in manual mode
                     }
-                } catch (e) {
-                    ConsoleLogEnabled("Error checking coordinates:", e);
+                } catch (error) {
+                    ConsoleLogEnabled("Error checking coordinates:", error);
                     notifications('Error checking location settings', 'error', '⚠️', 8000);
-                    return; // Prevent closing
+                    return; // prevent closing if there is an error
                 }
             }
-            // Proceed with closing if validation passes
+            // uh close if all is good
             const menu = document.getElementById("userscript-settings-menu");
             menu.style.animation = "fadeOut 0.4s cubic-bezier(0.19, 1, 0.22, 1) forwards";
-            // Add rotation to close button when closing
+            // cool aniamtion for the close button
             this.style.transform = "rotate(90deg)";
             setTimeout(() => menu.remove(), 400);
         });
-        // Apply stored settings immediately when opened
+        // uh does whats in the fucntion name
         applyStoredSettings();
-        // Add ripple effect to buttons
+        // oooo a ripple animation cool :)
         const buttons = document.querySelectorAll(".edit-nav-button, .settings-button");
         buttons.forEach(button => {
             button.addEventListener("mousedown", function(e) {
@@ -2188,18 +2265,18 @@ li a.about-link:hover::after {
                 }, 10);
             });
         });
-        // Handle help icon clicks
+        // uh look at help icon clicky
         document.addEventListener('click', function(e) {
             if (e.target.classList.contains('help-icon')) {
-                // Prevent the event from bubbling up to the toggle button
+                // no glitches no bubble up
                 e.stopPropagation();
                 e.preventDefault();
                 const helpItem = e.target.getAttribute('data-help');
                 if (helpItem) {
-                    // Switch to help tab
+                    // go to help tab
                     const helpTab = document.querySelector('.settings-sidebar li[data-section="help"]');
                     if (helpTab) helpTab.click();
-                    // Scroll to the corresponding help item after a short delay
+                    // cool animtion to scroll down on help tab
                     setTimeout(() => {
                         const helpElement = document.getElementById(`help-${helpItem}`);
                         if (helpElement) {
@@ -2223,9 +2300,8 @@ li a.about-link:hover::after {
     name of function: applyStoredSettings
     description: makes sure local storage is stored in correctly
     *******************************************************/
-
     function applyStoredSettings() {
-        // Handle all checkboxes
+        // checkbox stuff
         document.querySelectorAll("input[type='checkbox']").forEach(checkbox => {
             const storageKey = `ROLOCATE_${checkbox.id}`;
             const savedValue = localStorage.getItem(storageKey);
@@ -2236,33 +2312,33 @@ li a.about-link:hover::after {
             });
         });
 
-        // Handle dropdown for prioritylocation-select
+        // location stuff
         const prioritySelect = document.getElementById("prioritylocation-select");
         if (prioritySelect) {
             const storageKey = "ROLOCATE_prioritylocation";
             const savedValue = localStorage.getItem(storageKey) || "automatic";
             prioritySelect.value = savedValue;
 
-            // Show/hide coordinates inputs based on selected value
+            // hide coordinate box if in automica vice versa
             const manualCoordinates = document.getElementById("manual-coordinates");
             if (manualCoordinates) {
                 manualCoordinates.style.display = savedValue === "manual" ? "block" : "none";
 
-                // Set input values from stored coordinates if available
+                // manual set input stuff
                 if (savedValue === "manual") {
                     try {
                         const savedCoords = JSON.parse(GM_getValue("ROLOCATE_coordinates", '{"lat":"","lng":""}'));
                         document.getElementById("latitude").value = savedCoords.lat || "";
                         document.getElementById("longitude").value = savedCoords.lng || "";
 
-                        // If manual mode but no coordinates saved, revert to automatic
+                        // if manual mode but no coordinates saved go back to automatic
                         if (!savedCoords.lat || !savedCoords.lng) {
                             prioritySelect.value = "automatic";
                             localStorage.setItem(storageKey, "automatic");
                             manualCoordinates.style.display = "none";
                         }
-                    } catch (e) {
-                        ConsoleLogEnabled("Error loading saved coordinates:", e);
+                    } catch (error) {
+                        ConsoleLogEnabled("Error loading saved coordinates:", error);
                     }
                 }
             }
@@ -2271,27 +2347,27 @@ li a.about-link:hover::after {
                 const newValue = prioritySelect.value;
                 localStorage.setItem(storageKey, newValue);
 
-                // Show/hide coordinates inputs based on new value
+                // show coordinate input if thereq
                 if (manualCoordinates) {
                     manualCoordinates.style.display = newValue === "manual" ? "block" : "none";
 
-                    // When switching to manual mode, load any saved coordinates
+                    // when switching to manual mode load any saved coordinates
                     if (newValue === "manual") {
                         try {
                             const savedCoords = JSON.parse(GM_getValue("ROLOCATE_coordinates", '{"lat":"","lng":""}'));
                             document.getElementById("latitude").value = savedCoords.lat || "";
                             document.getElementById("longitude").value = savedCoords.lng || "";
 
-                            // If no coordinates exist, keep the inputs empty
-                        } catch (e) {
-                            ConsoleLogEnabled("Error loading saved coordinates:", e);
+                            // if no input then keep it empty
+                        } catch (error) {
+                            ConsoleLogEnabled("Error loading saved coordinates:", error);
                         }
                     }
                 }
             });
         }
 
-        // Button click handlers
+        // uh buttons that need special treatment
 
         const editRemoveads = document.getElementById("edit-removeads-btn");
         if (editRemoveads) {
@@ -2324,17 +2400,21 @@ li a.about-link:hover::after {
         }
 
         const AutoRunServerRegions = document.getElementById("AutoRunServerRegions");
+        const AutoRunServerRegionsbutton = document.getElementById("edit-autoserverregionsbutton-btn")
         if (AutoRunServerRegions) {
             AutoRunServerRegions.addEventListener("change", () => {
                 if (AutoRunServerRegions.checked) {
                     notifications('Auto Server Regions works best when paired with Fast Server Search in Advanced Settings.', 'info', '🧪', 2000);
                 }
             });
+            AutoRunServerRegionsbutton.addEventListener("click", () => {
+                ChangeAutoServerRegionCount();
+            });
         }
 
 
 
-        // Save coordinates button handler
+        // save coordinates button duh
         const saveCoordinatesBtn = document.getElementById("save-coordinates");
         if (saveCoordinatesBtn) {
             saveCoordinatesBtn.addEventListener("click", () => {
@@ -2343,7 +2423,7 @@ li a.about-link:hover::after {
                 const lat = latInput.value.trim();
                 const lng = lngInput.value.trim();
 
-                // If manual mode but no coordinates provided, revert to automatic
+                // doubole check for stuff
                 if (!lat || !lng) {
                     const prioritySelect = document.getElementById("prioritylocation-select");
                     if (prioritySelect) {
@@ -2351,7 +2431,7 @@ li a.about-link:hover::after {
                         localStorage.setItem("ROLOCATE_prioritylocation", "automatic");
                         document.getElementById("manual-coordinates").style.display = "none";
 
-                        // show feedback to user even if they dont see it
+                        // if user sees this then something went wrong.
                         saveCoordinatesBtn.textContent = "Reverted to Automatic!";
                         saveCoordinatesBtn.style.background = "#4CAF50";
 
@@ -2363,7 +2443,8 @@ li a.about-link:hover::after {
                     return;
                 }
 
-                // Validate coordinates
+                // make sure they are actually real coordiantes
+                // wont check if ur in a middle of the ocean lmao
                 const latNum = parseFloat(lat);
                 const lngNum = parseFloat(lng);
                 if (isNaN(latNum) || isNaN(lngNum) || latNum < -90 || latNum > 90 || lngNum < -180 || lngNum > 180) {
@@ -2371,20 +2452,20 @@ li a.about-link:hover::after {
                     return;
                 }
 
-                // Save valid coordinates
+                // save the coordinates
                 const coordinates = {
                     lat,
                     lng
                 };
                 GM_setValue("ROLOCATE_coordinates", JSON.stringify(coordinates)); // store coordinates in secure storage
 
-                // Ensure we're in manual mode
+                // make sure in manaul mode. triple check
                 localStorage.setItem("ROLOCATE_prioritylocation", "manual");
                 if (prioritySelect) {
                     prioritySelect.value = "manual";
                 }
 
-                // Provide feedback
+                // tell user it saved
                 saveCoordinatesBtn.textContent = "Saved!";
                 saveCoordinatesBtn.style.background = "linear-gradient(135deg, #1e8449 0%, #196f3d 100%);";
 
@@ -2416,7 +2497,7 @@ li a.about-link:hover::after {
             });
         }
 
-        // Preset cards
+        // preset cards
         document.querySelectorAll(".preset-card").forEach(card => {
             card.addEventListener("click", () => {
                 const preset = card.dataset.preset;
@@ -2479,7 +2560,8 @@ li a.about-link:hover::after {
             localStorage.setItem(`ROLOCATE_${key}`, value);
         });
 
-        notifications(`${preset.name} preset applied! Refresh the page to see changes.`, 'success', '⚡', 5000);
+        notifications(`${preset.name} preset applied! Refreshing the page in 3 seconds...`, 'success', '⚡', 3000);
+        setTimeout(() => { location.reload(); }, 3000); // refresh after 5 seconds
     }
 
     function showConfirmation(title, message, onConfirm) {
@@ -2689,7 +2771,6 @@ li a.about-link:hover::after {
             return;
         }
 
-        // Get user settings
         const userSettings = JSON.parse(localStorage.getItem("ROLOCATE_editremoveads") || '{}');
         const defaultSettings = {
             adIframes: true,
@@ -2716,7 +2797,7 @@ li a.about-link:hover::after {
             isRunning = true;
 
             try {
-                // Block ad iframes if enabled
+                // block ad iframes if enabled by roblox for some reason
                 if (settings.adIframes) {
                     const adIframes = document.querySelectorAll(`
                         .ads-container iframe,
@@ -2735,7 +2816,7 @@ li a.about-link:hover::after {
 
                     adIframes.forEach(iframe => {
                         if (!doneMap.get(iframe)) {
-                            // hide instead of remove to be less aggressive
+                            // hide instead of remove cause no want page break
                             iframe.style.display = "none";
                             iframe.style.visibility = "hidden";
                             doneMap.set(iframe, true);
@@ -2743,7 +2824,7 @@ li a.about-link:hover::after {
                     });
                 }
 
-                // Block sponsored game cards if enabled
+                // block sponsored game cards if enabled
                 if (settings.sponsoredGames) {
                     document.querySelectorAll(".game-card-native-ad").forEach(ad => {
                         if (!doneMap.get(ad)) {
@@ -2756,7 +2837,7 @@ li a.about-link:hover::after {
                     });
                 }
 
-                // Block sponsored sections if enabled
+                // block sponsored sections if enabled
                 if (settings.sponsoredSections) {
                     document.querySelectorAll(".game-sort-carousel-wrapper").forEach(wrapper => {
                         if (doneMap.get(wrapper)) return;
@@ -2775,7 +2856,7 @@ li a.about-link:hover::after {
                     });
                 }
 
-                // Block "today's picks" section if enabled
+                // block "today's picks" section if enabled
                 if (settings.todaysPicks) {
                     document.querySelectorAll('.game-sort-carousel-wrapper').forEach(wrapper => {
                         if (doneMap.get(wrapper)) return;
@@ -2788,7 +2869,7 @@ li a.about-link:hover::after {
                     });
                 }
 
-                // Block "recommended for you" section if enabled
+                // block "recommended for you" section if enabled
                 if (settings.recommendedForYou) {
                     document.querySelectorAll('[data-testid="home-page-game-grid"]').forEach(grid => {
                         if (!doneMap.get(grid)) {
@@ -2798,7 +2879,7 @@ li a.about-link:hover::after {
                     });
                 }
 
-                // Block feed items if enabled
+                // block feed items if enabled
                 if (settings.feedItems) {
                     document.querySelectorAll(".sdui-feed-item-container").forEach(node => {
                         if (!doneMap.get(node)) {
@@ -2813,7 +2894,7 @@ li a.about-link:hover::after {
             }
         }
 
-        // use a throttled observer to reduce conflicts
+        // no comment
         let timeoutId;
         const observer = new MutationObserver(() => {
             clearTimeout(timeoutId);
@@ -2826,16 +2907,78 @@ li a.about-link:hover::after {
         });
 
         // wait a bit before initial run to let ublock orgin do its thing first if its installed
+        // master at glitch fixing ikr
         setTimeout(removeElements, 100);
     }
 
 
+    /*******************************************************
+    name of function: changeServerCount
+    description: gui to cyhange autoservergion count
+    *******************************************************/
+    function ChangeAutoServerRegionCount() {
+        const current = localStorage.getItem('ROLOCATE_AutoRunServerRegionsnumber') || '16';
+
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99998;opacity:0;transition:opacity 0.3s ease-in-out';
+
+        // Create modal
+        const div = document.createElement('div');
+        div.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1a1a1a;padding:20px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.5);z-index:99999;color:white;font-family:system-ui;opacity:0;transition:opacity 0.3s ease-in-out';
+        div.innerHTML = `
+            <div style="font-size:18px;margin-bottom:15px;font-weight:bold"># of Servers to Search</div>
+            <input type="number" value="${current}" min="1" max="1000" style="width:200px;padding:8px;border-radius:6px;border:1px solid #444;background:#2a2a2a;color:white;font-size:16px;margin-bottom:15px">
+            <div style="display:flex;gap:10px">
+                <button style="flex:1;padding:8px;border:none;border-radius:6px;background:#667eea;color:white;cursor:pointer;font-weight:600">Save</button>
+                <button style="padding:8px 15px;border:none;border-radius:6px;background:#444;color:white;cursor:pointer">Cancel</button>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+        document.body.appendChild(div);
+
+        // Fade in
+        setTimeout(() => {
+            overlay.style.opacity = '1';
+            div.style.opacity = '1';
+        }, 10);
+
+        const input = div.querySelector('input');
+        const saveBtn = div.querySelectorAll('button')[0];
+        const cancelBtn = div.querySelectorAll('button')[1];
+
+        input.focus();
+
+        // Helper function to fade out and remove
+        const fadeOutAndRemove = () => {
+            overlay.style.opacity = '0';
+            div.style.opacity = '0';
+            setTimeout(() => {
+                overlay.remove();
+                div.remove();
+            }, 300);
+        };
+
+        saveBtn.onclick = () => {
+            const val = parseInt(input.value);
+            if (val >= 1 && val <= 1000) {
+                localStorage.setItem('ROLOCATE_AutoRunServerRegionsnumber', val.toString());
+                saveBtn.textContent = '✓ Saved!';
+                saveBtn.style.background = '#10b981';
+                setTimeout(() => fadeOutAndRemove(), 1000);
+            }
+        };
+
+        cancelBtn.onclick = () => fadeOutAndRemove();
+        overlay.onclick = () => fadeOutAndRemove();
+    }
 
     /*******************************************************
     applycustombackgrounds(): applies user background and handles transparency
     *******************************************************/
     async function applycustombackgrounds() {
-        // tiny storage helpers
+        // stupid storage helper
         const getFile = k => {
             let d = (typeof GM_getValue != 'undefined') ? GM_getValue(`ROLOCATE_FILE_${k}`) : localStorage.getItem(`ROLOCATE_FILE_${k}`);
             return d ? JSON.parse(d) : null;
@@ -2843,6 +2986,7 @@ li a.about-link:hover::after {
 
         if (localStorage.getItem("ROLOCATE_custombackgrounds") !== "true") return;
 
+        // this was so painful
         const useVid = localStorage.getItem('ROLOCATE_CUSTOMBACKGROUND_use_animated') === 'true';
         const vidURL = localStorage.getItem('ROLOCATE_CUSTOMBACKGROUND_video_url') || '';
         const txtColor = localStorage.getItem('ROLOCATE_CUSTOMBACKGROUND_text_color') || '';
@@ -2867,10 +3011,10 @@ li a.about-link:hover::after {
             document.documentElement.appendChild(el);
         }
 
-        // base CSS
+        // using the variable css isnt a good idea but idc
         let css = hasBG ? `html,body,.content{background:transparent!important}` : '';
 
-        // advanced panels (condensed)
+        // advanced panel
         if (adv) {
             const def = 'rgba(45,45,45,0.85)';
             const map = [
@@ -2892,7 +3036,7 @@ li a.about-link:hover::after {
         style.textContent = css;
         document.head.appendChild(style);
 
-        // --- Smart transparency handler ---
+        // trasnaprent backgroudn
         const targets = [
             '.rolocate-greeting-header',
             '.best-friends-section',
@@ -2914,12 +3058,12 @@ li a.about-link:hover::after {
         const maybeTransparent = () => {
             const bodyBg = getComputedStyle(document.body).backgroundColor;
             if (bodyBg === 'rgba(0, 0, 0, 0)' || bodyBg === 'transparent') targets.forEach(applyTransparent);
-            else tStyle.textContent = ''; // revert transparency if page bg isn't transparent
+            else tStyle.textContent = '';
         };
 
         maybeTransparent(); // initial check
 
-        // observe dynamic changes + style reverts
+        // wont even comment
         new MutationObserver(maybeTransparent).observe(document.body, {
             childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class']
         });
@@ -2931,7 +3075,7 @@ li a.about-link:hover::after {
     *******************************************************/
     function showSettingsPopup_background() {
         notifications('Uh maybe i will work on this later but its kinda hard to update this', 'info', 'ℹ️', 4000);
-        // === FILE HELPERS ===
+        // uh the file helper
         const fileToBase64 = (file) => new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = () => resolve(reader.result);
@@ -2980,10 +3124,10 @@ li a.about-link:hover::after {
             del(`ROLOCATE_FILE_${key}`);
         };
 
-        // === CLEANUP & STYLES ===
+        // cleanup stuff
         document.getElementById('rolocate-settings-popup')?.remove();
 
-        const style = document.createElement('style');
+        const style = document.createElement('style'); // css smaller to save space
         style.textContent = `
             @keyframes rFadeIn{from{opacity:0}to{opacity:1}}
             @keyframes rSlideIn{from{opacity:0;transform:translate(-50%,-48%)scale(.96)}to{opacity:1;transform:translate(-50%,-50%)scale(1)}}
@@ -3020,19 +3164,19 @@ li a.about-link:hover::after {
         `;
         document.head.appendChild(style);
 
-        // === OVERLAY ===
+        // overlay
         const overlay = Object.assign(document.createElement('div'), {
             id: 'rolocate-settings-overlay',
             style: 'position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:9999998;animation:rFadeIn .2s'
         });
 
-        // === POPUP ===
+        // popup
         const popup = Object.assign(document.createElement('div'), {
             id: 'rolocate-settings-popup',
             style: 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1a1a1a;color:#d0d0d0;border:1px solid #2a2a2a;border-radius:14px;width:94%;max-width:520px;max-height:85vh;overflow:hidden;z-index:9999999;box-shadow:0 24px 48px rgba(0,0,0,.8);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;font-size:13px;animation:rSlideIn .3s cubic-bezier(.16,1,.3,1)'
         });
 
-        // === HEADER ===
+        // the header
         const header = Object.assign(document.createElement('div'), {
             innerHTML: `<div style="display:flex;align-items:center;gap:10px">
                 <div style="width:36px;height:36px;background:linear-gradient(135deg,#5fb589,#2f4f3f);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px">🎨</div>
@@ -3054,12 +3198,12 @@ li a.about-link:hover::after {
         header.appendChild(closeBtn);
         popup.appendChild(header);
 
-        // === CONTENT ===
+        // content
         const content = Object.assign(document.createElement('div'), {
             style: 'padding:18px 20px;overflow-y:auto;max-height:calc(85vh - 160px)'
         });
 
-        // Tabs
+        // the tabs ooooo
         const tabs = Object.assign(document.createElement('div'), {
             className: 'r-tabs',
             innerHTML: `<button class="r-tab active" data-tab="basic">Basic</button>
@@ -3068,20 +3212,20 @@ li a.about-link:hover::after {
         });
         content.appendChild(tabs);
 
-        // Get localStorage helper
-        const ls = (key, def = '') => localStorage.getItem(`ROLOCATE_CUSTOMBACKGROUND_${key}`) || def;
+        // get localStorage helper
+        const localstoragegetternator = (key, def = '') => localStorage.getItem(`ROLOCATE_CUSTOMBACKGROUND_${key}`) || def;
 
-        // === BASIC TAB ===
+        // basictav
         const basicTab = Object.assign(document.createElement('div'), {
             className: 'r-tab-content active',
             innerHTML: `<div class="r-card">
                 <h3 class="r-card-title"><span>🎬</span> Background Type</h3>
                 <label class="r-label"><span class="r-label-text">Animated Video Background</span>
-                <label class="r-toggle"><input type="checkbox" id="use-animated" ${ls('use_animated', 'true') !== 'false' ? 'checked' : ''}><span class="r-slider"></span></label></label>
+                <label class="r-toggle"><input type="checkbox" id="use-animated" ${localstoragegetternator('use_animated', 'true') !== 'false' ? 'checked' : ''}><span class="r-slider"></span></label></label>
                 <p class="r-helper">Choose between a video or an image</p></div>
                 <div class="r-card" id="video-section"><h3 class="r-card-title"><span>📹</span> Video Background</h3>
                 <label style="display:block;color:#c0c0c0;font-size:12px;margin-bottom:8px;font-weight:500">Video Source</label>
-                <input type="text" id="video-url" class="r-input" value="${ls('video_url')}" placeholder="https://example.com/video.mp4">
+                <input type="text" id="video-url" class="r-input" value="${sanitizeAttribute(localstoragegetternator('video_url'))}" placeholder="https://example.com/video.mp4">
                 <p class="r-helper">Enter a direct URL to an MP4 video file, or upload your own below</p>
                 <input type="file" id="video-file-input" accept="video/*" style="display:none">
                 <div class="r-upload-zone" id="video-upload-zone"><div style="font-size:28px;margin-bottom:6px">📤</div>
@@ -3098,37 +3242,37 @@ li a.about-link:hover::after {
         });
         content.appendChild(basicTab);
 
-        // === APPEARANCE TAB ===
+        // appearance tab
         const appearanceTab = Object.assign(document.createElement('div'), {
             className: 'r-tab-content',
             innerHTML: `<div class="r-card"><h3 class="r-card-title"><span>🎨</span> Text Color</h3>
                 <label class="r-label"><span class="r-label-text">Custom text color</span>
-                <label class="r-toggle"><input type="checkbox" id="override-text-color" ${ls('override_text_color') === 'true' ? 'checked' : ''}>
+                <label class="r-toggle"><input type="checkbox" id="override-text-color" ${localstoragegetternator('override_text_color') === 'true' ? 'checked' : ''}>
                 <span class="r-slider"></span></label></label>
-                <div id="text-color-group" style="margin-top:14px;transition:opacity .2s;${ls('override_text_color') === 'true' ? '' : 'opacity:.3;pointer-events:none'}">
+                <div id="text-color-group" style="margin-top:14px;transition:opacity .2s;${localstoragegetternator('override_text_color') === 'true' ? '' : 'opacity:.3;pointer-events:none'}">
                 <div style="display:flex;align-items:center;gap:10px">
-                <input type="color" id="text-color" value="${ls('text_color', '#ffffff')}" style="width:50px;height:50px;border:none;border-radius:8px;cursor:pointer">
-                <div style="flex:1"><input type="text" id="text-color-hex" class="r-input" value="${ls('text_color', '#ffffff')}" style="font-family:Consolas,monospace;text-align:center;font-size:12px"></div>
+                <input type="color" id="text-color" value="${sanitizeColor(localstoragegetternator('text_color', '#ffffff'))}" style="width:50px;height:50px;border:none;border-radius:8px;cursor:pointer">
+                <div style="flex:1"><input type="text" id="text-color-hex" class="r-input" value="${sanitizeColor(localstoragegetternator('text_color', '#ffffff'))}" style="font-family:Consolas,monospace;text-align:center;font-size:12px"></div>
                 <div style="padding:14px 20px;background:#2a2a2a;border-radius:8px;border:1px solid #3d3d3d">
                 <span id="text-color-preview" style="font-size:13px;font-weight:600">Preview</span></div></div>
                 <p class="r-helper">This will change all text on the page to your selected color</p></div></div>`
         });
         content.appendChild(appearanceTab);
 
-        // === ADVANCED TAB ===
+        // the advanced tav
         const advancedTab = Object.assign(document.createElement('div'), {
             className: 'r-tab-content',
             innerHTML: `<div class="r-card"><h3 class="r-card-title"><span>⚙️</span> Advanced Settings</h3>
                 <label class="r-label"><span class="r-label-text">Enable Advanced UI Styling</span>
-                <label class="r-toggle"><input type="checkbox" id="use-advanced" ${ls('use_advanced') === 'true' ? 'checked' : ''}>
+                <label class="r-toggle"><input type="checkbox" id="use-advanced" ${localstoragegetternator('use_advanced') === 'true' ? 'checked' : ''}>
                 <span class="r-slider"></span></label></label>
                 <p class="r-helper" style="margin-bottom:12px; color: red;">These styles are not documented correctly yet. So yea advanced users only.</p>
-                <div class="r-adv-grid" id="advanced-grid" style="${ls('use_advanced') === 'true' ? '' : 'display:none'}"></div></div>`
+                <div class="r-adv-grid" id="advanced-grid" style="${localstoragegetternator('use_advanced') === 'true' ? '' : 'display:none'}"></div></div>`
         });
         content.appendChild(advancedTab);
         popup.appendChild(content);
 
-        // === FOOTER ===
+        // the footor of the popup
         const footer = Object.assign(document.createElement('div'), {
             style: 'padding:16px 20px;background:#1e1e1e;border-top:1px solid #2a2a2a;display:flex;justify-content:space-between;gap:10px'
         });
@@ -3150,7 +3294,7 @@ li a.about-link:hover::after {
         footer.append(resetBtn, saveBtn);
         popup.appendChild(footer);
 
-        // === ELEMENT REFS ===
+        // uhhhhhh the elemnt refreenrencessss
         const $ = (sel) => popup.querySelector(sel);
         const useAnimated = $('#use-animated');
         const videoSection = $('#video-section');
@@ -3164,28 +3308,29 @@ li a.about-link:hover::after {
         const useAdvanced = $('#use-advanced');
         const advancedGrid = $('#advanced-grid');
 
-        // === FILE UPLOAD ===
+        // the file upload
         const updateFilePreview = (type) => {
             const fileData = getFile(type);
-            const preview = $(`#${type}-file-preview`);
+            const preview = document.querySelector(`#${type}-file-preview`);
             if (fileData) {
                 preview.innerHTML = `<div class="r-file-preview"><div class="r-file-info">
                     <span style="font-size:20px">${type === 'video' ? '📹' : '🖼️'}</span>
-                    <div><div style="font-weight:500">${fileData.name}</div>
+                    <div><div style="font-weight:500" class="r-filename"></div>
                     <div style="font-size:10px;color:#808080;margin-top:2px">${(fileData.size / 1024 / 1024).toFixed(2)} MB</div></div></div>
                     <button class="r-remove-btn">Remove</button></div>`;
+
+                // no attakcs here
+                preview.querySelector('.r-filename').textContent = fileData.name;
+
                 preview.style.display = 'block';
                 preview.querySelector('.r-remove-btn').onclick = () => {
                     deleteFile(type);
                     preview.style.display = 'none';
                     preview.innerHTML = '';
-                    $(`#${type}-file-input`).value = '';
+                    document.querySelector(`#${type}-file-input`).value = '';
                 };
             }
         };
-
-        updateFilePreview('video');
-        updateFilePreview('image');
 
         const setupFileUpload = (type) => {
             const input = $(`#${type}-file-input`);
@@ -3202,7 +3347,7 @@ li a.about-link:hover::after {
         setupFileUpload('video');
         setupFileUpload('image');
 
-        // === TAB SWITCHING ===
+        // this does tab switching stuff
         popup.querySelectorAll('.r-tab').forEach(tab => {
             tab.onclick = () => {
                 popup.querySelectorAll('.r-tab').forEach(t => t.classList.remove('active'));
@@ -3212,7 +3357,7 @@ li a.about-link:hover::after {
             };
         });
 
-        // === UPDATE VISIBILITY ===
+        // update the visibiltiyiedsadasdasdjkahgdiakhgdikagsdJ
         const updateVisibility = () => {
             videoSection.style.display = useAnimated.checked ? 'block' : 'none';
             imageSection.style.display = useAnimated.checked ? 'none' : 'block';
@@ -3240,7 +3385,7 @@ li a.about-link:hover::after {
 
         updateVisibility();
 
-        // === ADVANCED SETTINGS ===
+        // bro finding all of these stiles on the roblox website was a pain
         const styleMap = {
             'profile-header': 'Profile Header', 'tabs-nav': 'Navigation Tabs', 'avatar-mask': 'Avatar Container',
             'collections': 'Collections', 'switcher': 'Switcher', 'stats-panel': 'Statistics',
@@ -3252,6 +3397,7 @@ li a.about-link:hover::after {
             'footer': 'Footer'
         };
 
+        // random defaults
         const defaultStyles = {
             'profile-header': 'rgba(40,40,40,0.85)', 'tabs-nav': 'rgba(50,50,50,0.85)', 'avatar-mask': 'rgba(45,45,45,0.85)',
             'collections': 'rgba(40,40,40,0.85)', 'switcher': 'rgba(50,50,50,0.85)', 'stats-panel': 'rgba(45,45,45,0.85)',
@@ -3264,13 +3410,13 @@ li a.about-link:hover::after {
         };
 
         Object.entries(styleMap).forEach(([key, label]) => {
-            const saved = ls(`style_${key}`, defaultStyles[key]);
-            advancedGrid.innerHTML += `<div class="r-adv-item"><label class="r-adv-label">${label}</label>
-                <input type="text" class="r-input" data-key="${key}" value="${saved}"
+            const saved = sanitizeCssValue(localstoragegetternator(`style_${key}`, defaultStyles[key]));
+            advancedGrid.innerHTML += `<div class="r-adv-item"><label class="r-adv-label">${escapeHtmlnoxssattackvectors(label)}</label>
+                <input type="text" class="r-input" data-key="${sanitizeAttribute(key)}" value="${sanitizeAttribute(saved)}"
                 style="font-family:Consolas,monospace;font-size:11px;padding:6px" placeholder="rgba(0,0,0,0.85)"></div>`;
         });
 
-        // === SAVE ===
+        // save button
         saveBtn.onclick = () => {
             localStorage.setItem('ROLOCATE_CUSTOMBACKGROUND_use_animated', useAnimated.checked);
             localStorage.setItem('ROLOCATE_CUSTOMBACKGROUND_video_url', videoUrl.value.trim());
@@ -3288,7 +3434,7 @@ li a.about-link:hover::after {
             setTimeout(() => { overlay.remove(); popup.remove(); }, 200);
         };
 
-        // === RESET ===
+        // reset button
         resetBtn.onclick = () => {
             const confirm = Object.assign(document.createElement('div'), {
                 innerHTML: `<h3 style="margin:0 0 10px;color:#e0e0e0;font-size:15px;font-weight:600">⚠️ Reset Everything?</h3>
@@ -3316,6 +3462,9 @@ li a.about-link:hover::after {
             };
         };
         document.body.append(overlay, popup);
+
+        updateFilePreview('video');
+        updateFilePreview('image');
     }
 
 
@@ -3792,7 +3941,7 @@ li a.about-link:hover::after {
 
     function qualityfilterRobloxGames() {
 
-        // Exit if on home page or filter disabled, cleanup existing observer
+        // exit if on home page or filter disabled
         if (/^https?:\/\/(www\.)?roblox\.com(\/[a-z]{2})?\/home\/?$/i.test(window.location.href)) {
             ConsoleLogEnabled("On roblox.com/home. Gamequalityfilter Exiting function.");
             return;
@@ -3872,7 +4021,8 @@ li a.about-link:hover::after {
             cards.forEach(card => filterCard(card, settings));
         }
 
-        // Run filtering every second to pick up new cards and setting changes
+        // run filtering every second to pick up new cards and setting changes
+        // plz no memoryt leak
         const intervalId = setInterval(() => {
             try {
                 filterAllCards();
@@ -3881,7 +4031,6 @@ li a.about-link:hover::after {
             }
         }, 1000);
 
-        // MutationObserver for extra responsiveness on new DOM nodes
         const observer = new MutationObserver(() => {
             filterAllCards();
         });
@@ -3899,23 +4048,21 @@ li a.about-link:hover::after {
      *  description: shows old roblox greeting if setting is turned on
      ****************************************************************/
     async function showOldRobloxGreeting() {
-        // Private implementation with isolated scope
         const implementation = async () => {
             ConsoleLogEnabled("Function showOldRobloxGreeting() started.");
 
-            // Check if we're on the Roblox home page
+            // if we are on homepage
             if (!/^https?:\/\/(www\.)?roblox\.com(\/[a-z]{2})?\/home\/?$/i.test(window.location.href)) {
                 ConsoleLogEnabled("Not on roblox.com/home. Exiting function.");
                 return;
             }
 
-            // Check if the feature is enabled
             if (localStorage.getItem("ROLOCATE_ShowOldGreeting") !== "true") {
                 ConsoleLogEnabled("ShowOldGreeting is disabled. Exiting function.");
                 return;
             }
 
-            // Wait for page to load
+            // wait for apge to laod
             await new Promise(r => setTimeout(r, 500));
 
             // functions
@@ -3966,7 +4113,7 @@ li a.about-link:hover::after {
             };
 
             try {
-                // Get required elements
+                // elements needed
                 const homeContainer = await observeElement("#HomeContainer .section:first-child");
                 ConsoleLogEnabled("Home container located.");
 
@@ -3974,11 +4121,10 @@ li a.about-link:hover::after {
                 const rawUsername = userNameElement ? userNameElement.innerText : "Robloxian";
                 ConsoleLogEnabled(`User name found: ${rawUsername}`);
 
-                // Create isolated styles with unique class names
                 const styleId = 'rolocate-greeting-styles';
                 if (!document.getElementById(styleId)) {
                     const styleTag = document.createElement("style");
-                    styleTag.id = styleId; // HERE
+                    styleTag.id = styleId;
                     styleTag.textContent = `
                     .rolocate-greeting-header {
                         display: flex;
@@ -4016,11 +4162,11 @@ li a.about-link:hover::after {
                     document.head.appendChild(styleTag);
                 }
 
-                // Create the greeting header with unique class names
+                // header creation
                 const headerContainer = document.createElement("div");
                 headerContainer.className = "rolocate-greeting-header";
 
-                // Create profile picture
+                // make profile
                 const profileFrame = document.createElement("div");
                 profileFrame.className = "rolocate-profile-frame";
                 const profileImage = document.createElement("img");
@@ -4029,7 +4175,7 @@ li a.about-link:hover::after {
                     window.Base64Images?.image_place_holder || "https://www.roblox.com/Thumbs/Asset.ashx?width=100&height=100&assetId=0");
                 profileFrame.appendChild(profileImage);
 
-                // Create greeting text
+                // make greeting
                 const userDetails = document.createElement("div");
                 userDetails.className = "rolocate-user-details";
                 const userName = document.createElement("h1");
@@ -4037,11 +4183,10 @@ li a.about-link:hover::after {
                 userName.textContent = getTimeBasedGreeting(rawUsername);
                 userDetails.appendChild(userName);
 
-                // Combine elements
+                // mix them
                 headerContainer.appendChild(profileFrame);
                 headerContainer.appendChild(userDetails);
 
-                // Replace existing content
                 homeContainer.replaceWith(headerContainer);
 
                 ConsoleLogEnabled("Greeting header created successfully.");
@@ -4051,7 +4196,7 @@ li a.about-link:hover::after {
             }
         };
 
-        // Execute the isolated implementation
+        // add them
         implementation().catch(error => {
             ConsoleLogEnabled("Error in showOldRobloxGreeting:", error);
         });
@@ -4125,33 +4270,33 @@ li a.about-link:hover::after {
     description: Check if user set their location manually
     or if it is still in automatic. Some error handling also
     *******************************************************/
+    // why tf did i put this all the way down here
     function validateManualMode() {
-        // Check if in manual mode
+        // if manual mode
         if (localStorage.getItem("ROLOCATE_prioritylocation") === "manual") {
             ConsoleLogEnabled("Manual mode detected");
 
             try {
-                // Get stored coordinates
+                // get cooridnates
                 const coords = JSON.parse(GM_getValue("ROLOCATE_coordinates", '{"lat":"","lng":""}'));
                 ConsoleLogEnabled("Coordinates fetched:", coords);
 
-                // If coordinates are empty, switch to automatic
+                // if coordiates are missing switch to auatomcait
                 if (!coords.lat || !coords.lng) {
                     localStorage.setItem("ROLOCATE_prioritylocation", "automatic");
                     ConsoleLogEnabled("No coordinates set. Switched to automatic mode.");
-                    return true; // Indicates that a switch occurred
+                    return true;
                 }
-            } catch (e) {
-                ConsoleLogEnabled("Error checking coordinates:", e);
-                // If there's an error reading coordinates, switch to automatic
+            } catch (error) {
+                ConsoleLogEnabled("Error checking coordinates:", error);
+                // if error swithc to automatic
                 localStorage.setItem("ROLOCATE_prioritylocation", "automatic");
                 ConsoleLogEnabled("Error encountered while fetching coordinates. Switched to automatic mode.");
                 return true;
             }
         }
-
-        ConsoleLogEnabled("No Errors detected.");
-        return false; // No switch occurred
+        ConsoleLogEnabled("No Errors detected with manual mode.");
+        return false;
     }
 
 
@@ -4181,127 +4326,74 @@ li a.about-link:hover::after {
 
     /*******************************************************
     name of function: loadmutualfriends
-    description: shows mutual friends. a huge function so its harder to copy.
+    description: shows mutual friends. optimized version with minimal API calls.
     *******************************************************/
     async function loadmutualfriends() {
         // check if mutualfriends is enabled in localStorage and double check if url is the correct one.
         if (localStorage.getItem("ROLOCATE_mutualfriends") !== "true" || !/^\/(?:[a-z]{2}\/)?users\/\d+\/profile$/.test(window.location.pathname)) return;
-        // Local cache for storing avatar data per page visit
+        // store for spedup
         let localAvatarCache = {};
 
         // function to get current user ID
         const getCurrentUserId = () => Roblox?.CurrentUser?.userId || null;
 
-        // function to fetch user details for missing names
-        const fetchUserDetails = (userId) => {
-            const url = `https://users.roblox.com/v1/users/${userId}`;
+        // function to fetch user details in batch (up to 100 at once)
+        const fetchUserDetailsBatch = (userIds) => {
+            if (userIds.length === 0) return Promise.resolve([]);
+
+            const url = `https://users.roblox.com/v1/users`;
             return new Promise((resolve) => {
                 GM_xmlhttpRequest({
-                    method: "GET",
+                    method: "POST",
                     url,
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    data: JSON.stringify({ userIds: userIds.slice(0, 100) }),
                     onload: function(response) {
+                        if (response.status === 429) {
+                            ConsoleLogEnabled(`[fetchUserDetailsBatch] Rate limited - stopping requests`);
+                            resolve(null);
+                            return;
+                        }
                         if (response.status >= 200 && response.status < 300) {
                             try {
                                 const data = JSON.parse(response.responseText);
-                                resolve({
-                                    id: data.id,
-                                    name: data.name || `User${data.id}`,
-                                    displayName: data.displayName || data.name || `User${data.id}`
-                                });
+                                resolve(data.data || []);
                             } catch (e) {
-                                ConsoleLogEnabled(`[fetchUserDetails] Failed to parse response for user ${userId}`, e);
-                                resolve({
-                                    id: userId,
-                                    name: `User${userId}`,
-                                    displayName: `User${userId}`
-                                });
+                                ConsoleLogEnabled(`[fetchUserDetailsBatch] Failed to parse response`, e);
+                                resolve([]);
                             }
                         } else {
-                            ConsoleLogEnabled(`[fetchUserDetails] Request failed for user ${userId} with status ${response.status}`);
-                            resolve({
-                                id: userId,
-                                name: `User${userId}`,
-                                displayName: `User${userId}`
-                            });
+                            ConsoleLogEnabled(`[fetchUserDetailsBatch] Request failed with status ${response.status}`);
+                            resolve([]);
                         }
                     },
                     onerror: function(err) {
-                        ConsoleLogEnabled(`[fetchUserDetails] Network error for user ${userId}`, err);
-                        resolve({
-                            id: userId,
-                            name: `User${userId}`,
-                            displayName: `User${userId}`
-                        });
+                        ConsoleLogEnabled(`[fetchUserDetailsBatch] Network error`, err);
+                        resolve([]);
                     }
                 });
             });
         };
 
-        // function to validate and fix friends data
-        const validateAndFixFriends = async (friends) => {
-            if (!friends || !Array.isArray(friends)) return [];
-
-            const missingNameFriends = friends.filter(friend =>
-                !friend.name || friend.name.trim() === '' ||
-                !friend.displayName || friend.displayName.trim() === ''
-            );
-
-            if (missingNameFriends.length === 0) {
-                ConsoleLogEnabled(`[validateAndFixFriends] All ${friends.length} friends have valid names`);
-                return friends;
-            }
-
-            ConsoleLogEnabled(`[validateAndFixFriends] Found ${missingNameFriends.length} friends with missing names, fetching details...`);
-
-            // fetch details for friends with missing names in batches of 5 to avoid rate limits
-            const batchSize = 5;
-            const fixedFriends = [...friends];
-
-            for (let i = 0; i < missingNameFriends.length; i += batchSize) {
-                const batch = missingNameFriends.slice(i, i + batchSize);
-                const detailsPromises = batch.map(friend => fetchUserDetails(friend.id));
-
-                try {
-                    const detailsResults = await Promise.all(detailsPromises);
-
-                    // Update the friends array with the fetched details
-                    detailsResults.forEach(details => {
-                        const friendIndex = fixedFriends.findIndex(f => f.id === details.id);
-                        if (friendIndex !== -1) {
-                            fixedFriends[friendIndex] = {
-                                ...fixedFriends[friendIndex],
-                                name: details.name,
-                                displayName: details.displayName
-                            };
-                        }
-                    });
-                } catch (error) {
-                    ConsoleLogEnabled(`[validateAndFixFriends] Error fetching batch details:`, error);
-                }
-
-                // 200 ms delay
-                if (i + batchSize < missingNameFriends.length) {
-                    await new Promise(resolve => setTimeout(resolve, 200));
-                }
-            }
-
-            ConsoleLogEnabled(`[validateAndFixFriends] Fixed ${missingNameFriends.length} friends with missing names`);
-            return fixedFriends;
-        };
-
-        // function to fetch friends with fallback for missing names
+        // function to fetch friends
         const gmFetchFriends = async (userId) => {
             const url = `https://friends.roblox.com/v1/users/${userId}/friends`;
             return new Promise((resolve) => {
                 GM_xmlhttpRequest({
                     method: "GET",
                     url,
-                    onload: async function(response) {
+                    onload: function(response) {
+                        if (response.status === 429) {
+                            ConsoleLogEnabled(`[gmFetchFriends] Rate limited for user ${userId}`);
+                            resolve(null);
+                            return;
+                        }
                         if (response.status >= 200 && response.status < 300) {
                             try {
                                 const data = JSON.parse(response.responseText);
-                                const validatedFriends = await validateAndFixFriends(data.data);
-                                resolve(validatedFriends);
+                                resolve(data.data);
                             } catch (e) {
                                 ConsoleLogEnabled(`[gmFetchFriends] Failed to parse response for user ${userId}`, e);
                                 resolve(null);
@@ -4319,10 +4411,10 @@ li a.about-link:hover::after {
             });
         };
 
-        // function to fetch user avatars
+        // function to fetch user avatars in batches
         const fetchUserAvatars = (userIds) => {
             return new Promise((resolve) => {
-                const requests = userIds.map(userId => ({
+                const requests = userIds.slice(0, 100).map(userId => ({
                     requestId: userId.toString(),
                     targetId: userId,
                     type: "AvatarHeadShot",
@@ -4367,26 +4459,23 @@ li a.about-link:hover::after {
         };
 
         // function to fetch and cache all avatars at once
-        const fetchAndCacheAllAvatars = async (mutualFriends) => {
-            if (Object.keys(localAvatarCache).length > 0) {
-                ConsoleLogEnabled('[fetchAndCacheAllAvatars] Using cached avatars');
-                return localAvatarCache;
+        const fetchAllAvatars = async (mutualFriends) => {
+            if (mutualFriends.length === 0) return {};
+
+            ConsoleLogEnabled(`[fetchAllAvatars] Fetching avatars for ${mutualFriends.length} mutual friends`);
+
+            const allIds = mutualFriends.map(f => f.id);
+            const batches = [];
+
+            for (let i = 0; i < allIds.length; i += 100) {
+                batches.push(allIds.slice(i, i + 100));
             }
 
-            ConsoleLogEnabled('[fetchAndCacheAllAvatars] Fetching avatars for the first time');
+            const avatarResults = await Promise.all(batches.map(batch => fetchUserAvatars(batch)));
+            const combinedAvatars = Object.assign({}, ...avatarResults);
 
-            const avatarPromises = [];
-            for (let i = 0; i < mutualFriends.length; i += 5) {
-                const batch = mutualFriends.slice(i, i + 5);
-                const userIds = batch.map(friend => friend.id);
-                avatarPromises.push(fetchUserAvatars(userIds));
-            }
-
-            const avatarResults = await Promise.all(avatarPromises);
-            localAvatarCache = Object.assign({}, ...avatarResults);
-
-            ConsoleLogEnabled(`[fetchAndCacheAllAvatars] Cached ${Object.keys(localAvatarCache).length} avatars`);
-            return localAvatarCache;
+            ConsoleLogEnabled(`[fetchAllAvatars] Cached ${Object.keys(combinedAvatars).length} avatars`);
+            return combinedAvatars;
         };
 
         // function to create the mutual friends element with all styles
@@ -4782,12 +4871,12 @@ li a.about-link:hover::after {
             return container;
         };
 
-        // Function to show loading state
+        // function to show loading state
         const showMutualFriendsLoading = (contentElement) => {
             contentElement.innerHTML = `<div class="mutual-friends-loading"><div class="loading-spinner"></div>Finding mutual friends...</div>`;
         };
 
-        // Function to create mutual friends popup
+        // make popup for mutual frineds
         const createMutualFriendsPopup = async (mutualFriends) => {
             const overlay = document.createElement('div');
             overlay.className = 'mutual-friends-overlay';
@@ -4812,9 +4901,16 @@ li a.about-link:hover::after {
                 const avatarContent = avatarUrl ? `<img src="${avatarUrl}" alt="${friend.displayName || friend.name}">` : '👤';
                 const displayName = friend.displayName || friend.name || `User${friend.id}`;
 
-                friendItem.innerHTML = `<div class="mutual-friend-avatar">${avatarContent}</div><span class="mutual-friend-name">${displayName}</span>`;
-                friendItem.onclick = () => {
-                    window.open(`https://www.roblox.com/users/${friend.id}/profile`, '_blank');
+                friendItem.innerHTML = `
+                  <div class="mutual-friend-avatar">
+                    ${avatarUrl ? `<img src="${avatarUrl}">` : '👤'}
+                  </div>
+                  <span class="mutual-friend-name"></span>
+                `;
+                friendItem.lastElementChild.textContent = displayName;
+
+                friendItem.onclick = () => { // i dont even know how hackers and inject js in a url but whatever
+                    window.open(`https://www.roblox.com/users/${sanitizeUserId(friend.id)}/profile`, '_blank'); // yo ik this isnt really neccessary but better safe than sorry.
                 };
                 grid.appendChild(friendItem);
             });
@@ -4828,10 +4924,17 @@ li a.about-link:hover::after {
                 setTimeout(() => overlay.remove(), 200);
             };
 
+            overlay.onclick = (randomvariableineed) => {
+                if (randomvariableineed.target === overlay) {
+                    overlay.style.animation = 'fadeOut 0.2s ease-out forwards';
+                    setTimeout(() => overlay.remove(), 200);
+                }
+            };
+
             return overlay;
         };
 
-        // Function to display mutual friends
+        // show mutal frinds
         const displayMutualFriends = async (contentElement, mutualFriends) => {
             contentElement.innerHTML = '';
 
@@ -4852,28 +4955,38 @@ li a.about-link:hover::after {
             const maxVisible = 4;
             const friendsToShow = mutualFriends.slice(0, maxVisible);
 
-            // Get avatar map from cache
+            // get avatar fromcm cache
             const avatarMap = localAvatarCache;
 
             friendsToShow.forEach(friend => {
                 const friendTag = document.createElement('div');
                 friendTag.className = 'mutual-friend-tag';
 
-                // Add avatar to the tag
+                // add it to tag
                 const avatarUrl = avatarMap[friend.id];
                 const displayName = friend.displayName || friend.name || `User${friend.id}`;
 
+               // no attacks
                 if (avatarUrl) {
-                    // Create tag with avatar
-                    friendTag.innerHTML = `
-                        <div class="mutual-friend-avatar" style="width: 32px; height: 32px; margin-right: 10px; display: inline-block; vertical-align: middle;">
-                            <img src="${avatarUrl}" alt="${displayName}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
-                        </div>
-                        <span style="vertical-align: middle;">${displayName}</span>
-                    `;
+                    const avatarDiv = document.createElement('div');
+                    avatarDiv.className = 'mutual-friend-avatar';
+                    avatarDiv.style.cssText = 'width: 32px; height: 32px; margin-right: 10px; display: inline-block; vertical-align: middle;';
+
+                    const img = document.createElement('img');
+                    img.src = avatarUrl;
+                    img.alt = '';
+                    img.style.cssText = 'width: 100%; height: 100%; border-radius: 50%; object-fit: cover;';
+
+                    avatarDiv.appendChild(img);
+
+                    const nameSpan = document.createElement('span');
+                    nameSpan.style.verticalAlign = 'middle';
+                    nameSpan.textContent = escapeHtmlnoxssattackvectors(displayName);
+
+                    friendTag.appendChild(avatarDiv);
+                    friendTag.appendChild(nameSpan);
                 } else {
-                    // Fallback without avatar
-                    friendTag.textContent = displayName;
+                    friendTag.textContent = escapeHtmlnoxssattackvectors(displayName); // no attacks
                 }
 
                 friendTag.onclick = () => {
@@ -4901,12 +5014,12 @@ li a.about-link:hover::after {
             return document.querySelector('ul.profile-tabs.flex');
         };
 
-        // main execution logic
+        // main code
         try {
             const currentUserId = getCurrentUserId();
             if (!currentUserId) return;
 
-            const urlMatch = window.location.pathname.match(/^\/(?:[a-z]{2}\/)?users\/(\d+)\/profile$/); // check if path name is right. if not then return
+            const urlMatch = window.location.pathname.match(/^\/(?:[a-z]{2}\/)?users\/(\d+)\/profile$/);
             if (!urlMatch) return;
 
             const otherUserId = urlMatch[1];
@@ -4929,6 +5042,7 @@ li a.about-link:hover::after {
             const contentElement = mutualFriendsElement.querySelector('.mutual-friends-content');
             showMutualFriendsLoading(contentElement);
 
+            // Step 1: fetch both friend lists
             const [currentUserFriends, otherUserFriends] = await Promise.all([
                 gmFetchFriends(currentUserId),
                 gmFetchFriends(otherUserId),
@@ -4939,15 +5053,60 @@ li a.about-link:hover::after {
                 return;
             }
 
-            const mutualFriends = currentUserFriends.filter(currentFriend =>
-                otherUserFriends.some(otherFriend => otherFriend.id === currentFriend.id)
+            ConsoleLogEnabled(`[Mutual Friends] Current user has ${currentUserFriends.length} friends`);
+            ConsoleLogEnabled(`[Mutual Friends] Other user has ${otherUserFriends.length} friends`);
+
+            // Step 2: find mutual friends via comparison of id
+            const otherFriendIds = new Set(otherUserFriends.map(f => f.id));
+            let mutualFriends = currentUserFriends.filter(f => otherFriendIds.has(f.id));
+
+            ConsoleLogEnabled(`[Mutual Friends] Found ${mutualFriends.length} mutual friends`);
+
+            if (mutualFriends.length === 0) {
+                await displayMutualFriends(contentElement, mutualFriends);
+                return;
+            }
+
+            // Step 3: check if they need display anmes
+            const friendsNeedingData = mutualFriends.filter(f =>
+                !f.name || f.name.trim() === '' ||
+                !f.displayName || f.displayName.trim() === ''
             );
 
-            await fetchAndCacheAllAvatars(mutualFriends);
+            ConsoleLogEnabled(`[Mutual Friends] ${friendsNeedingData.length} mutual friends need data fixes`);
+
+            // Step 4: fetch details of the friends that are mutual friends. find dispolayname
+            if (friendsNeedingData.length > 0) {
+                const userIds = friendsNeedingData.map(f => f.id);
+                const userDetails = await fetchUserDetailsBatch(userIds);
+
+                if (userDetails && userDetails.length > 0) {
+                    const detailsMap = new Map(userDetails.map(u => [u.id, u]));
+
+                    mutualFriends = mutualFriends.map(friend => {
+                        if (friend.name && friend.displayName) return friend;
+                        const details = detailsMap.get(friend.id);
+                        return {
+                            ...friend,
+                            name: details?.name || `User${friend.id}`,
+                            displayName: details?.displayName || details?.name || `User${friend.id}`
+                        };
+                    });
+
+                    ConsoleLogEnabled(`[Mutual Friends] Successfully enriched ${userDetails.length} friend details`);
+                }
+            }
+
+            // Step 5: fetch the avatars
+            localAvatarCache = await fetchAllAvatars(mutualFriends);
+
+            // Step 6: show it to the user
             await displayMutualFriends(contentElement, mutualFriends);
 
+            ConsoleLogEnabled('[Mutual Friends] Feature loaded successfully');
+
         } catch (error) {
-            ConsoleLogEnabled('[executeMutualFriendsFeature] Error occurred:', error);
+            ConsoleLogEnabled('[loadmutualfriends] Error occurred:', error);
         }
     }
 
@@ -5048,7 +5207,7 @@ li a.about-link:hover::after {
             return chunks;
         }
 
-        // yea i dont even know hoiw this works but it works. thx google
+        // levenshteinDistance functiuon. leetcode
         function levenshteinDistance(a, b) {
             const matrix = Array(b.length + 1).fill().map(() => Array(a.length + 1).fill(0));
             for (let i = 0; i <= a.length; i++) matrix[0][i] = i;
@@ -5068,58 +5227,86 @@ li a.about-link:hover::after {
 
         function getSimilarityScore(str1, str2) {
             ConsoleLogEnabled("Original strings:", {str1, str2});
+
+            // no emojis yea
             const removeEmojisAndClean = (str) =>
                 str.replace(/[\u{1F300}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
                    .toLowerCase().replace(/[^a-z0-9]/g, '');
-            const cleanStr1 = removeEmojisAndClean(str1);
-            const cleanStr2 = removeEmojisAndClean(str2);
-            ConsoleLogEnabled("Cleaned strings:", {cleanStr1, cleanStr2});
 
-            if (cleanStr1.includes(cleanStr2) || cleanStr2.includes(cleanStr1)) {
+            const searchQuery = removeEmojisAndClean(str1);
+            const targetText = removeEmojisAndClean(str2);
+            ConsoleLogEnabled("Cleaned strings:", {searchQuery, targetText});
+
+            // if something includes the samething then its prob a match
+            if (searchQuery.includes(targetText) || targetText.includes(searchQuery)) {
                 ConsoleLogEnabled("One string includes the other.");
-                const longer = cleanStr1.length > cleanStr2.length ? cleanStr1 : cleanStr2;
-                const shorter = cleanStr1.length > cleanStr2.length ? cleanStr2 : cleanStr1;
-                ConsoleLogEnabled("Longer string:", longer);
-                ConsoleLogEnabled("Shorter string:", shorter);
-                let baseScore = 0.8 + (shorter.length / longer.length) * 0.15;
-                ConsoleLogEnabled("Base score (inclusion case):", baseScore);
-                if (cleanStr1 === cleanStr2) {
-                    ConsoleLogEnabled("Exact match."); return 1.0;
+
+                const longerText = searchQuery.length > targetText.length ? searchQuery : targetText;
+                const shorterText = searchQuery.length > targetText.length ? targetText : searchQuery;
+
+                ConsoleLogEnabled("Longer string:", longerText);
+                ConsoleLogEnabled("Shorter string:", shorterText);
+
+                // uh increase score if it has like lengths
+                let matchScore = 0.8 + (shorterText.length / longerText.length) * 0.15;
+                ConsoleLogEnabled("Base score (inclusion case):", matchScore);
+
+                if (searchQuery === targetText) {
+                    ConsoleLogEnabled("Exact match.");
+                    return 1.0;
                 }
-                const result = Math.min(0.95, baseScore);
+
+                const result = Math.min(0.95, matchScore);
                 ConsoleLogEnabled("Inclusion final score:", result);
                 return result;
             }
 
-            const maxLength = Math.max(cleanStr1.length, cleanStr2.length);
-            if (maxLength === 0) {
-                ConsoleLogEnabled("Both strings are empty after cleaning. Returning 1.");
+            // if no direct match do distance claucaltion instead
+            const maxLen = Math.max(searchQuery.length, targetText.length);
+
+            if (maxLen === 0) {
+                ConsoleLogEnabled("uh maybe all emojis returning 1");
                 return 1;
             }
-            const distance = levenshteinDistance(cleanStr1, cleanStr2);
-            const levenshteinScore = 1 - (distance / maxLength);
-            ConsoleLogEnabled("Levenshtein distance:", distance);
-            ConsoleLogEnabled("Levenshtein score:", levenshteinScore);
 
-            const minLength = Math.min(cleanStr1.length, cleanStr2.length);
-            let substringBoost = 0;
-            let longestMatch = 0;
-            for (let i = 0; i < cleanStr1.length; i++) {
-                for (let j = 0; j < cleanStr2.length; j++) {
-                    let k = 0;
-                    while (i + k < cleanStr1.length && j + k < cleanStr2.length && cleanStr1[i + k] === cleanStr2[j + k]) k++;
-                    if (k > longestMatch) longestMatch = k;
+            const editDistance = levenshteinDistance(searchQuery, targetText);
+            const distanceScore = 1 - (editDistance / maxLen);
+
+            ConsoleLogEnabled("Levenshtein distance:", editDistance);
+            ConsoleLogEnabled("Levenshtein score:", distanceScore);
+
+            // comon chunks then yeasss
+            const minLen = Math.min(searchQuery.length, targetText.length);
+            let bonusPoints = 0;
+            let bestMatch = 0;
+
+            for (let i = 0; i < searchQuery.length; i++) {
+                for (let j = 0; j < targetText.length; j++) {
+                    let matchLen = 0;
+                    while (i + matchLen < searchQuery.length &&
+                           j + matchLen < targetText.length &&
+                           searchQuery[i + matchLen] === targetText[j + matchLen]) {
+                        matchLen++;
+                    }
+
+                    if (matchLen > bestMatch) bestMatch = matchLen;
                 }
             }
-            ConsoleLogEnabled("Longest matching substring length:", longestMatch);
-            if (longestMatch >= 3) {
-                substringBoost = (longestMatch / minLength) * 0.5;
-                ConsoleLogEnabled("Substring boost applied:", substringBoost);
-            } else ConsoleLogEnabled("No substring boost applied.");
 
-            const finalScore = Math.min(0.95, levenshteinScore + substringBoost);
-            ConsoleLogEnabled("Final similarity score:", finalScore);
-            return finalScore;
+            ConsoleLogEnabled("longest matching substring length:", bestMatch);
+
+            // boost if its decent ig
+            if (bestMatch >= 3) {
+                bonusPoints = (bestMatch / minLen) * 0.5;
+                ConsoleLogEnabled("boosting subtring:", bonusPoints);
+            } else {
+                ConsoleLogEnabled("no substring boost applied");
+            }
+
+            const finalScore = Math.min(0.95, distanceScore + bonusPoints);
+            ConsoleLogEnabled("final similarity score:", finalScore);
+
+            return finalScore; // this is the final score to rank the items
         }
 
         function formatNumberCount(num) {
@@ -5225,7 +5412,7 @@ li a.about-link:hover::after {
             });
         }
 
-        // NEW: Fetch Bundle Thumbnails
+        // find thumbnails in a batch
         async function fetchBundleThumbnailsBatch(bundleIds) {
             if (!bundleIds.length) return [];
             const params = new URLSearchParams({bundleIds: bundleIds.join(","), size: "150x150", format: "png", isCircular: "false"});
@@ -6158,11 +6345,8 @@ li a.about-link:hover::after {
         }
         return true;
     }
-    /**
-     * Fetch Universe ID from Place ID using GM_xmlhttpRequest (Tampermonkey/Greasemonkey)
-     * @param {number|string} placeId
-     * @returns {Promise<number>} resolves with universeId or rejects on error
-     */
+
+    //fetch Universe ID from Place ID using GM_xmlhttpRequest
     function getUniverseIdFromPlaceId(placeId) {
         return new Promise((resolve, reject) => {
             GM_xmlhttpRequest({
@@ -6184,117 +6368,6 @@ li a.about-link:hover::after {
                             }
                         } catch (e) {
                             reject(e);
-                        }
-                    } else {
-                        reject(new Error(`HTTP error! Status: ${response.status}`));
-                    }
-                },
-                onerror: function(err) {
-                    reject(err);
-                }
-            });
-        });
-    }
-    /**
-     * Fetches the game icon thumbnail URL using universeId via GM_xmlhttpRequest
-     * @param {number|string} universeId - The Universe ID of the game
-     * @returns {Promise<string>} Resolves with the image URL of the game icon
-     */
-    function getGameIconFromUniverseId(universeId) {
-        const apiUrl = `https://thumbnails.roblox.com/v1/games/icons?universeIds=${universeId}&size=512x512&format=Png&isCircular=false&returnPolicy=PlaceHolder`;
-        return new Promise((resolve, reject) => {
-            GM_xmlhttpRequest({
-                method: "GET",
-                url: apiUrl,
-                headers: {
-                    "Accept": "application/json"
-                },
-                onload: function(response) {
-                    if (response.status === 200) {
-                        try {
-                            const data = JSON.parse(response.responseText);
-                            if (Array.isArray(data.data) && data.data.length > 0 && data.data[0].imageUrl) {
-                                ConsoleLogEnabled(`Game icon URL for universe ${universeId}: ${data.data[0].imageUrl}`);
-                                resolve(data.data[0].imageUrl);
-                            } else {
-                                reject(new Error("Image URL not found in response."));
-                            }
-                        } catch (err) {
-                            reject(err);
-                        }
-                    } else {
-                        reject(new Error(`HTTP error! Status: ${response.status}`));
-                    }
-                },
-                onerror: function(err) {
-                    reject(err);
-                }
-            });
-        });
-    }
-    /**
-     * Fetch Universe ID from Place ID using GM_xmlhttpRequest (Tampermonkey/Greasemonkey)
-     * @param {number|string} placeId
-     * @returns {Promise<number>} resolves with universeId or rejects on error
-     */
-    function getUniverseIdFromPlaceId(placeId) {
-        return new Promise((resolve, reject) => {
-            GM_xmlhttpRequest({
-                method: "GET",
-                url: `https://games.roblox.com/v1/games/multiget-place-details?placeIds=${placeId}`,
-                headers: {
-                    "Accept": "application/json"
-                },
-                onload: function(response) {
-                    if (response.status === 200) {
-                        try {
-                            const data = JSON.parse(response.responseText);
-                            if (Array.isArray(data) && data.length > 0 && data[0].universeId) {
-                                // Console log inside the function
-                                ConsoleLogEnabled(`Universe ID for place ${placeId}: ${data[0].universeId}`);
-                                resolve(data[0].universeId);
-                            } else {
-                                reject(new Error("Universe ID not found in response."));
-                            }
-                        } catch (e) {
-                            reject(e);
-                        }
-                    } else {
-                        reject(new Error(`HTTP error! Status: ${response.status}`));
-                    }
-                },
-                onerror: function(err) {
-                    reject(err);
-                }
-            });
-        });
-    }
-    /**
-     * Fetches the game icon thumbnail URL using universeId via GM_xmlhttpRequest
-     * @param {number|string} universeId - The Universe ID of the game
-     * @returns {Promise<string>} Resolves with the image URL of the game icon
-     */
-    function getGameIconFromUniverseId(universeId) {
-        const apiUrl = `https://thumbnails.roblox.com/v1/games/icons?universeIds=${universeId}&size=512x512&format=Png&isCircular=false&returnPolicy=PlaceHolder`;
-        return new Promise((resolve, reject) => {
-            GM_xmlhttpRequest({
-                method: "GET",
-                url: apiUrl,
-                headers: {
-                    "Accept": "application/json"
-                },
-                onload: function(response) {
-                    if (response.status === 200) {
-                        try {
-                            const data = JSON.parse(response.responseText);
-                            if (Array.isArray(data.data) && data.data.length > 0 && data.data[0].imageUrl) {
-                                ConsoleLogEnabled(`Game icon URL for universe ${universeId}: ${data.data[0].imageUrl}`);
-                                resolve(data.data[0].imageUrl);
-                            } else {
-                                reject(new Error("Image URL not found in response."));
-                            }
-                        } catch (err) {
-                            reject(err);
                         }
                     } else {
                         reject(new Error(`HTTP error! Status: ${response.status}`));
@@ -6307,6 +6380,39 @@ li a.about-link:hover::after {
         });
     }
 
+    // Fetches the game icon thumbnail URL using universeId via GM_xmlhttpRequest
+    function getGameIconFromUniverseId(universeId) {
+        const apiUrl = `https://thumbnails.roblox.com/v1/games/icons?universeIds=${universeId}&size=512x512&format=Png&isCircular=false&returnPolicy=PlaceHolder`;
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: apiUrl,
+                headers: {
+                    "Accept": "application/json"
+                },
+                onload: function(response) {
+                    if (response.status === 200) {
+                        try {
+                            const data = JSON.parse(response.responseText);
+                            if (Array.isArray(data.data) && data.data.length > 0 && data.data[0].imageUrl) {
+                                ConsoleLogEnabled(`Game icon URL for universe ${universeId}: ${data.data[0].imageUrl}`);
+                                resolve(data.data[0].imageUrl);
+                            } else {
+                                reject(new Error("Image URL not found in response."));
+                            }
+                        } catch (err) {
+                            reject(err);
+                        }
+                    } else {
+                        reject(new Error(`HTTP error! Status: ${response.status}`));
+                    }
+                },
+                onerror: function(err) {
+                    reject(err);
+                }
+            });
+        });
+    }
 
     /*******************************************************
     name of function: quicklaunchgamesfunction
@@ -6866,7 +6972,7 @@ li a.about-link:hover::after {
 
                 friendsSection.parentNode.insertBefore(newGamesContainer, friendsSection.nextSibling);
 
-                // =============== HELPER FUNCTIONS ===============
+                // dumb functions
                 async function getGameDetails(universeId) {
                     return new Promise((resolve, reject) => {
                         GM_xmlhttpRequest({
@@ -6887,64 +6993,6 @@ li a.about-link:hover::after {
                             },
                             onerror: function(err) {
                                 reject(err);
-                            }
-                        });
-                    });
-                }
-
-                async function getUniverseIdFromPlaceId(placeId) {
-                    return new Promise((resolve, reject) => {
-                        GM_xmlhttpRequest({
-                            method: "GET",
-                            url: `https://games.roblox.com/v1/games/multiget-place-details?placeIds=${placeId}`,
-                            headers: { "Accept": "application/json" },
-                            onload: function(response) {
-                                if (response.status === 200) {
-                                    try {
-                                        const data = JSON.parse(response.responseText);
-                                        if (data && data.length && data[0].universeId) {
-                                            resolve(data[0].universeId);
-                                        } else {
-                                            reject(new Error("Universe ID not found"));
-                                        }
-                                    } catch (e) {
-                                        reject(e);
-                                    }
-                                } else {
-                                    reject(new Error(`HTTP ${response.status}`));
-                                }
-                            },
-                            onerror: function(err) {
-                                reject(err);
-                            }
-                        });
-                    });
-                }
-
-                async function getGameIconFromUniverseId(universeId) {
-                    return new Promise((resolve) => {
-                        GM_xmlhttpRequest({
-                            method: "GET",
-                            url: `https://thumbnails.roblox.com/v1/games/icons?universeIds=${universeId}&size=150x150&format=Png&isCircular=false`,
-                            headers: { "Accept": "application/json" },
-                            onload: function(response) {
-                                if (response.status === 200) {
-                                    try {
-                                        const data = JSON.parse(response.responseText);
-                                        if (data.data && data.data[0] && data.data[0].imageUrl) {
-                                            resolve(data.data[0].imageUrl);
-                                        } else {
-                                            resolve('https://via.placeholder.com/150x150?text=No+Image');
-                                        }
-                                    } catch (e) {
-                                        resolve('https://via.placeholder.com/150x150?text=Err');
-                                    }
-                                } else {
-                                    resolve('https://via.placeholder.com/150x150?text=No+Icon');
-                                }
-                            },
-                            onerror: function() {
-                                resolve('https://via.placeholder.com/150x150?text=Icon+Fail');
                             }
                         });
                     });
@@ -7018,7 +7066,7 @@ li a.about-link:hover::after {
 
                     gameGrid.insertBefore(gameTile, gameGrid.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_add-tile'));
 
-                    // Remove button
+                    // remove button for tyhe quaklcjahcgyhin gmasjerhbvsajmn
                     const removeBtn = gameTile.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_remove-button');
                     removeBtn.addEventListener('click', function(e) {
                         e.preventDefault();
@@ -7032,7 +7080,7 @@ li a.about-link:hover::after {
                         }, 400);
                     });
 
-                    // Arrow buttons (horizontal)
+                    // arrow button
                     const leftBtn = gameTile.querySelector('.left');
                     const rightBtn = gameTile.querySelector('.right');
 
@@ -7046,7 +7094,7 @@ li a.about-link:hover::after {
                         moveTile(gameTile, 'right');
                     });
 
-                    // Update button states on hover
+                    // udpat ethe vbuyttons whenever hover
                     gameTile.addEventListener('mouseenter', () => {
                         const tiles = Array.from(document.querySelectorAll('.ROLOCATE_QUICKLAUNCHGAMES_game-tile'));
                         const index = tiles.indexOf(gameTile);
@@ -7054,7 +7102,7 @@ li a.about-link:hover::after {
                         rightBtn.disabled = index === tiles.length - 1;
                     });
 
-                    // Load details
+                    // load detials of the gmae
                     (async () => {
                         try {
                             const universeId = await getUniverseIdFromPlaceId(gameId);
@@ -7168,11 +7216,10 @@ li a.about-link:hover::after {
                     });
                 }
 
-                // Event: Add button
+                // add button
                 const addButton = document.getElementById('ROLOCATE_QUICKLAUNCHGAMES_add-button');
                 addButton.addEventListener('click', showAddGamePopup);
 
-                // Initial load
                 setTimeout(loadSavedGames, 100);
             }
         });
@@ -7203,7 +7250,7 @@ li a.about-link:hover::after {
             return;
         }
 
-        // global state management vars
+        // variables
         let dropdownObserver = null;
         let avatarObserver = null;
         let mainObserver = null;
@@ -7603,7 +7650,7 @@ li a.about-link:hover::after {
             const bestFriends = getBestFriends();
             if (bestFriends.size === 0) return;
 
-            // Create best friends section
+            // create best friends section tf
             const bestFriendsSection = document.createElement('div');
             bestFriendsSection.className = 'best-friends-section';
             bestFriendsSection.style.cssText = `
@@ -7615,7 +7662,7 @@ li a.about-link:hover::after {
         margin: 0 0 16px 0;
     `;
 
-            // Create header
+            // create header
             const headerDiv = document.createElement('div');
             headerDiv.className = 'container-header people-list-header';
             headerDiv.style.cssText = `
@@ -7636,7 +7683,7 @@ li a.about-link:hover::after {
 
             headerDiv.appendChild(headerTitle);
 
-            // Create carousel container
+            // caroskulecontioner for the frinds
             const carouselContainer = document.createElement('div');
             carouselContainer.className = 'friends-carousel-container';
             carouselContainer.style.cssText = `
@@ -7646,7 +7693,7 @@ li a.about-link:hover::after {
         margin: 0;
     `;
 
-            // Create carousel
+            // create another
             const carousel = document.createElement('div');
             carousel.className = 'friends-carousel';
             carousel.style.cssText = `
@@ -7660,13 +7707,14 @@ li a.about-link:hover::after {
             carouselContainer.appendChild(carousel);
             bestFriendsSection.appendChild(carouselContainer);
 
-            // Insert before regular friends section
+            // add before friends section so ontop of the frineds section
             friendsContainer.parentNode.insertBefore(bestFriendsSection, friendsContainer);
 
-            // Populate with best friends
+            // populat
             populateBestFriendsSection();
         };
 
+        //add best frinds
         const populateBestFriendsSection = async () => {
             const bestFriendsCarousel = document.querySelector('.best-friends-section .friends-carousel');
             if (!bestFriendsCarousel) return;
@@ -7696,7 +7744,7 @@ li a.about-link:hover::after {
                     }
                 });
 
-                // Filter and sort best friends - online/game first
+                // friends ingame are frist
                 const bestFriendsList = allFriends
                     .filter(friend => bestFriends.has(friend.id))
                     .sort((a, b) => {
@@ -7770,7 +7818,7 @@ li a.about-link:hover::after {
                 const nameElement = tile.querySelector('.friend-name');
                 if (!nameElement) return;
 
-                // Try to find friend ID from tile (you might need to adjust this based on how friend IDs are stored)
+                // try to find friend id from the firned ssection
                 const profileLink = tile.querySelector('a[href*="/users/"]');
                 if (profileLink) {
                     const match = profileLink.href.match(/\/users\/(\d+)/);
@@ -7798,7 +7846,7 @@ li a.about-link:hover::after {
         transition: background-color 0.2s ease;
     `;
 
-            // Create avatar card
+            // create avatar card
             const avatarCard = document.createElement('div');
             avatarCard.className = 'avatar-card';
             avatarCard.style.cssText = `
@@ -7825,7 +7873,7 @@ li a.about-link:hover::after {
         object-fit: cover;
     `;
 
-            // Add status indicator with proper structure for existing status detection
+            // status circle thing
             const avatarStatus = document.createElement('div');
             avatarStatus.className = 'avatar-status';
             avatarStatus.style.cssText = `
@@ -7844,7 +7892,7 @@ li a.about-link:hover::after {
 
             const statusIcon = document.createElement('span');
             statusIcon.setAttribute('data-testid', 'presence-icon');
-            statusIcon.className = 'icon-offline'; // Default to offline, will be updated by status detection
+            statusIcon.className = 'icon-offline'; // default to offline
             statusIcon.setAttribute('title', 'Offline');
             statusIcon.style.cssText = `
         width: 16px;
@@ -7859,7 +7907,7 @@ li a.about-link:hover::after {
             avatarCardImage.appendChild(avatarStatus);
             avatarCard.appendChild(avatarCardImage);
 
-            // Create name label
+            // create name label
             const nameLabel = document.createElement('div');
             nameLabel.className = 'friend-name';
             nameLabel.textContent = friend.displayName || friend.name;
@@ -7876,7 +7924,7 @@ li a.about-link:hover::after {
             tile.appendChild(avatarCard);
             tile.appendChild(nameLabel);
 
-            // Add click handler to go to profile
+            // add click handler to go to profile
             tile.addEventListener('click', () => {
                 window.open(`https://www.roblox.com/users/${friend.id}/profile`, '_blank');
             });
@@ -7900,7 +7948,7 @@ li a.about-link:hover::after {
             const statusClassList = statusIconElement.className || '';
             const statusTitleAttribute = statusIconElement.getAttribute('title') || '';
 
-            // comprehensive status detection logic
+            // status detection stuff for friends
             if (statusClassList.includes('icon-game') ||
                 statusClassList.includes('game') ||
                 statusTitleAttribute.toLowerCase().includes('game') ||
@@ -7951,7 +7999,7 @@ li a.about-link:hover::after {
             });
         };
 
-        // style dropdown menu elements
+        // style dropdown menu stuff
         const styleDropdownMenus = () => {
             const dropdownElements = document.querySelectorAll(`.friend-tile-dropdown:not([data-${CLASSES.DROPDOWN_STYLED}])`);
 
@@ -7966,7 +8014,7 @@ li a.about-link:hover::after {
                 dropdownElement.setAttribute('data-friend-status', friendStatusForDropdown);
                 dropdownElement.setAttribute(`data-${CLASSES.DROPDOWN_STYLED}`, 'true');
 
-                // preserve icon styling for dropdown buttons
+                // icon styling for dropdown buttons
                 const iconElements = dropdownElement.querySelectorAll('.friend-tile-dropdown-button .icon');
                 iconElements.forEach(iconElement => {
                     iconElement.style.transition = 'opacity 0.2s ease';
@@ -7989,7 +8037,7 @@ li a.about-link:hover::after {
                                 const data = JSON.parse(response.responseText);
                                 let friends = data.data;
 
-                                // Check if any friends have missing names/displayNames
+                                // check if any friends have missing names/displayNames
                                 const friendsWithMissingData = friends.filter(friend =>
                                     !friend.name || !friend.displayName ||
                                     friend.name === "" || friend.displayName === ""
@@ -7998,12 +8046,12 @@ li a.about-link:hover::after {
                                 if (friendsWithMissingData.length > 0) {
                                     ConsoleLogEnabled(`[gmFetchFriends] Found ${friendsWithMissingData.length} friends with missing name data, fetching individual user data...`);
 
-                                    // Fetch individual user data for friends with missing info (with rate limiting)
+                                    // fetchj user data
                                     const userDataResults = await fetchUserDataWithRateLimit(friendsWithMissingData);
 
                                     try {
 
-                                        // Create a map of userId -> userData for quick lookup
+                                        // create a map for the user data
                                         const userDataMap = {};
                                         userDataResults.forEach((userData, index) => {
                                             if (userData) {
@@ -8011,7 +8059,7 @@ li a.about-link:hover::after {
                                             }
                                         });
 
-                                        // Update friends array with fetched user data
+                                        // update the friends array with suer data
                                         friends = friends.map(friend => {
                                             if (userDataMap[friend.id]) {
                                                 return {
@@ -8026,7 +8074,7 @@ li a.about-link:hover::after {
                                         ConsoleLogEnabled(`[gmFetchFriends] Successfully updated ${Object.keys(userDataMap).length} friends with user data`);
                                     } catch (fallbackError) {
                                         ConsoleLogEnabled(`[gmFetchFriends] Failed to fetch some individual user data:`, fallbackError);
-                                        // Continue with original data even if fallback fails
+                                        // continue with user data
                                     }
                                 }
 
@@ -8052,18 +8100,18 @@ li a.about-link:hover::after {
         const fetchUserDataWithRateLimit = async (friendsWithMissingData) => {
             const results = [];
             const DELAY_MS = 100; // 100ms delay between requests
-            const BATCH_SIZE = 5; // Process 5 requests at a time
+            const BATCH_SIZE = 5; // do 5 requests at a time
 
             for (let i = 0; i < friendsWithMissingData.length; i += BATCH_SIZE) {
                 const batch = friendsWithMissingData.slice(i, i + BATCH_SIZE);
 
-                // Process batch concurrently
+                // batch concurrently
                 const batchPromises = batch.map(friend => fetchIndividualUserData(friend.id));
                 const batchResults = await Promise.all(batchPromises);
 
                 results.push(...batchResults);
 
-                // Add delay between batches (except for the last batch)
+                // add the delay between batches except for the last batch cause like, its the end lol
                 if (i + BATCH_SIZE < friendsWithMissingData.length) {
                     await new Promise(resolve => setTimeout(resolve, DELAY_MS));
                 }
@@ -8095,7 +8143,7 @@ li a.about-link:hover::after {
                             }
                         } else if (response.status === 429) {
                             ConsoleLogEnabled(`[fetchIndividualUserData] Rate limited for user ${userId}, retrying after delay...`);
-                            // Retry after a longer delay for rate limiting
+                            // retry after a longer delay for rate limiting
                             setTimeout(() => {
                                 fetchIndividualUserData(userId).then(resolve);
                             }, 1000);
@@ -8170,7 +8218,7 @@ li a.about-link:hover::after {
             path.setAttribute('d', 'M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z');
             svg.appendChild(path);
 
-            // Fade in animation
+            // fade in animation
             setTimeout(() => {
                 svg.classList.add('star-visible');
             }, 50);
@@ -8274,7 +8322,7 @@ li a.about-link:hover::after {
             searchContainer.appendChild(searchInput);
             header.appendChild(searchContainer);
 
-            // Add close button
+            // add close button
             const closeButton = document.createElement('button');
             closeButton.className = 'best-friends-close';
             closeButton.innerHTML = '×';
@@ -8302,7 +8350,7 @@ li a.about-link:hover::after {
                 setTimeout(() => overlay.remove(), 200);
             });
 
-            // search functionality
+            // search stuff for the ui best friewnds
             let allFriends = [];
             const performSearch = () => {
                 const searchTerm = searchInput.value.toLowerCase();
@@ -8340,10 +8388,10 @@ li a.about-link:hover::after {
                     return;
                 }
 
-                // Get friend IDs
+                // get friend id
                 const friendIds = friends.map(friend => friend.id);
 
-                // Fetch avatars in batches
+                // fetch avatars in batches
                 const avatarMap = {};
                 const batchSize = 5;
                 for (let i = 0; i < friendIds.length; i += batchSize) {
@@ -8352,7 +8400,7 @@ li a.about-link:hover::after {
                     Object.assign(avatarMap, batchAvatars);
                 }
 
-                // Clear loading and populate grid
+                // clear loading and populate grid
                 grid.innerHTML = '';
                 allFriends = friends.map(friend => ({
                     id: friend.id,
@@ -8360,7 +8408,7 @@ li a.about-link:hover::after {
                     avatarUrl: avatarMap[friend.id]
                 }));
 
-                // Store all friends for search
+                // store all friends for search
                 allFriends.forEach(friend => {
                     const friendItem = createFriendItem(friend, bestFriends.has(friend.id));
                     grid.appendChild(friendItem);
@@ -8371,7 +8419,7 @@ li a.about-link:hover::after {
                 grid.innerHTML = '<div class="no-best-friends">Failed to load friends</div>';
             }
 
-            // Create friend item element
+            // create friend item element
             function createFriendItem(friend, isBestFriend) {
                 const friendItem = document.createElement('div');
                 friendItem.className = 'best-friends-popup-item';
@@ -8395,17 +8443,17 @@ li a.about-link:hover::after {
                 friendItem.appendChild(avatarDiv);
                 friendItem.appendChild(nameSpan);
 
-                // Add star if best friend
+                // add star if best friend
                 if (isBestFriend) {
                     const star = createStarIcon();
                     friendItem.appendChild(star);
                 }
 
-                // Click handler
+                // click handler
                 friendItem.addEventListener('click', (e) => {
                     e.stopPropagation();
 
-                    // Toggle best friend status
+                    // toggle best friend status
                     if (bestFriends.has(friend.id)) {
                         bestFriends.delete(friend.id);
                         const star = friendItem.querySelector(`.${CLASSES.BEST_FRIEND_STAR}`);
@@ -8426,7 +8474,7 @@ li a.about-link:hover::after {
                         friendItem.appendChild(star);
                     }
 
-                    // Save to localStorage
+                    // save to localStorage
                     saveBestFriends(bestFriends);
                 });
 
@@ -8475,11 +8523,11 @@ li a.about-link:hover::after {
             const bestFriendsButton = document.createElement('button');
             bestFriendsButton.className = CLASSES.BEST_FRIENDS_BUTTON;
 
-            // Add the person icon
+            // add the person icon
             const personIcon = createPersonIcon();
             bestFriendsButton.appendChild(personIcon);
 
-            // Add the text
+            // add the text
             const textNode = document.createTextNode('Best Friends');
             bestFriendsButton.appendChild(textNode);
 
@@ -8610,11 +8658,11 @@ li a.about-link:hover::after {
             setupBestFriendsButtonObserver();
             createAndInsertBestFriendsButton();
 
-            // Add best friends section
+            // add best friends section
             createBestFriendsSection();
             removeBestFriendsFromRegularSection();
 
-            // Immediate check when DOM is ready
+            // check if dom is ready
             const checkWhenReady = () => {
                 if (Roblox?.CurrentUser?.userId) {
                     ROLOCATE_checkBestFriendsStatus();
@@ -8626,7 +8674,7 @@ li a.about-link:hover::after {
             return true;
         };
 
-        // cleanup function for observers
+        // cleanup function for observers so no memory leaks
         const cleanupAllObservers = () => {
             if (dropdownObserver) dropdownObserver.disconnect();
             if (avatarObserver) avatarObserver.disconnect();
@@ -8682,7 +8730,7 @@ li a.about-link:hover::after {
 
         if (localStorage.getItem("ROLOCATE_restoreclassicterms") !== "true") return;
 
-        // Get current language from HTML element with fallbacks
+        // language from the page
         const htmlElement = document.querySelector('html');
         const robloxLang = (htmlElement.getAttribute('lang') ||
             htmlElement.getAttribute('xml:lang') ||
@@ -8719,7 +8767,7 @@ li a.about-link:hover::after {
         function isElementInBlockedGameContext(element) {
             if (isElementInOverrideContainer(element)) return false;
 
-            const experienceTerms = {
+            const experienceTerms = { // tf did i do here
                 en: 'experience',
                 fr: 'expérience',
                 es: 'experiencia'
@@ -8878,7 +8926,7 @@ li a.about-link:hover::after {
 
     /*******************************************************
     name of function: event listener
-    description: Note a function but runs the initial setup for the script to actually
+    description: Not a function but runs the initial setup for the script to actually
     start working. Very important
     *******************************************************/
     window.addEventListener("load", () => {
@@ -8921,23 +8969,65 @@ li a.about-link:hover::after {
     });
 
     /*******************************************************
-    The code for the random hop button and the filter button on roblox.com/games/*
+    name of function: mobile stuff #1
+    description: mobile mode thing. if mobile mode true and not in game link then show notification.
     *******************************************************/
 
+    if (localStorage.ROLOCATE_mobilemode === "true" && !location.href.match(/^https:\/\/www\.roblox\.com(\/[a-z]{2})?\/games\//)) {
+        console.log("true");
+        const observer = new MutationObserver(() => {
+            document.querySelectorAll('a[href*="/games/"]').forEach(link => {
+                if (link.dataset.mobileModeAttached) return;
+                link.dataset.mobileModeAttached = "true";
+                link.addEventListener("click", () => notifications('Tap the "Cancel" button', 'info', '❗', '60000'));
+            });
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    /*******************************************************
+    name of function: mobile stuff #2
+    description: mobile mode thingy so that servers can show on mobile devices. this is so scuffed lmao
+    *******************************************************/
+    if (localStorage.ROLOCATE_mobilemode === "true" && /^https:\/\/www\.roblox\.com(\/[a-z]{2})?\/games\//.test(location.href)) {
+      if (!location.href.includes("#!/game-instances")) {
+        // not yet on game-instance
+        notifications('Mobile Mode is Enabled. Some features may be disabled.', 'info', 'ℹ️', '6000');
+        setTimeout(() => {
+          location.replace(location.href + "#!/game-instances");
+        }, 1000);
+      } else {
+        // after on game-instance
+        notifications('Mobile Mode is Enabled. Some features may be disabled.', 'info', 'ℹ️', '6000');
+      }
+    }
+
+    /*******************************************************
+    name of function: mobile stuff #3
+    description: so like if on roblox.com where says go to app, tell user to not do that
+    *******************************************************/
+    if (localStorage.ROLOCATE_mobilemode === "true" && location.href.match(/^https:\/\/www\.roblox\.com\/?$/)) {
+        notifications('Tap "Continue in browser"', 'info', '❗', '30000');
+    }
+
+
+    /*******************************************************
+    The code for the random hop button and the filter button on roblox.com/games/*
+    *******************************************************/
         if (
             window.location.href.includes("/games/") &&
             (
                 localStorage.getItem("ROLOCATE_togglefilterserversbutton") === "true" ||
                 localStorage.getItem("ROLOCATE_toggleserverhopbutton") === "true" ||
                 localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true" ||
-                localstorage.getItem("ROLOCATE_compactprivateservers") == "true"
+                localStorage.getItem("ROLOCATE_compactprivateservers") == "true"
             )
         ) {
 
         let Isongamespage = true;
 
         if (window.location.href.includes("/games/")) { // saftey check and lazy load data to save the 2mb of ram lmao
-            loadServerRegions(); // lazy loads the server region data to save 4mb of ram
+            loadServerRegions(); // lazy loads the server region data to save 1.4mb of ram
             InitRobloxLaunchHandler();
 
             if (window.serverRegionsByIp) {
@@ -8948,12 +9038,22 @@ li a.about-link:hover::after {
             getFlagEmoji(); // lazy loads the flag emoji base64 to save some ram i guess
         }
 
+
         /*******************************************************
         name of function: JoinServer
         description: a function to join servers. has btroblox comptabaility
         *******************************************************/
         async function JoinServer(placeId, serverId) {
             if (!/^https:\/\/www\.roblox\.com(\/[a-z]{2})?\/games\//.test(window.location.href)) return;
+
+            // mobile mode exception
+            if (localStorage.getItem("ROLOCATE_mobilemode") === "true") {
+                window.open(
+                    `https://oqarshi.github.io/Invite/?placeid=${placeId}&serverid=${serverId}&mobilemode=true`,
+                    "_blank"
+                );
+                return;
+            }
 
             if (localStorage.getItem("ROLOCATE_btrobloxfix") === "true") {
 
@@ -8978,18 +9078,18 @@ li a.about-link:hover::after {
 
                 /* ---------- recent‑servers handling (always runs) ---------- */
                 if (localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true") {
-                    await HandleRecentServersAddGames(placeId, serverId); // Fixed: was gameId
+                    await HandleRecentServersAddGames(placeId, serverId); // fixed: was gameId
                     document.querySelector(".recent-servers-section")?.remove();
                     HandleRecentServers();
                 }
 
                 /* ---------- smartserver join---------- */
                 if (localStorage.getItem("ROLOCATE_smartjoinpopup") === "true") {
-                    showLoadingOverlay(placeId, serverId); // Fixed: was gameId
+                    showLoadingOverlay(placeId, serverId); // fixed: was gameId
                     await new Promise(res => setTimeout(res, 1500)); // 1.5s delay
                 }
 
-                // Set flag to bypass interceptor
+                // set flag to bypass interceptor
                 window._skipRobloxJoinInterceptor = true;
                 Roblox.GameLauncher.joinGameInstance(placeId, serverId);
             }
@@ -8998,13 +9098,13 @@ li a.about-link:hover::after {
         /*******************************************************
         name of function: InitRobloxLaunchHandler
         description: Detects when the user joins a Roblox server,
-        adds it to recent servers (if enabled), and—only when
-        SmartSearch is on—shows a loading overlay and waits 1.5s.
+        adds it to recent servers (if enabled), and only when
+        SmartSearch is on shows a loading overlay and waits 1.5s.
         *******************************************************/
         function InitRobloxLaunchHandler() {
-            if (localStorage.getItem("ROLOCATE_btrobloxfix") === "true") {
-              return;
-            };
+            if (localStorage.getItem("ROLOCATE_btrobloxfix") === "true" || localStorage.getItem("ROLOCATE_mobilemode") === "true") {
+                return;
+            }
 
             if (!/^https:\/\/www\.roblox\.com(\/[a-z]{2})?\/games\//.test(window.location.href)) return;
 
@@ -9015,9 +9115,9 @@ li a.about-link:hover::after {
 
             Roblox.GameLauncher.joinGameInstance = async function(gameId, serverId) {
 
-                // Check if we should skip interception (called from JoinServer)
+                // check if we should skip interception (called from JoinServer)
                 if (window._skipRobloxJoinInterceptor) {
-                    window._skipRobloxJoinInterceptor = false; // Reset flag
+                    window._skipRobloxJoinInterceptor = false; // reset flag
                     return originalJoin.apply(this, arguments);
                 }
 
@@ -9050,10 +9150,10 @@ li a.about-link:hover::after {
             const stored = JSON.parse(localStorage.getItem(storageKey) || "{}");
             const key = `${gameId}_${serverId}`;
 
-            // Check if we already have region data for this server
+            // check if we already have region data for this server
             if (!stored[key] || !stored[key].region) {
                 try {
-                    // Fetch server region if not already stored
+                    // fetch server region if not already stored
                     const region = await fetchServerDetails(gameId, serverId);
                     stored[key] = {
                         timestamp: Date.now(),
@@ -9061,14 +9161,14 @@ li a.about-link:hover::after {
                     };
                 } catch (error) {
                     ConsoleLogEnabled("Failed to fetch server region:", error);
-                    // Store without region data if fetch fails
+                    // store without region data if fetch fails
                     stored[key] = {
                         timestamp: Date.now(),
                         region: null
                     };
                 }
             } else {
-                // Update timestamp but keep existing region data
+                // update timestamp but keep existing region data
                 stored[key].timestamp = Date.now();
             }
 
@@ -9083,25 +9183,25 @@ li a.about-link:hover::after {
         *******************************************************/
         // WARNING: Do not republish this script. Licensed for personal use only.
         function HandleRecentServersURL() {
-            // Static-like variable to remember if we've already found an invalid URL
+            // static like variable to remember if we've already found an invalid URL
             if (HandleRecentServersURL.alreadyInvalid) {
-                return; // Skip if previously marked as invalid
+                return;
             }
 
             const url = window.location.href;
 
-            // Regex pattern to match ROLOCATE_GAMEID and SERVERID from the hash
+            // in url to match ROLOCATE_GAMEID and SERVERID from the hash
             const match = url.match(/ROLOCATE_GAMEID=(\d+)_SERVERID=([a-f0-9-]+)/i);
 
             if (match && match.length === 3) {
                 const gameId = match[1];
                 const serverId = match[2];
 
-                // Clean up the URL (remove the hash part) while preserving query parameters
+                // clean up the URL from invite
                 const cleanURL = window.location.pathname + window.location.search;
                 history.replaceState(null, null, cleanURL);
 
-                // Call the handler with extracted values
+                // call handler stuff
                 HandleRecentServersAddGames(gameId, serverId);
             } else {
                 ConsoleLogEnabled("No gameId and serverId found in URL. (From invite link)");
@@ -9114,19 +9214,19 @@ li a.about-link:hover::after {
         description: Guves Flag Emoji
         *******************************************************/
         function getFlagEmoji(countryCode) {
-            // Static variables to maintain state without globals
+            // static variables to maintain state without globals
             if (!getFlagEmoji.flagsData) {
                 ConsoleLogEnabled("[getFlagEmoji] Initializing static variables.");
                 getFlagEmoji.flagsData = null;
                 getFlagEmoji.isLoaded = false;
             }
 
-            // If no countryCode provided, lazy load all data
+            // if no countryCode provided, lazy load all data
             if (!countryCode) {
                 ConsoleLogEnabled("[getFlagEmoji] No country code provided.");
                 if (!getFlagEmoji.isLoaded) {
                     ConsoleLogEnabled("[getFlagEmoji] Loading flag data (no countryCode).");
-                    getFlagEmoji.flagsData = loadFlagsData(); // This function comes from @require
+                    getFlagEmoji.flagsData = loadFlagsData(); // this function comes from @require
                     getFlagEmoji.isLoaded = true;
                     ConsoleLogEnabled("[getFlagEmoji] Flag data loaded successfully.");
                 } else {
@@ -9135,7 +9235,7 @@ li a.about-link:hover::after {
                 return;
             }
 
-            // If data not loaded yet, load it now
+            // if data not loaded yet, load it now
             if (!getFlagEmoji.isLoaded) {
                 ConsoleLogEnabled(`[getFlagEmoji] Lazy loading flag data for country: ${countryCode}`);
                 getFlagEmoji.flagsData = loadFlagsData();
@@ -10356,9 +10456,9 @@ li a.about-link:hover::after {
         /*******************************************************
         name of function: disableYouTubeAutoplayInIframes
         Description:
-        Disable autoplay in YouTube and youtube-nocookie iframes inside a container element.
+        disable autoplay in YouTube iframes on game page
         *******************************************************/
-        // stops youtube autoplay in iframes
+        // currently bug where if u play the video it like keeps playing when scrolling through
         function disableYouTubeAutoplayInIframes(rootElement = document, observeMutations = false) {
             const processedFlag = 'data-autoplay-blocked';
 
@@ -10415,13 +10515,13 @@ li a.about-link:hover::after {
         *******************************************************/
         function cleanupPrivateServerCards() {
           if (localStorage.ROLOCATE_compactprivateservers !== "true") return;
-          // Prevent multiple observers or overlapping runs
+          // prevent multiple observers or other runs
           if (cleanupPrivateServerCards._initialized) return;
           cleanupPrivateServerCards._initialized = true;
 
           let isRunning = false;
 
-          // Popup logic
+          // popup stuff
           const showPlayersPopup = (thumbs, card) => {
             const overlay = document.createElement('div');
             overlay.className = 'players-popup-overlay';
@@ -10443,7 +10543,7 @@ li a.about-link:hover::after {
                 link.setAttribute('rel', 'noopener noreferrer');
               });
 
-              // Stop propagation on thumbnail clicks so links work
+              // stop propagation on thumbnail clicks so links work
               thumbs.addEventListener('click', (e) => {
                 e.stopPropagation();
               });
@@ -10476,7 +10576,7 @@ li a.about-link:hover::after {
             document.body.appendChild(overlay);
           };
 
-          // Cleanup logic
+          // cleanup logic
           const performCleanup = () => {
             if (isRunning) return;
             isRunning = true;
@@ -10532,14 +10632,14 @@ li a.about-link:hover::after {
             isRunning = false;
           };
 
-          // Observer inside same scope
+          // observer inside same scope
           const observer = new MutationObserver(() => {
             observer.disconnect();
             performCleanup();
             observer.observe(document.body, { childList: true, subtree: true });
           });
 
-          // Initial run
+          // run
           performCleanup();
           observer.observe(document.body, { childList: true, subtree: true });
         }
@@ -10550,7 +10650,7 @@ li a.about-link:hover::after {
         *******************************************************/
         function createPopup() {
             const popup = document.createElement('div');
-            popup.className = 'server-filters-dropdown-box'; // Unique class name
+            popup.className = 'server-filters-dropdown-box';
             popup.style.cssText = `
         position: absolute;
         width: 210px;
@@ -10566,7 +10666,7 @@ li a.about-link:hover::after {
         box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
         `;
 
-            // Create the header section
+            // header section
             const header = document.createElement('div');
             header.style.cssText = `
         display: flex;
@@ -10576,7 +10676,7 @@ li a.about-link:hover::after {
         margin-bottom: 5px;
         `;
 
-            // Add the logo (base64 image)
+            // add base64 logo
             const logo = document.createElement('img');
             logo.src = window.Base64Images.logo;
             logo.style.cssText = `
@@ -10585,7 +10685,7 @@ li a.about-link:hover::after {
         margin-right: 10px;
         `;
 
-            // Add the title
+            // add title
             const title = document.createElement('span');
             title.textContent = 'RoLocate';
             title.style.cssText = `
@@ -10594,14 +10694,14 @@ li a.about-link:hover::after {
         font-weight: bold;
         `;
 
-            // Append logo and title to the header
+            // add logo and title
             header.appendChild(logo);
             header.appendChild(title);
 
-            // Append the header to the popup
+            // add header
             popup.appendChild(header);
 
-            // Define unique names, tooltips, experimental status, and explanations for each button
+            // stuff for unique names, tooltips, experimental status, and explanations for each button
             const buttonData = [{
                     name: "Smallest Servers",
                     tooltip: "**Reverses the order of the server list.** The emptiest servers will be displayed first.",
@@ -10655,13 +10755,13 @@ li a.about-link:hover::after {
                 },
             ];
 
-            // Create buttons with unique names, tooltips, experimental status, and explanations
+            // create buttons with unique names, tooltips, experimental status, and explanations
             buttonData.forEach((data, index) => {
                 const buttonContainer = document.createElement('div');
                 buttonContainer.className = 'server-filter-option';
                 buttonContainer.classList.add(data.disabled ? "disabled" : "enabled");
 
-                // Create a wrapper for the button content that can have opacity applied
+                // create a wrapper for the button content that can have opacity applied
                 const buttonContentWrapper = document.createElement('div');
                 buttonContentWrapper.style.cssText = `
             width: 100%;
@@ -10689,7 +10789,7 @@ li a.about-link:hover::after {
             opacity: 0;
         `;
 
-                // ✅ MAIN TOOLTIP (RIGHT SIDE) — KEPT INTACT
+                // tooltip on the right side
                 const tooltip = document.createElement('div');
                 tooltip.className = 'filter-tooltip';
                 tooltip.style.cssText = `
@@ -10710,7 +10810,7 @@ li a.about-link:hover::after {
             z-index: 1001;
         `;
 
-                // Parse tooltip text and replace **...** with bold HTML tags
+                // parse tooltip text and replace **...** with bold HTML tags
                 tooltip.innerHTML = data.tooltip.replace(/\*\*(.*?)\*\*/g, "<b style='color: #068f00;'>$1</b>");
 
                 const buttonText = document.createElement('p');
@@ -10721,9 +10821,9 @@ li a.about-link:hover::after {
         `;
                 buttonText.textContent = data.name;
 
-                // Add "DISABLED" style if the button is disabled
+                // add "DISABLED" style if the button is disabled
                 if (data.disabled) {
-                    // Show explanation tooltip (left side like experimental)
+                    // show explanation tooltip (left side like experimental)
                     const disabledTooltip = document.createElement('div');
                     disabledTooltip.className = 'disabled-tooltip';
                     disabledTooltip.style.cssText = `
@@ -10745,7 +10845,7 @@ li a.about-link:hover::after {
 
                     buttonContainer.appendChild(disabledTooltip);
 
-                    // Add disabled indicator
+                    // add disabled indicator
                     const disabledIndicator = document.createElement('span');
                     disabledIndicator.textContent = 'DISABLED';
                     disabledIndicator.style.cssText = `
@@ -10759,7 +10859,7 @@ li a.about-link:hover::after {
                     `;
                     buttonText.appendChild(disabledIndicator);
 
-                    // Show on hover
+                    // show on hover
                     buttonContainer.addEventListener('mouseenter', () => {
                         disabledTooltip.style.display = 'block';
                     });
@@ -10768,7 +10868,7 @@ li a.about-link:hover::after {
                     });
                 }
 
-                // Add "EXP" label if the button is experimental
+                // add "EXP" label if the button is experimental
                 if (data.experimental) {
                     const expLabel = document.createElement('span');
                     expLabel.textContent = 'EXP';
@@ -10783,7 +10883,7 @@ li a.about-link:hover::after {
             `;
                     buttonText.appendChild(expLabel);
 
-                    // Add experimental explanation tooltip (left side)
+                    // add experimental explanation tooltip (left side)
                     const experimentalTooltip = document.createElement('div');
                     experimentalTooltip.className = 'experimental-tooltip';
                     experimentalTooltip.style.cssText = `
@@ -10802,17 +10902,17 @@ li a.about-link:hover::after {
                       opacity: 1;
                   `;
 
-                    // Function to replace **text** with bold and gold styled text
+                    // function to replace **text** with bold and gold styled text
                     const formatText = (text) => {
                         return text.replace(/\*\*(.*?)\*\*/g, '<span style="font-weight: bold; color: gold;">$1</span>');
                     };
 
-                    // Apply the formatting to the experimental explanation
+                    // apply the formatting to the experimental explanation
                     experimentalTooltip.innerHTML = formatText(data.experimentalExplanation);
 
                     buttonContainer.appendChild(experimentalTooltip);
 
-                    // Show on hover
+                    // show on hover
                     buttonContainer.addEventListener('mouseenter', () => {
                         experimentalTooltip.style.display = 'block';
                     });
@@ -10821,16 +10921,16 @@ li a.about-link:hover::after {
                     });
                 }
 
-                // ✅ APPEND MAIN TOOLTIP — STILL HERE
+                // appent main tooltip
                 buttonContainer.appendChild(tooltip);
 
-                // Append button text to content wrapper
+                // button text next top cointyainer
                 buttonContentWrapper.appendChild(buttonText);
 
-                // Append content wrapper to button container
+                // content wrapper to button contadiner
                 buttonContainer.appendChild(buttonContentWrapper);
 
-                // In the event listeners:
+                // event listerners:
                 buttonContainer.addEventListener('mouseover', () => {
                     tooltip.style.display = 'block';
 
@@ -10858,12 +10958,12 @@ li a.about-link:hover::after {
                 });
 
                 buttonContainer.addEventListener('click', () => {
-                    // Prevent click functionality for disabled buttons
+                    // no clciks on disabled buttons
                     if (data.disabled) {
                         return;
                     }
 
-                    // Add click animation
+                    // add click animation
                     buttonContainer.style.transform = 'translateY(0px) scale(0.95)';
                     setTimeout(() => {
                         buttonContainer.style.transform = 'translateY(0px) scale(1)';
@@ -10926,23 +11026,23 @@ li a.about-link:hover::after {
             ConsoleLogEnabled("Starting server hop...");
 
             showLoadingOverlay();
-            // Extract the game ID from the URL
+            // extract the game ID from the URL
             const url = window.location.href;
             const gameId = (url.split("/").indexOf("games") !== -1) ? url.split("/")[url.split("/").indexOf("games") + 1] : null;
 
             ConsoleLogEnabled(`Game ID: ${gameId}`);
 
-            // Array to store server IDs
+            // array to store server IDs
             let serverIds = [];
             let nextPageCursor = null;
             let pagesRequested = 0;
 
-            // Get the list of all recently joined servers in localStorage
+            // get the list of all recently joined servers in localStorage
             const allStoredServers = Object.keys(localStorage)
                 .filter(key => key.startsWith("ROLOCATE_recentServers_")) // server go after!
                 .map(key => JSON.parse(localStorage.getItem(key)));
 
-            // Remove any expired servers for all games (older than 15 minutes)
+            // remove any expired servers for all games (older than 15 minutes)
             const currentTime = new Date().getTime();
             allStoredServers.forEach(storedServers => {
                 const validServers = storedServers.filter(server => {
@@ -10950,14 +11050,14 @@ li a.about-link:hover::after {
                     return (currentTime - lastJoinedTime) <= 15 * 60 * 1000; // 15 minutes
                 });
 
-                // Update localStorage with the valid (non-expired) servers
+                // update localStorage with the valid servers
                 localStorage.setItem(`ROLOCATE_recentServers_${gameId}`, JSON.stringify(validServers));
             });
 
-            // Get the list of recently joined servers for the current game
+            // get the list of recently joined servers for the current game
             const storedServers = JSON.parse(localStorage.getItem(`ROLOCATE_recentServers_${gameId}`)) || [];
 
-            // Check if there are any recently joined servers and exclude them from selection
+            // check if there are any recently joined servers and exclude them from selection
             const validServers = storedServers.filter(server => {
                 const lastJoinedTime = new Date(server.timestamp).getTime();
                 return (currentTime - lastJoinedTime) <= 15 * 60 * 1000; // 15 minutes
@@ -10977,7 +11077,7 @@ li a.about-link:hover::after {
             description: Function to fetch servers
             *******************************************************/
             function fetchServers(cursor) {
-                // Randomly choose between sortOrder=1 and sortOrder=2 (50% chance each)
+                // randomly choose between sortOrder=1 and sortOrder=2
                 const sortOrder = Math.random() < 0.5 ? 1 : 2;
                 const url = `https://games.roblox.com/v1/games/${gameId}/servers/0?sortOrder=${sortOrder}&excludeFullGames=true&limit=100${cursor ? `&cursor=${cursor}` : ""}`;
 
@@ -10992,13 +11092,13 @@ li a.about-link:hover::after {
                         if (response.status === 429) {
                             ConsoleLogEnabled("Rate limited! Slowing down requests.");
                             isRateLimited = true;
-                            currentDelay = 750; // Switch to 0.75 seconds
+                            currentDelay = 750; // switch to 0.75 seconds
                             setTimeout(() => fetchServers(cursor), currentDelay);
                             return;
                         } else if (isRateLimited && response.status === 200) {
                             ConsoleLogEnabled("Recovered from rate limiting. Restoring normal delay.");
                             isRateLimited = false;
-                            currentDelay = 150; // Back to normal
+                            currentDelay = 150; // back to normal 0.15 seconds
                         }
 
                         try {
@@ -11050,10 +11150,10 @@ li a.about-link:hover::after {
                     const randomServerId = serverIds[Math.floor(Math.random() * serverIds.length)];
                     ConsoleLogEnabled(`Joining server: ${randomServerId}`);
 
-                    // Join the game instance with the selected server ID
+                    // join the game instance with the selected server ID
                     JoinServer(gameId, randomServerId);
 
-                    // Store the selected server ID with the time and date in localStorage
+                    // store the selected server ID with the time and date in localStorage
                     const timestamp = new Date().toISOString();
                     const newServer = {
                         serverId: randomServerId,
@@ -11061,7 +11161,7 @@ li a.about-link:hover::after {
                     };
                     validServers.push(newServer);
 
-                    // Save the updated list of recently joined servers to localStorage
+                    // save the updated list of recently joined servers to localStorage
                     localStorage.setItem(`ROLOCATE_recentServers_${gameId}`, JSON.stringify(validServers));
 
                     ConsoleLogEnabled(`Server ${randomServerId} stored with timestamp ${timestamp}`);
@@ -11071,7 +11171,7 @@ li a.about-link:hover::after {
                 }
             }
 
-            // Start the fetching process
+            // start the fetching process
             fetchServers();
         }
 
@@ -11205,7 +11305,8 @@ li a.about-link:hover::after {
                     *******************************************************/
 
                     async function runServerRegions() {
-                        // Store the original state at the beginning using getItem/setItem
+                        // store the original state at the beginning using getItem/setItem
+                        // i did some magic here now i don't know why this disabled notificatioons
                         const originalNotifFlag = window.localStorage.getItem('ROLOCATE_enablenotifications');
 
                         ConsoleLogEnabled("[DEBUG] Original state:", originalNotifFlag);
@@ -11220,7 +11321,7 @@ li a.about-link:hover::after {
                         const gameId = /^https:\/\/www\.roblox\.com(\/[a-z]{2})?\/games\//.test(window.location.href) ? (window.location.href.match(/\/games\/(\d+)/) || [])[1] || null : null;
                         if (!gameId) {
                             ConsoleLogEnabled("[Auto] Game ID not found, aborting runServerRegions.");
-                            // Restore original state before early return
+                            // restore original state before early return
                             if (originalNotifFlag !== null) {
                                 window.localStorage.setItem('ROLOCATE_enablenotifications', originalNotifFlag);
                             }
@@ -11233,7 +11334,8 @@ li a.about-link:hover::after {
                         if (typeof disableFilterButton === "function") disableFilterButton(true);
                         if (typeof disableLoadMoreButton === "function") disableLoadMoreButton();
                         if (typeof rebuildServerList === "function") {
-                            rebuildServerList(gameId, 16);
+                            const serverCount = parseInt(window.localStorage.getItem('ROLOCATE_AutoRunServerRegionsnumber')) || 16; // fallback to 16
+                            rebuildServerList(gameId, serverCount); // search 100 servers
                             ConsoleLogEnabled(`[Auto] Server list rebuilt for game ID: ${gameId}`);
                         } else {
                             ConsoleLogEnabled("[Auto] rebuildServerList function not found.");
@@ -11245,20 +11347,20 @@ li a.about-link:hover::after {
                                     "radial-gradient(circle, rgba(255, 40, 40, 0.4)",
                                     5000
                                 );
-                                // Restore original state
+                                // restore original state
                                 window.localStorage.setItem('ROLOCATE_enablenotifications', originalNotifFlag);
                                 ConsoleLogEnabled("[DEBUG] Restored to:", window.localStorage.getItem('ROLOCATE_enablenotifications'));
                                 ConsoleLogEnabled("[Auto] Notifications restored to original state (style div detected).");
                             } catch (err) {
                                 ConsoleLogEnabled("[Auto] Style div not detected in time:", err.message);
-                                // Restore original state even if there's an error
+                                // restore original state even if there's an error
                                 window.localStorage.setItem('ROLOCATE_enablenotifications', originalNotifFlag);
                                 ConsoleLogEnabled("[DEBUG] Restored to:", window.localStorage.getItem('ROLOCATE_enablenotifications'));
                                 ConsoleLogEnabled("[Auto] Notifications restored to original state (error occurred).");
                             }
                         }
 
-                        // Final restoration to ensure it's always restored
+                        // final restoration to ensure it's always restored
                         if (originalNotifFlag !== null) {
                             window.localStorage.setItem('ROLOCATE_enablenotifications', originalNotifFlag);
                         }
@@ -11502,18 +11604,18 @@ li a.about-link:hover::after {
         if (window.location.hash === '#?ROLOCATE_QUICKJOIN') {
             if (localStorage.ROLOCATE_smartsearch === 'true' || localStorage.ROLOCATE_quicklaunchgames === 'true') { // fixed this
 
-                // Extract gameId from URL path (assuming format: /games/gameId)
+                // get gameid from url
                 const gameIdMatch = window.location.pathname.match(/\/games\/(\d+)/);
 
                 if (gameIdMatch && gameIdMatch[1]) {
                     const gameId = gameIdMatch[1];
-                    rebuildServerList(gameId, 50, false, true); // Quick join mode
+                    rebuildServerList(gameId, 50, false, true); // quick join mode
                 } else {
                     ConsoleLogEnabled('[RoLocate] Could not extract gameId from URL');
                     notifications('Error: Failed to extract gameid. Please try again later.', 'error', '⚠️', '5000');
                 }
 
-                // Clean up the URL
+                // clean up the URL
                 history.replaceState(null, null, window.location.pathname + window.location.search);
             } else {
                 ConsoleLogEnabled('[RoLocate] Quick Join detected but smartsearch is disabled');
@@ -11533,25 +11635,25 @@ li a.about-link:hover::after {
         description: Fetches the smallest servers, disables the "Load More" button, shows a loading bar, and recreates the server cards.
         *******************************************************/
         async function smallest_servers() {
-            // Disable the "Load More" button and show the loading bar
+            // disable the "Load More" button and show the loading bar
             Loadingbar(true);
             disableFilterButton(true);
             disableLoadMoreButton();
             notifications("Finding small servers...", "success", "🧐");
 
-            // Get the game ID from the URL
+            // get the game ID from the URL
             const gameId = ((p => {
                 const i = p.indexOf('games');
                 return i !== -1 && p.length > i + 1 ? p[i + 1] : null;
             })(window.location.pathname.split('/')));
 
-            // Retry mechanism
+            // retry thing
             let retries = 3;
             let success = false;
 
             while (retries > 0 && !success) {
                 try {
-                    // Use GM_xmlhttpRequest to fetch server data from the Roblox API
+                    // get server data
                     const response = await new Promise((resolve, reject) => {
                         GM_xmlhttpRequest({
                             method: "GET",
@@ -11573,7 +11675,7 @@ li a.about-link:hover::after {
 
                     const data = JSON.parse(response.responseText);
 
-                    // Process each server
+                    // find info on each server
                     for (const server of data.data) {
                         const {
                             id: serverId,
@@ -11582,13 +11684,13 @@ li a.about-link:hover::after {
                             playing
                         } = server;
 
-                        // Pass the server data to the card creation function
+                        // give to rbx_card function
                         await rbx_card(serverId, playerTokens, maxPlayers, playing, gameId);
                     }
 
-                    success = true; // Mark as successful if no errors occurred
+                    success = true; // mark as successful if no errors occurred
                 } catch (error) {
-                    retries--; // Decrement the retry count
+                    retries--; // remove 1
 
                     if (error.message === '429: Too Many Requests' && retries > 0) {
                         ConsoleLogEnabled('Encountered a 429 error. Retrying in 5 seconds...');
@@ -11597,11 +11699,11 @@ li a.about-link:hover::after {
                         ConsoleLogEnabled('Error fetching server data:', error);
                         notifications('Error: Failed to fetch server data. Please try again later.', 'error', '⚠️', '5000');
                         Loadingbar(false);
-                        break; // Exit the loop if it's not a 429 error or no retries left
+                        break; // exit the loop if it's not a 429 error or no retries left
                     }
                 } finally {
                     if (success || retries === 0) {
-                        // Hide the loading bar and enable the filter button
+                        // hide the loading bar and enable the filter button
                         Loadingbar(false);
                         disableFilterButton(false);
                     }
@@ -11622,25 +11724,25 @@ li a.about-link:hover::after {
         description: Fetches servers with available space, disables the "Load More" button, shows a loading bar, and recreates the server cards.
         *******************************************************/
         async function available_space_servers() {
-            // Disable the "Load More" button and show the loading bar
+            // disable the "Load More" button and show the loading bar
             Loadingbar(true);
             disableLoadMoreButton();
             disableFilterButton(true);
             notifications("Finding servers with space...", "success", "🧐");
 
-            // Get the game ID from the URL
+            // get the game ID from the URL
             const gameId = ((p => {
                 const i = p.indexOf('games');
                 return i !== -1 && p.length > i + 1 ? p[i + 1] : null;
             })(window.location.pathname.split('/')));
 
-            // Retry mechanism
+            // retry thing
             let retries = 3;
             let success = false;
 
             while (retries > 0 && !success) {
                 try {
-                    // Use GM_xmlhttpRequest to fetch server data from the Roblox API
+                    // get server data
                     const response = await new Promise((resolve, reject) => {
                         GM_xmlhttpRequest({
                             method: "GET",
@@ -11662,7 +11764,7 @@ li a.about-link:hover::after {
 
                     const data = JSON.parse(response.responseText);
 
-                    // Process each server
+                    // get server info
                     for (const server of data.data) {
                         const {
                             id: serverId,
@@ -11671,24 +11773,24 @@ li a.about-link:hover::after {
                             playing
                         } = server;
 
-                        // Pass the server data to the card creation function
+                        // give to function for card creation
                         await rbx_card(serverId, playerTokens, maxPlayers, playing, gameId);
                     }
 
-                    success = true; // Mark as successful if no errors occurred
+                    success = true; // mark successful if no errors
                 } catch (error) {
-                    retries--; // Decrement the retry count
+                    retries--; // remove 1
 
                     if (error.message === '429: Too Many Requests' && retries > 0) {
                         ConsoleLogEnabled('Encountered a 429 error. Retrying in 10 seconds...');
                         await new Promise(resolve => setTimeout(resolve, 10000)); // Wait for 10 seconds
                     } else {
                         ConsoleLogEnabled('Error fetching server data:', error);
-                        break; // Exit the loop if it's not a 429 error or no retries left
+                        break; // exit the loop if it's not a 429 error or no retries left
                     }
                 } finally {
                     if (success || retries === 0) {
-                        // Hide the loading bar and enable the filter button
+                        // hide the loading bar and enable the filter button
                         Loadingbar(false);
                         disableFilterButton(false);
                     }
@@ -11707,9 +11809,9 @@ li a.about-link:hover::after {
         	description: Opens a popup for the user to select the max player count using a slider and filters servers accordingly. Maybe one of my best functions lowkey.
         *******************************************************/
         function player_count_tab() {
-            // Check if the max player count has already been determined
+            // check if the max player count has already been determined
             if (!player_count_tab.maxPlayers) {
-                // Try to find the element containing the player count information
+                // try to find the element containing the player count information
                 const playerCountElement = document.querySelector('.text-info.rbx-game-status.rbx-game-server-status.text-overflow');
                 if (playerCountElement) {
                     const playerCountText = playerCountElement.textContent.trim();
@@ -11722,11 +11824,11 @@ li a.about-link:hover::after {
                         }
                     }
                 } else {
-                    // If the element is not found, extract the gameId from the URL
+                    // if the element is not found, extract the gameId from the URL
                     const gameIdMatch = window.location.href.match(/\/(?:[a-z]{2}\/)?games\/(\d+)/);
                     if (gameIdMatch && gameIdMatch[1]) {
                         const gameId = gameIdMatch[1];
-                        // Send a request to the Roblox API to get server information
+                        // send a request to the Roblox API to get server information
                         GM_xmlhttpRequest({
                             method: 'GET',
                             url: `https://games.roblox.com/v1/games/${gameId}/servers/public?sortOrder=1&excludeFullGames=true&limit=100`,
@@ -11746,7 +11848,7 @@ li a.about-link:hover::after {
                                             }
                                         }
                                     }
-                                    // Update the slider range if the popup is already created
+                                    // update the slider range if the popup is already created
                                     const slider = document.querySelector('.player-count-popup input[type="range"]');
                                     if (slider) {
                                         slider.max = player_count_tab.maxPlayers ? (player_count_tab.maxPlayers - 1).toString() : '100';
@@ -11762,7 +11864,7 @@ li a.about-link:hover::after {
                                     }
                                 } catch (error) {
                                     ConsoleLogEnabled('Failed to parse API response:', error);
-                                    // Default to 100 if parsing fails
+                                    // default to 100 if parsing fails
                                     player_count_tab.maxPlayers = 100;
                                     const slider = document.querySelector('.player-count-popup input[type="range"]');
                                     if (slider) {
@@ -11782,7 +11884,7 @@ li a.about-link:hover::after {
                             onerror: function(error) {
                                 ConsoleLogEnabled('Failed to fetch server information:', error);
                                 ConsoleLogEnabled('Fallback to 100 players.');
-                                // Default to 100 if the request fails
+                                // default to 100 if the request fails
                                 player_count_tab.maxPlayers = 100;
                                 const slider = document.querySelector('.player-count-popup input[type="range"]');
                                 if (slider) {
@@ -11802,7 +11904,7 @@ li a.about-link:hover::after {
                     }
                 }
             }
-            // Create the overlay (backdrop)
+            // create the overlay
             const overlay = document.createElement('div');
             overlay.style.cssText = `
         position: fixed;
@@ -11817,7 +11919,7 @@ li a.about-link:hover::after {
     `;
             document.body.appendChild(overlay);
 
-            // Create the popup container
+            // create the popup container
             const popup = document.createElement('div');
             popup.className = 'player-count-popup';
             popup.style.cssText = `
@@ -11839,9 +11941,9 @@ li a.about-link:hover::after {
         transition: opacity 0.3s ease, transform 0.3s ease;
     `;
 
-            // Add a close button in the top-right corner (bigger size)
+            // add a close button in the top-right corner (bigger size)
             const closeButton = document.createElement('button');
-            closeButton.innerHTML = '&times;'; // Using '×' for the close icon
+            closeButton.innerHTML = '&times;'; // using '×' for the close icon
             closeButton.style.cssText = `
         position: absolute;
         top: 10px;
@@ -11868,7 +11970,7 @@ li a.about-link:hover::after {
                 closeButton.style.color = '#ffffff';
             });
 
-            // Add a title
+            // add a title
             const title = document.createElement('h3');
             title.textContent = 'Select Max Player Count';
             title.style.cssText = `
@@ -11879,7 +11981,7 @@ li a.about-link:hover::after {
     `;
             popup.appendChild(title);
 
-            // Add a slider with improved functionality and styling
+            // add a slider with improved functionality and styling
             const slider = document.createElement('input');
             slider.type = 'range';
             slider.min = '1';
@@ -11905,7 +12007,7 @@ li a.about-link:hover::after {
         border-radius: 5px;
         height: 6px;
     `;
-            // Custom slider thumb
+            // custom slider thumb
             slider.style.setProperty('--thumb-size', '20px'); /* Larger thumb */
             slider.style.setProperty('--thumb-color', '#00A2FF');
             slider.style.setProperty('--thumb-hover-color', '#0088cc');
@@ -11924,12 +12026,12 @@ li a.about-link:hover::after {
                 sliderValue.textContent = slider.value; // update the displayed value
             });
             // keyboard support for better accuracy (fixed to increment/decrement by 1)
-            slider.addEventListener('keydown', (e) => {
-                e.preventDefault(); // Prevent default behavior (which might cause jumps)
+            slider.addEventListener('keydown', (arrowkeybutton) => {
+                arrowkeybutton.preventDefault(); // orevent default behavior (which might cause jumps)
                 let newValue = parseInt(slider.value, 10);
-                if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+                if (arrowkeybutton.key === 'ArrowLeft' || arrowkeybutton.key === 'ArrowDown') {
                     newValue = Math.max(1, newValue - 1); // decrease by 1
-                } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+                } else if (arrowkeybutton.key === 'ArrowRight' || arrowkeybutton.key === 'ArrowUp') {
                     newValue = Math.min(100, newValue + 1); // increase by 1
                 }
                 slider.value = newValue;
@@ -11937,7 +12039,7 @@ li a.about-link:hover::after {
             });
             popup.appendChild(slider);
 
-            // Add a display for the slider value
+            // add a display for the slider value
             const sliderValue = document.createElement('span');
             sliderValue.textContent = slider.value;
             sliderValue.style.cssText = `
@@ -11947,7 +12049,7 @@ li a.about-link:hover::after {
     `;
             popup.appendChild(sliderValue);
 
-            // Add a submit button with dark, blackish style
+            // add a submit button with dark, blackish style
             const submitButton = document.createElement('button');
             submitButton.textContent = 'Search';
             submitButton.style.cssText = `
@@ -11961,7 +12063,7 @@ li a.about-link:hover::after {
         transition: background-color 0.3s ease, transform 0.2s ease;
     `;
             submitButton.addEventListener('mouseenter', () => {
-                submitButton.style.backgroundColor = '#333'; /* Slightly lighter on hover */
+                submitButton.style.backgroundColor = '#333';
                 submitButton.style.transform = 'scale(1.05)';
             });
             submitButton.addEventListener('mouseleave', () => {
@@ -11969,7 +12071,7 @@ li a.about-link:hover::after {
                 submitButton.style.transform = 'scale(1)';
             });
 
-            // Add a yellow box with a tip under the submit button
+            // add yeelow stuff
             const tipBox = document.createElement('div');
             tipBox.style.cssText = `
         width: 100%;
@@ -11990,10 +12092,10 @@ li a.about-link:hover::after {
             });
             popup.appendChild(tipBox);
 
-            // Append the popup to the body
+            // append the popup to the body
             document.body.appendChild(popup);
 
-            // Fade in the overlay and popup
+            // fade in the overlay and popup
             setTimeout(() => {
                 overlay.style.opacity = '1';
                 popup.style.opacity = '1';
@@ -12011,15 +12113,15 @@ li a.about-link:hover::after {
                 setTimeout(() => {
                     popup.remove();
                     overlay.remove();
-                }, 300); // Match the duration of the transition
+                }, 300); // match the duration of the transition
             }
 
-            // Close the popup when the close button is clicked
+            // close the popup when the close button is clicked
             closeButton.addEventListener('click', () => {
                 fadeOutAndRemove(popup, overlay);
             });
 
-            // Handle submit button click
+            // handle submit button click
             submitButton.addEventListener('click', () => {
                 const maxPlayers = parseInt(slider.value, 10);
                 if (!isNaN(maxPlayers) && maxPlayers > 0) {
@@ -12046,7 +12148,7 @@ li a.about-link:hover::after {
                     method: 'GET',
                     url: url,
                     onload: function(response) {
-                        // Check for 429 Rate Limit error
+                        // check for 429 rate limit
                         if (response.status === 429) {
                             if (retries > 0) {
                                 const newDelay = currentDelay * 1; // Exponential backoff
@@ -12062,14 +12164,14 @@ li a.about-link:hover::after {
                             return;
                         }
 
-                        // Handle other HTTP errors
+                        // random errors handle it
                         if (response.status < 200 || response.status >= 300) {
                             ConsoleLogEnabled('[DEBUG] HTTP error:', response.status, response.statusText);
                             reject(new Error(`HTTP error: ${response.status}`));
                             return;
                         }
 
-                        // Parse and return the JSON data
+                        // give json data af5ter parsing
                         try {
                             const data = JSON.parse(response.responseText);
                             ConsoleLogEnabled('[DEBUG] Fetched data successfully:', data);
@@ -12094,14 +12196,14 @@ li a.about-link:hover::after {
         Keeps fetching until at least 8 servers are found, with a dynamic delay between requests.
         *******************************************************/
         async function filterServersByPlayerCount(maxPlayers) {
-            // Validate maxPlayers before proceeding
+            // make sure it actually good
             if (isNaN(maxPlayers) || maxPlayers < 1 || !Number.isInteger(maxPlayers)) {
                 ConsoleLogEnabled('[DEBUG] Invalid input for maxPlayers.');
                 notifications('Error: Please input a valid whole number greater than or equal to 1.', 'error', '⚠️', '5000');
                 return;
             }
 
-            // Disable UI elements and clear the server list
+            // disable UI elements and clear the server list
             Loadingbar(true);
             disableLoadMoreButton();
             disableFilterButton(true);
@@ -12117,22 +12219,22 @@ li a.about-link:hover::after {
                 serverMaxPlayers = null,
                 isCloserToOne = null;
             let topDownServers = [],
-                bottomUpServers = []; // Servers collected during searches
-            let currentDelay = 500; // Initial delay of 0.5 seconds
+                bottomUpServers = []; // servers collected during searches
+            let currentDelay = 500; // initial delay of 0.5 seconds
             const timeLimit = 3 * 60 * 1000,
                 startTime = Date.now(); // 3 minutes limit
             notifications('Will search for a maximum of 3 minutes to find a server.', 'success', '🔎', '5000');
 
             try {
                 while (serversFound < 16) {
-                    // Check if the time limit has been exceeded
+                    // check if the time limit has been exceeded
                     if (Date.now() - startTime > timeLimit) {
                         ConsoleLogEnabled('[DEBUG] Time limit reached. Proceeding to fallback servers.');
                         notifications('Warning: Time limit reached. Proceeding to fallback servers.', 'warning', '❗', '5000');
                         break;
                     }
 
-                    // Fetch initial data to determine serverMaxPlayers and isCloserToOne
+                    // fetch initial data to determine serverMaxPlayers and isCloserToOne
                     if (!serverMaxPlayers) {
                         const initialUrl = cursor ?
                             `https://games.roblox.com/v1/games/${gameId}/servers/public?excludeFullGames=true&limit=100&cursor=${cursor}` :
@@ -12149,14 +12251,14 @@ li a.about-link:hover::after {
                         }
                     }
 
-                    // Validate maxPlayers against serverMaxPlayers
+                    // vaklidate maxplayers
                     if (maxPlayers >= serverMaxPlayers) {
                         ConsoleLogEnabled('[DEBUG] Invalid input: maxPlayers is greater than or equal to serverMaxPlayers.');
                         notifications(`Error: Please input a number between 1 through ${serverMaxPlayers - 1}`, 'error', '⚠️', '5000');
                         return;
                     }
 
-                    // Adjust the URL based on isCloserToOne
+                    // adjust the URL based on isCloserToOne
                     const baseUrl = isCloserToOne ?
                         `https://games.roblox.com/v1/games/${gameId}/servers/public?sortOrder=1&excludeFullGames=true&limit=100` :
                         `https://games.roblox.com/v1/games/${gameId}/servers/public?excludeFullGames=true&limit=100`;
@@ -12164,14 +12266,14 @@ li a.about-link:hover::after {
                     const url = cursor ? `${baseUrl}&cursor=${cursor}` : baseUrl;
                     const data = await fetchServersWithRetry(url);
 
-                    // Safety check: Ensure the server list is valid and iterable
+                    // servber lsit good?
                     if (!Array.isArray(data.data)) {
                         ConsoleLogEnabled('[DEBUG] Invalid server list received. Waiting 1 second before retrying...');
                         await delay(1000);
                         continue;
                     }
 
-                    // Filter and process servers
+                    // filter sevrers
                     for (const server of data.data) {
                         if (server.playing === maxPlayers) {
                             await rbx_card(server.id, server.playerTokens, server.maxPlayers, server.playing, gameId);
@@ -12187,7 +12289,7 @@ li a.about-link:hover::after {
                     if (!data.nextPageCursor) break;
                     cursor = data.nextPageCursor;
 
-                    // Adjust delay dynamically
+                    // dynamicaic delay
                     if (currentDelay > 150) {
                         currentDelay = Math.max(150, currentDelay / 2);
                     }
@@ -12195,7 +12297,7 @@ li a.about-link:hover::after {
                     await delay(currentDelay);
                 }
 
-                // If no exact matches were found or time limit reached, use fallback servers
+                // if no exact matches were found or time limit reached, use fallback servers
                 if (serversFound === 0 && (topDownServers.length > 0 || bottomUpServers.length > 0)) {
                     notifications(`There are no servers with ${maxPlayers} players. Showing servers closest to ${maxPlayers} players.`, 'warning', '😔', '8000');
 
@@ -12232,33 +12334,33 @@ li a.about-link:hover::after {
         *******************************************************/
         async function random_servers() {
             notifications('Finding Random Servers. Please wait 2-5 seconds', 'success', '🔎', '5000');
-            // Disable the "Load More" button and show the loading bar
+            // disable the "Load More" button and show the loading bar
             Loadingbar(true);
             disableFilterButton(true);
             disableLoadMoreButton();
 
-            // Get the game ID from the URL ik reduent function
+            // get the game ID from the URL ik reduent function
             const gameId = ((p = window.location.pathname.split('/')) => {
                 const i = p.indexOf('games');
                 return i !== -1 && p.length > i + 1 ? p[i + 1] : null;
             })();
 
             try {
-                // Fetch servers from the first URL with retry logic
+                // fetch servers from the first URL with retry logic
                 const firstUrl = `https://games.roblox.com/v1/games/${gameId}/servers/public?excludeFullGames=true&limit=10`;
                 const firstData = await fetchWithRetry(firstUrl, 10); // Retry up to 3 times
 
-                // Wait for 5 seconds
+                // wait for 1.5 seconds
                 await delay(1500);
 
-                // Fetch servers from the second URL with retry logic
+                // fetch servers from the second URL with retry logic
                 const secondUrl = `https://games.roblox.com/v1/games/${gameId}/servers/public?sortOrder=1&excludeFullGames=true&limit=10`;
                 const secondData = await fetchWithRetry(secondUrl, 10); // Retry up to 3 times
 
-                // Combine the servers from both URLs. Yea im kinda proud of this lmao
+                // combine the servers from both URLs. Yea im kinda proud of this lmao
                 const combinedServers = [...firstData.data, ...secondData.data];
 
-                // Remove duplicates by server ID
+                // remove duplicates by server ID
                 const uniqueServers = [];
                 const seenServerIds = new Set();
 
@@ -12269,13 +12371,13 @@ li a.about-link:hover::after {
                     }
                 }
 
-                // Shuffle the unique servers array
+                // shuffl;y it
                 const shuffledServers = shuffleArray(uniqueServers);
 
-                // Get the first 16 shuffled servers
+                // get first 16 shuffled
                 const selectedServers = shuffledServers.slice(0, 16);
 
-                // Process each server in random order
+                // random order
                 for (const server of selectedServers) {
                     const {
                         id: serverId,
@@ -12284,14 +12386,14 @@ li a.about-link:hover::after {
                         playing
                     } = server;
 
-                    // Pass the server data to the card creation function
+                    // give it to this function
                     await rbx_card(serverId, playerTokens, maxPlayers, playing, gameId);
                 }
             } catch (error) {
                 ConsoleLogEnabled('Error fetching server data:', error);
                 notifications('Error: Failed to fetch server data. Please try again later.', 'error', '⚠️', '5000');
             } finally {
-                // Hide the loading bar and enable the filter button
+                // hide the loading bar and enable the filter button
                 Loadingbar(false);
                 disableFilterButton(false);
             }
@@ -12313,7 +12415,7 @@ li a.about-link:hover::after {
                             if (response.status === 429) {
                                 if (attempt < retries) {
                                     ConsoleLogEnabled(`Rate limited. Retrying in 2.5 seconds... (Attempt ${attempt + 1}/${retries})`);
-                                    setTimeout(() => attemptFetch(attempt + 1), 1500); // Wait 1.5 seconds and retry
+                                    setTimeout(() => attemptFetch(attempt + 1), 1500); // wait 1.5 seconds and retry
                                 } else {
                                     reject(new Error('Rate limit exceeded after retries'));
                                 }
@@ -12331,7 +12433,7 @@ li a.about-link:hover::after {
                         onerror: function(error) {
                             if (attempt < retries) {
                                 ConsoleLogEnabled(`Error occurred. Retrying in 10 seconds... (Attempt ${attempt + 1}/${retries})`);
-                                setTimeout(() => attemptFetch(attempt + 1), 10000); // Wait 10 seconds and retry
+                                setTimeout(() => attemptFetch(attempt + 1), 10000); // wait 10 seconds and retry
                             } else {
                                 reject(error);
                             }
@@ -12366,7 +12468,7 @@ li a.about-link:hover::after {
         description: not a function but if on game page inject styles
         *******************************************************/
         if (Isongamespage) {
-            // Create a <style> element
+            // global styles for serverfilters to use
             const style = document.createElement('style');
             style.textContent = `
 /* Overlay for the modal background */
@@ -12610,7 +12712,7 @@ select:hover, select:focus {
 
 
     `;
-            // Append the <style> element to the document head
+            // add element to the document head
             document.head.appendChild(style);
         }
 
@@ -12728,7 +12830,6 @@ select:hover, select:focus {
 
 
 
-
         /*******************************************************
         name of function: fetchServerDetails
         description: Function to fetch server details so game id and job id. yea!
@@ -12768,7 +12869,6 @@ select:hover, select:focus {
                                 reject('banned_by_creator');
                                 return;
                             }
-
 
                             const address = json?.joinScript?.UdmuxEndpoints?.[0]?.Address ?? json?.joinScript?.MachineAddress;
                             if (!address) {
@@ -13048,120 +13148,182 @@ select:hover, select:focus {
             const popup = document.createElement('div');
             popup.className = 'filter-popup';
 
-            popup.style.width = '460px';
-
-
             // get current player count preference from localStorage
             const currentPlayerCountPreference = localStorage.getItem('ROLOCATE_invertplayercount');
             const isLowPlayerCount = currentPlayerCountPreference === 'true';
 
-            // inject styles for dropdown icon
+            // inject styles for dropdown icon and mobile responsiveness
             const style = document.createElement('style');
             style.textContent = `
-    /* NEW: Grid container for the dropdowns */
-    .filter-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr; /* Create two equal columns */
-        gap: 20px; /* Space between the columns */
-        margin-bottom: 15px;
-    }
+            .overlay {
+                z-index: 10000;
+            }
 
-    .dropdown-wrapper {
-      position: relative;
-      display: inline-block;
-      width: 100%;
-    }
+            .filter-popup {
+                width: 90%;
+                max-width: 460px;
+                max-height: 90vh;
+                margin: 0 auto;
+                box-sizing: border-box;
+                overflow-y: auto;
+                z-index: 10001;
+            }
 
-    .dropdown-wrapper select {
-      width: 100%;
-      padding-right: 30px;
-      appearance: none;
-      -webkit-appearance: none;
-      -moz-appearance: none;
-    }
+            .filter-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 20px;
+                margin-bottom: 15px;
+            }
 
-    .dropdown-wrapper .dropdown-icon {
-      position: absolute;
-      right: 10px;
-      top: 40%;
-      transform: translateY(-50%);
-      pointer-events: none;
-      font-size: 12px;
-      color: #fff;
-    }
+            @media (max-width: 600px) {
+                .filter-grid {
+                    grid-template-columns: 1fr;
+                    gap: 15px;
+                }
 
-    .filter-section label {
-      display: block;
-      margin-bottom: 5px;
-      font-weight: 600;
-    }
+                .filter-popup {
+                    width: 95%;
+                    padding: 20px 15px;
+                }
 
-    #cancelServerCount {
-      background-color: #2a1f1f;
-      border: 1px solid #3d2626;
-      border-radius: 6px;
-      font-size: 14px;
-      cursor: pointer;
-      transition: background-color 0.3s ease, transform 0.2s ease;
-    }
+                .popup-header h3 {
+                    font-size: 18px;
+                }
 
-    #cancelServerCount:hover {
-      background-color: #332222;
-      transform: translateY(-1px); /* Slight lift effect */
-    }
+                .popup-header p {
+                    font-size: 13px;
+                }
 
-    #cancelServerCount:active {
-        transform: translateY(0); /* Reset lift effect on click */
-    }
-  `;
+                .popup-footer p {
+                    font-size: 12px;
+                }
+            }
+
+            /* Very small screens */
+            @media (max-width: 400px) {
+                .filter-popup {
+                    width: 98%;
+                    padding: 15px 10px;
+                }
+
+                .popup-header h3 {
+                    font-size: 16px;
+                }
+
+                .filter-section label {
+                    font-size: 13px;
+                }
+
+                select, input, button {
+                    font-size: 13px;
+                }
+            }
+
+            .dropdown-wrapper {
+                position: relative;
+                display: inline-block;
+                width: 100%;
+            }
+
+            .dropdown-wrapper select {
+                width: 100%;
+                padding-right: 30px;
+                appearance: none;
+                -webkit-appearance: none;
+                -moz-appearance: none;
+                box-sizing: border-box;
+            }
+
+            .dropdown-wrapper .dropdown-icon {
+                position: absolute;
+                right: 10px;
+                top: 40%;
+                transform: translateY(-50%);
+                pointer-events: none;
+                font-size: 12px;
+                color: #fff;
+            }
+
+            .filter-section label {
+                display: block;
+                margin-bottom: 5px;
+                font-weight: 600;
+            }
+
+            #cancelServerCount {
+                background-color: #2a1f1f;
+                border: 1px solid #3d2626;
+                border-radius: 6px;
+                font-size: 14px;
+                cursor: pointer;
+                transition: background-color 0.3s ease, transform 0.2s ease;
+            }
+
+            #cancelServerCount:hover {
+                background-color: #332222;
+                transform: translateY(-1px);
+            }
+
+            #cancelServerCount:active {
+                transform: translateY(0);
+            }
+
+            /* Ensure buttons are touch-friendly on mobile */
+            @media (max-width: 600px) {
+                button {
+                    padding: 12px;
+                    min-height: 44px;
+                }
+            }
+        `;
             document.head.appendChild(style);
 
             popup.innerHTML = `
-    <div class="popup-header">
-      <h3>Select Number of Servers</h3>
-      <p><strong>More servers = more variety, but longer search times.</strong></p>
-    </div>
-
-    <div class="filter-grid">
-        <div class="filter-section">
-            <label for="serverCount">Number of Servers:</label>
-            <div class="dropdown-wrapper">
-                <select id="serverCount">
-                    <option value="10">10 Servers</option>
-                    <option value="25" selected>25 Servers</option>
-                    <option value="100">100 Servers</option>
-                    <option value="200">200 Servers</option>
-                    <option value="500">500 Servers</option>
-                    <option value="1000">1000 Servers</option>
-                    <option value="2000">2000 Servers</option>
-                    <option value="custom">Custom</option>
-                </select>
-                <span class="dropdown-icon">▼</span>
+            <div class="popup-header">
+                <h3>Select Number of Servers</h3>
+                <p><strong>More servers = more variety, but longer search times.</strong></p>
             </div>
-            <input id="customServerCount" type="number" min="1" max="2000" placeholder="Enter number (1–2000)" style="display: none; margin-top: 5px; width: calc(100% - 10px);">
-        </div>
 
-        <div class="filter-section">
-            <label for="playerCountFilter">Find Servers with:</label>
-            <div class="dropdown-wrapper">
-                <select id="playerCountFilter">
-                    <option value="high" ${!isLowPlayerCount ? 'selected' : ''}>High Player Counts</option>
-                    <option value="low" ${isLowPlayerCount ? 'selected' : ''}>Low Player Counts</option>
-                </select>
-                <span class="dropdown-icon">▼</span>
+            <div class="filter-grid">
+                <div class="filter-section">
+                    <label for="serverCount">Number of Servers:</label>
+                    <div class="dropdown-wrapper">
+                        <select id="serverCount">
+                            <option value="10">10 Servers</option>
+                            <option value="25">50 Servers</option>
+                            <option value="100" selected>100 Servers</option>
+                            <option value="200">200 Servers</option>
+                            <option value="500">500 Servers</option>
+                            <option value="700">700 Servers</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                        <span class="dropdown-icon">▼</span>
+                    </div>
+                    <input id="customServerCount" type="number" min="1" max="700" placeholder="Enter number (1–700)" style="display: none; margin-top: 5px; width: calc(100% - 10px); box-sizing: border-box;">
+                </div>
+
+                <div class="filter-section">
+                    <label for="playerCountFilter">Find Servers with:</label>
+                    <div class="dropdown-wrapper">
+                        <select id="playerCountFilter">
+                            <option value="high" ${!isLowPlayerCount ? 'selected' : ''}>High Player Counts</option>
+                            <option value="low" ${isLowPlayerCount ? 'selected' : ''}>Low Player Counts</option>
+                        </select>
+                        <span class="dropdown-icon">▼</span>
+                    </div>
+                </div>
             </div>
-        </div>
-    </div>
 
-    <div class="popup-footer" style="text-align: left; margin-top: 0;">
-        <p><strong>Note:</strong> If you have fast servers on, the buildman thumbnails are intentional! It's because it saves time for the search.</p>
-    </div>
+            <div class="popup-footer" style="text-align: left; margin-top: 0;">
+                <p><strong>Note:</strong> If you have fast servers on, the buildman thumbnails are intentional! It's because it saves time for the search.</p>
+            </div>
 
-    <div style="display: flex; gap: 10px; margin-top: 15px;">
-        <button id="cancelServerCount" style="width:25%;">Cancel</button>
-        <button id="confirmServerCount" style="width: 75%;">Confirm</button>
-    </div>
-  `;
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button id="cancelServerCount" style="width:25%;">Cancel</button>
+                <button id="confirmServerCount" style="width: 75%;">Confirm</button>
+            </div>
+        `;
 
             document.body.appendChild(overlay);
             document.body.appendChild(popup);
@@ -14952,7 +15114,8 @@ select:hover, select:focus {
                         serverListContainer.appendChild(serverCard);
 
                       // load real thumbnails in background if not cached and not already being fetched
-                      if (server.playerTokens && server.playerTokens.length > 0 && !thumbnailCache.has(server.id)) {
+                      // added another condition so that finding thumbnails only occurs if mobilemode = false. This is a performance upgrade for mobile users.
+                      if (server.playerTokens && server.playerTokens.length > 0 && !thumbnailCache.has(server.id) && localStorage.ROLOCATE_mobilemode === "false") {
                           // mark as being fetched to prevent duplicate requests
                           thumbnailCache.set(server.id, 'loading');
                           fetchPlayerThumbnails_servers(server.playerTokens)
@@ -14964,7 +15127,7 @@ select:hover, select:focus {
                                   ConsoleLogEnabled(`Failed to load thumbnails for server ${server.id}:`, error);
                                   // remove the 'loading' marker on error so it can be retried
                                   thumbnailCache.delete(server.id);
-                              });
+                          });
                       }
                     });
                 };
@@ -15063,12 +15226,12 @@ select:hover, select:focus {
                     ConsoleLogEnabled(`Invite link copied to clipboard: ${inviteLink}`);
                     notifications('Success! Invite link copied to clipboard!', 'success', '🎉', '2000');
 
-                    // Prevent spam clicking
+                    // no spam clicks
                     inviteButton.disabled = true;
                     inviteButton.style.opacity = '0.6';
                     inviteButton.style.cursor = 'not-allowed';
 
-                    // Reset any previous timeout
+                    // reset the timeout
                     if (resetTextTimeout !== null) {
                         clearTimeout(resetTextTimeout);
                     }
@@ -15124,7 +15287,7 @@ select:hover, select:focus {
         *******************************************************/
 
         function calculateDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371; // Radius of the Earth in kilometers as a perfect sphere but obv its not a perfect sphere
+            const R = 6371; // radius of the Earth in kilometers as a perfect sphere but obv its not a perfect sphere but close enough
             const dLat = (lat2 - lat1) * (Math.PI / 180);
             const dLon = (lon2 - lon1) * (Math.PI / 180);
             const a =
@@ -15132,7 +15295,7 @@ select:hover, select:focus {
                 Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
                 Math.sin(dLon / 2) * Math.sin(dLon / 2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            return R * c; // Distance in kilometers
+            return R * c; // distance in kilometers
         }
 
 
@@ -15175,18 +15338,18 @@ select:hover, select:focus {
             };
 
 
-            // If user's timezone is available in the map
+            // check if user's timezone in map
             if (timezoneMap[timezone]) {
                 guessedLocation = timezoneMap[timezone];
                 ConsoleLogEnabled("User's timezone found:", timezone);
             }
 
-            // If the timezone is not found, find the closest match
+            // if no timezone find closest one
             if (!guessedLocation) {
                 ConsoleLogEnabled("User's timezone not found. Finding closest match...");
                 Object.keys(timezoneMap).forEach((tz) => {
                     const location = timezoneMap[tz];
-                    const distance = calculateDistance(location.lat, location.lon, 0, 0); // Distance from the equator (0,0)
+                    const distance = calculateDistance(location.lat, location.lon, 0, 0); // distance from equator
                     if (distance < closestDistance) {
                         closestDistance = distance;
                         closestLocation = location;
@@ -15195,7 +15358,7 @@ select:hover, select:focus {
                 guessedLocation = closestLocation;
             }
 
-            // If we found a location, return it, otherwise default to New York
+            //if location then good, if not then newyork
             if (guessedLocation) {
                 notifications("Estimated location based on timezone. Please allow location access to see what servers are closest to you or change to manual in settings.", "info", "🕒", "6000");
                 resolve({
@@ -15207,7 +15370,7 @@ select:hover, select:focus {
                 resolve({
                     latitude: 40.7128,
                     longitude: -74.0060
-                }); // Default to NYC
+                }); // nyc
             }
         }
 
@@ -15219,10 +15382,10 @@ select:hover, select:focus {
         *******************************************************/
         function getUserLocation(quickJoin = false) {
             return new Promise((resolve, reject) => {
-                // Check priority location setting
+                // check priority location setting
                 const priorityLocation = localStorage.getItem("ROLOCATE_prioritylocation") || "automatic";
 
-                // If in manual mode, use stored coordinates
+                // if in manual mode, use stored coordinates
                 if (priorityLocation === "manual") {
                     try {
                         const coords = JSON.parse(GM_getValue("ROLOCATE_coordinates", '{"lat":"","lng":""}'));
@@ -15230,24 +15393,24 @@ select:hover, select:focus {
                             ConsoleLogEnabled("Using manual location from storage");
                             notifications("We successfully detected your location.", "success", "🌎", "2000");
                             return resolve({
-                                latitude: parseFloat(coords.lat), // Changed to match automatic mode
-                                longitude: parseFloat(coords.lng), // Changed to match automatic mode
+                                latitude: parseFloat(coords.lat), // changed to match automatic mode
+                                longitude: parseFloat(coords.lng), // changed to match automatic mode
                                 source: "manual",
-                                accuracy: 0 // Manual coordinates have no accuracy metric
+                                accuracy: 0 // manual coordinates have no accuracy metric
                             });
                         } else {
                             ConsoleLogEnabled("Manual mode selected but no coordinates set - falling back to automatic behavior");
                             notifications("Manual mode selected but no coordinates set. Fatal error: Report on greasyfork. Using Automatic Mode.", "error", "", "2000");
-                            // Fall through to automatic behavior
+                            // fall through to automatic behavior
                         }
                     } catch (e) {
                         ConsoleLogEnabled("Error reading manual coordinates:", e);
                         notifications("Error reading manual coordinates. Fatal error: Report on greasyfork. Using Automatic Mode.", "error", "", "2000");
-                        // Fall through to automatic behavior
+                        // fall through to automatic behavior
                     }
                 }
 
-                // Automatic mode behavior
+                // automatic mode behavior
                 if (!navigator.geolocation) {
                     ConsoleLogEnabled("Geolocation not supported.");
                     notifications("Geolocation is not supported by your browser.", "error", "⚠️", "15000");
@@ -15259,7 +15422,7 @@ select:hover, select:focus {
                     async (error) => {
                         ConsoleLogEnabled("Geolocation error:", error);
 
-                        // Attempt to inspect geolocation permission state
+                        // attempt to inspect geolocation permission state
                         try {
                             if (navigator.permissions && navigator.permissions.query) {
                                 const permissionStatus = await navigator.permissions.query({
@@ -15275,7 +15438,7 @@ select:hover, select:focus {
                             ConsoleLogEnabled("Permission check failed:", permError);
                         }
 
-                        // Retry geolocation once with a slightly relaxed setting
+                        // retry geolocation once
                         navigator.geolocation.getCurrentPosition(
                             (position) => resolveSuccess(position, resolve, quickJoin),
                             (retryError) => {
@@ -15328,24 +15491,24 @@ select:hover, select:focus {
         description: Automatically joins the smallest server
         *******************************************************/
         async function auto_join_small_server() {
-            // Disable the "Load More" button and show the loading bar
+            // disable the "Load More" button and show the loading bar
             Loadingbar(true);
             disableFilterButton(true);
             disableLoadMoreButton();
 
-            // Get the game ID from the URL
+            // get the game ID from the URL
             const gameId = ((p = window.location.pathname.split('/')) => {
                 const i = p.indexOf('games');
                 return i !== -1 && p.length > i + 1 ? p[i + 1] : null;
             })();
 
-            // Retry mechanism for 429 errors
-            let retries = 3; // Number of retries
+            // retry mechanism for 429 errors
+            let retries = 3; // number of retries
             let success = false;
 
             while (retries > 0 && !success) {
                 try {
-                    // Fetch server data using GM_xmlhttpRequest
+                    // fetch server data
                     const data = await new Promise((resolve, reject) => {
                         GM_xmlhttpRequest({
                             method: "GET",
@@ -15377,31 +15540,29 @@ select:hover, select:focus {
                     }
 
                     if (targetServer) {
-                        // Join the server with the lowest player count
-                        //showLoadingOverlay();
+                        // join the server with the lowest player count
                         JoinServer(gameId, targetServer.id);
                         notifications(`Joining a server with ${targetServer.playing} player(s).`, 'success', '🚀');
-                        success = true; // Mark as successful
+                        success = true;
                     } else {
                         notifications('No available servers found.', 'error', '⚠️');
-                        break; // Exit the loop if no servers are found
+                        break;
                     }
                 } catch (error) {
                     if (error === '429: Too Many Requests' && retries > 0) {
                         ConsoleLogEnabled('Rate limited. Retrying in 10 seconds...');
                         notifications('Rate limited. Retrying in 10 seconds...', 'warning', '⏳', '10000');
-                        await delay(10000); // Wait 10 seconds before retrying
+                        await delay(10000);
                         retries--;
                     } else {
                         ConsoleLogEnabled('Error fetching server data:', error);
                         notifications('Error: Failed to fetch server data. Please try again later.', 'error', '⚠️', '5000');
                         Loadingbar(false);
-                        break; // Exit the loop if it's not a 429 error or no retries left
+                        break;
                     }
                 }
             }
 
-            // Hide the loading bar and enable the filter button
             Loadingbar(false);
             disableFilterButton(false);
         }
@@ -15458,17 +15619,17 @@ select:hover, select:focus {
             // reset
             if (disable) {
                 if (serverCardsContainer) {
-                    serverCardsContainer.innerHTML = ''; // Clear contents
-                    serverCardsContainer.removeAttribute('style'); // Remove inline styles if present
+                    serverCardsContainer.innerHTML = '';
+                    serverCardsContainer.removeAttribute('style');
                 }
 
                 // no duplicate ones
                 const existingLoadingBar = document.querySelector('#loading-bar');
                 if (existingLoadingBar) {
-                    existingLoadingBar.remove(); // Remove the existing loading bar if it exists
+                    existingLoadingBar.remove();
                 }
 
-                // Create and display the loading boxes
+                // create the laoding boxes
                 const loadingContainer = document.createElement('div');
                 loadingContainer.id = 'loading-bar';
                 loadingContainer.style.cssText = `
@@ -15548,13 +15709,13 @@ select:hover, select:focus {
                 }
 
             } else {
-                // If disable is false, remove the loading bar
+                // if disable is false, remove the loading bar
                 const loadingBar = document.querySelector('#loading-bar');
                 if (loadingBar) {
                     loadingBar.remove();
                 }
 
-                // Reset any applied styles
+                // reset any applied styles
                 const styleSheet = document.querySelector('#loading-style');
                 if (styleSheet) {
                     styleSheet.remove();
@@ -15707,7 +15868,7 @@ select:hover, select:focus {
         async function rbx_card(serverId, playerTokens, maxPlayers, playing, gameId) {
             const thumbnails = await fetchPlayerThumbnails(playerTokens);
 
-            // Helper function to create elements with properties
+            // helper function to create elements with properties
             const createElement = (tag, props = {}, styles = {}) => {
                 const el = document.createElement(tag);
                 Object.assign(el, props);
@@ -15718,7 +15879,7 @@ select:hover, select:focus {
             const cardItem = createElement('li', { className: 'rbx-game-server-item col-md-3 col-sm-4 col-xs-6' });
             const playerThumbnailsContainer = createElement('div', { className: 'player-thumbnails-container' });
 
-            // Add player thumbnails
+            // add player thumbnails
             thumbnails.forEach(thumbnail => {
                 const playerAvatar = createElement('span', { className: 'avatar avatar-headshot-md player-avatar' });
                 const thumbnailImage = createElement('span', { className: 'thumbnail-2d-container avatar-card-image' });
@@ -15729,7 +15890,7 @@ select:hover, select:focus {
                 playerThumbnailsContainer.appendChild(playerAvatar);
             });
 
-            // Add placeholder for remaining players
+            // add placeholder for remaining players
             if (playing > 5) {
                 const placeholder = createElement('span', {
                     className: 'avatar avatar-headshot-md player-avatar hidden-players-placeholder',
@@ -15742,26 +15903,26 @@ select:hover, select:focus {
                 playerThumbnailsContainer.appendChild(placeholder);
             }
 
-            // Server details
+            // server details
             const serverDetails = createElement('div', { className: 'rbx-game-server-details game-server-details' });
             const serverStatus = createElement('div', {
                 className: 'text-info rbx-game-status rbx-game-server-status text-overflow',
                 textContent: `${playing} of ${maxPlayers} people max`
             });
 
-            // Player count gauge
+            // player count gauge
             const gaugeContainer = createElement('div', { className: 'server-player-count-gauge border' });
             const gaugeInner = createElement('div', { className: 'gauge-inner-bar border' }, {
                 width: `${(playing / maxPlayers) * 100}%`
             });
             gaugeContainer.appendChild(gaugeInner);
 
-            // Button container with buttons
+            // button container with buttons
             const buttonContainer = createElement('div', { className: 'button-container' }, {
                 display: 'flex', gap: '8px'
             });
 
-            // Join button
+            // join button
             const joinButton = createElement('button', {
                 type: 'button',
                 className: 'btn-full-width btn-control-xs rbx-game-server-join game-server-join-btn btn-primary-md btn-min-width',
@@ -15769,7 +15930,7 @@ select:hover, select:focus {
                 onclick: () => JoinServer(gameId, serverId)
             });
 
-            // Invite button with click handler
+            // invite button
             const inviteButton = createElement('button', {
                 type: 'button',
                 className: 'btn-full-width btn-control-xs rbx-game-server-invite game-server-invite-btn btn-secondary-md btn-min-width',
@@ -15798,7 +15959,7 @@ select:hover, select:focus {
                 }
             };
 
-            // Assemble everything
+            // uh create the stuff
             buttonContainer.append(joinButton, inviteButton);
             serverDetails.append(serverStatus, gaugeContainer, buttonContainer);
 
@@ -15815,7 +15976,7 @@ select:hover, select:focus {
         *******************************************************/
         // WARNING: Do not republish this script. Licensed for personal use only.
         async function showLoadingOverlay(gameId, serverId, mainMessage = "", statusMessage = "") {
-            // Remove existing overlay if present
+            // remove existing overlay if present
             const existingOverlay = document.querySelector('[data-loading-overlay]');
             if (existingOverlay) {
                 existingOverlay.style.opacity = '0';
@@ -15823,7 +15984,7 @@ select:hover, select:focus {
                 setTimeout(() => existingOverlay.remove(), 400);
             }
 
-            // Remove existing styles
+            // remove existing styles
             const existingStyle = document.querySelector('[data-loading-overlay-style]');
             if (existingStyle) existingStyle.remove();
 
@@ -15838,7 +15999,6 @@ select:hover, select:focus {
             // function for common gradient background
             const gradientBg = (color1, color2) => `linear-gradient(145deg, ${color1}, ${color2})`;
 
-            // Create CSS animations
             const style = createElement('style', {}, `
                 @keyframes loading-slide {
                     0% { transform: translateX(-100%); background-position: 0% 50%; }
@@ -15858,7 +16018,7 @@ select:hover, select:focus {
             style.setAttribute('data-loading-overlay-style', '');
             document.head.appendChild(style);
 
-            // Main overlay
+            // the main stuff
             const overlay = createElement('div', {
                 position: 'fixed',
                 top: '0',
@@ -15872,7 +16032,7 @@ select:hover, select:focus {
             });
             overlay.setAttribute('data-loading-overlay', '');
 
-            // Main container
+            // other main stuff
             const container = createElement('div', {
                 position: 'fixed',
                 top: '50%',
@@ -15893,7 +16053,7 @@ select:hover, select:focus {
                 transition: 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)'
             });
 
-            // Exit button with hover effects
+            // exit button
             const exitButton = createElement('button', {
                 position: 'absolute',
                 top: '15px',
@@ -15915,7 +16075,7 @@ select:hover, select:focus {
                 outline: 'none'
             }, '✕');
 
-            // Exit button event handlers
+            // exit button handelrs
             const exitButtonHover = (enter) => {
                 exitButton.style.background = enter ? gradientBg('#333333', '#262626') : gradientBg('#2a2a2a', '#1f1f1f');
                 exitButton.style.color = enter ? '#ffffff' : '#a0a0a0';
@@ -15930,14 +16090,14 @@ select:hover, select:focus {
             exitButton.addEventListener('mousedown', () => exitButton.style.transform = 'scale(0.95)');
             exitButton.addEventListener('mouseup', () => exitButton.style.transform = 'scale(1.05)');
 
-            // Top section
+            // top section
             const topSection = createElement('div', {
                 display: 'flex',
                 alignItems: 'center',
                 marginBottom: '26px'
             });
 
-            // Icon container
+            // icon
             const iconContainer = createElement('div', {
                 width: '77px',
                 height: '77px',
@@ -15954,7 +16114,7 @@ select:hover, select:focus {
                 transition: 'transform 0.3s ease, box-shadow 0.3s ease'
             });
 
-            // Default logo
+            // the logo
             const defaultLogo = createElement('div', {
                 width: '40px',
                 height: '40px',
@@ -15967,7 +16127,7 @@ select:hover, select:focus {
                 animation: 'pulse-glow 2s ease-in-out infinite'
             }, `<img src="${window.Base64Images.logo}" alt="Logo" width="80" height="80">`);
 
-            // Game icon
+            // the game icon
             const gameIcon = createElement('img', {
                 width: '100%',
                 height: '100%',
@@ -15980,14 +16140,14 @@ select:hover, select:focus {
             iconContainer.appendChild(defaultLogo);
             iconContainer.appendChild(gameIcon);
 
-            // Text container
+            // other stuff
             const textContainer = createElement('div', {
                 flex: '1',
                 display: 'flex',
                 flexDirection: 'column'
             });
 
-            // Main loading text
+            // main loading text
             const isServerHopping = !gameId || !serverId;
             const loadingText = createElement('div', {
                 fontSize: '24px',
@@ -16001,13 +16161,13 @@ select:hover, select:focus {
                 lineHeight: '1.2'
             }, mainMessage || (isServerHopping ? 'Server Hopping' : 'Joining Roblox Game'));
 
-            // Animated dots
+            // animated dots
             const dotsSpan = createElement('span', {
                 animation: 'dots 1.5s steps(4, end) infinite'
             });
             loadingText.appendChild(dotsSpan);
 
-            // Status text
+            // status
             const statusText = createElement('div', {
                 fontSize: '14px',
                 color: '#a0a0a0',
@@ -16021,7 +16181,7 @@ select:hover, select:focus {
             topSection.appendChild(iconContainer);
             topSection.appendChild(textContainer);
 
-            // Location section
+            // location
             const locationSection = createElement('div', {
                 display: 'flex',
                 flexDirection: 'column',
@@ -16038,7 +16198,7 @@ select:hover, select:focus {
                 overflow: 'hidden'
             });
 
-            // Background pattern
+            // background stuff
             const pattern = createElement('div', {
                 position: 'absolute',
                 top: '0',
@@ -16051,7 +16211,7 @@ select:hover, select:focus {
             });
             locationSection.appendChild(pattern);
 
-            // Location content
+            // location
             const locationContent = createElement('div', {
                 textAlign: 'center',
                 opacity: '0',
@@ -16081,7 +16241,7 @@ select:hover, select:focus {
             locationContent.appendChild(locationSubtext);
             locationSection.appendChild(locationContent);
 
-            // Server details container
+            // server details
             const serverDetailsContainer = createElement('div', {
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -16140,7 +16300,7 @@ select:hover, select:focus {
             serverDetailsContainer.appendChild(createIdDisplay('Game', gameId, '#60a5fa'));
             serverDetailsContainer.appendChild(createIdDisplay('Server', serverId, '#34d399'));
 
-            // Loading bar container
+            // loading
             const loadingBarContainer = createElement('div', {
                 width: '100%',
                 height: '7px',
@@ -16152,7 +16312,7 @@ select:hover, select:focus {
                 border: '1px solid rgba(255, 255, 255, 0.05)'
             });
 
-            // Loading bar
+            // loading bar
             const loadingBar = createElement('div', {
                 height: '100%',
                 background: 'linear-gradient(90deg, #3b82f6, #60a5fa, #93c5fd, #60a5fa, #3b82f6)',
@@ -16165,7 +16325,7 @@ select:hover, select:focus {
 
             loadingBarContainer.appendChild(loadingBar);
 
-            // Branding section
+            // the rolocate stuff
             const brandingSection = createElement('div', {
                 textAlign: 'center',
                 marginTop: 'auto',
@@ -16195,7 +16355,6 @@ select:hover, select:focus {
 
             brandingSection.appendChild(brandingText);
 
-            // Assemble overlay
             container.appendChild(exitButton);
             container.appendChild(topSection);
             container.appendChild(locationSection);
@@ -16205,7 +16364,7 @@ select:hover, select:focus {
             overlay.appendChild(container);
             document.body.appendChild(overlay);
 
-            // Fade in animation
+            // aniamtion
             setTimeout(() => {
                 overlay.style.opacity = '1';
                 container.style.opacity = '1';
@@ -16214,7 +16373,7 @@ select:hover, select:focus {
 
             setTimeout(() => serverDetailsContainer.style.opacity = '1', 300);
 
-            // Icon hover effects
+            // hover effects
             const iconHover = (enter) => {
                 iconContainer.style.transform = enter ? 'scale(1.05)' : 'scale(1)';
                 iconContainer.style.boxShadow = enter ?
@@ -16225,7 +16384,7 @@ select:hover, select:focus {
             iconContainer.addEventListener('mouseenter', () => iconHover(true));
             iconContainer.addEventListener('mouseleave', () => iconHover(false));
 
-            // Fetch game icon
+            // fetch game icons
             if (gameId) {
                 getUniverseIdFromPlaceId(gameId)
                     .then(universeId => getGameIconFromUniverseId(universeId))
@@ -16244,7 +16403,7 @@ select:hover, select:focus {
                     .catch(error => ConsoleLogEnabled('Error fetching game icon:', error));
             }
 
-            // Server location detection
+            // server location detector thing
             (async () => {
                 statusText.textContent = statusMessage || (isServerHopping ? 'Finding available server...' : 'Locating server location...');
 
@@ -16275,7 +16434,7 @@ select:hover, select:focus {
                 locationContent.style.transform = 'translateY(0)';
             })();
 
-            // Cleanup function
+            // clean everytihng up
             const cleanup = () => {
                 overlay.style.opacity = '0';
                 container.style.transform = 'translate(-50%, -55%) scale(0.9)';
@@ -16285,10 +16444,10 @@ select:hover, select:focus {
                 }, 400);
             };
 
-            // Auto-hide after 6 seconds
+            // hide after 6 seconds
             const fadeOutTimer = setTimeout(cleanup, 6000);
 
-            // Exit button handler
+            // exit button stuff
             exitButton.addEventListener('click', () => {
                 clearTimeout(fadeOutTimer);
                 cleanup();

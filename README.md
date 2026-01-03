@@ -13,7 +13,7 @@
   [![Open Source][opensource-badge]][github-link]
 
   <br><br>
-  <strong>Version 44.4</strong> · Created & maintained by <strong>Oqarshi</strong>
+  <strong>Version 44.5</strong> · Created & maintained by <strong>Oqarshi</strong>
   <br><br>
   [Official Website][website-link]
   ·
@@ -130,7 +130,7 @@ If installed via GreasyFork, updates are automatic.
 Try refreshing first. If that fails, reinstall everything or ask on [GreasyFork Feedback][greasyfork-feedback-link].
 
 **🔹 Can I use RoLocate on mobile?**  
-It’s designed for desktop, but may work on Android browsers like Firefox or Edge.
+Yes, refer to this <a href="https://www.youtube.com/watch?v=gz5SHAro08Q">Video</a>.
 
 **🔹 How does RoLocate find server locations?**  
 It uses a modified [Roblox DevForum method][roblox-devforum-link].

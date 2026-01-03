@@ -29,7 +29,7 @@
     </p>
 
     <p>
-      <strong>Version 44.4</strong> · Created &amp; maintained by <strong>Oqarshi</strong>
+      <strong>Version 44.5</strong> · Created &amp; maintained by <strong>Oqarshi</strong>
     </p>
 
     <p>
@@ -149,7 +149,7 @@
 
 <p><strong>🔹 I don’t see the filter button!</strong><br>Refresh, reinstall, or check feedback page.</p>
 
-<p><strong>🔹 Can I use RoLocate on mobile?</strong><br>Desktop recommended; Android may work.</p>
+<p><strong>🔹 Can I use RoLocate on mobile?</strong><br>Yes, refer to this <a href="https://www.youtube.com/watch?v=gz5SHAro08Q">Video</a>.</p>
 
 <p><strong>🔹 How does it find server locations?</strong><br>Uses modified <a href="https://devforum.roblox.com/t/server-region-from-website/2862705">Roblox DevForum method</a>.</p>
 
