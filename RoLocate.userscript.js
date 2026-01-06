@@ -27,6 +27,8 @@
 // @connect      groups.roblox.com
 // @connect      users.roblox.com
 // @connect      catalog.roblox.com
+// @downloadURL https://update.greasyfork.org/scripts/523727/RoLocate.user.js
+// @updateURL https://update.greasyfork.org/scripts/523727/RoLocate.meta.js
 // ==/UserScript==
 
 /**
@@ -14714,9 +14716,35 @@ select:hover, select:focus {
                     premium_message.textContent = "Location detected! Discovering servers...";
                 }
 
-                const servers = await fetchPublicServers(gameId, totalLimit);
+                let servers = await fetchPublicServers(gameId, totalLimit);
+                
+                if (servers.length === 0) {
+                    ConsoleLogEnabled("No servers returned on first attempt, Retrying after delay");
+                    if (premium_message) {
+                        premium_message.textContent = "Waiting for server data to load";
+                    }
+                    
+                    const retrycap = 3;
+                    for (let retry = 1; retry <= retrycap && servers.length === 0; retry++) {
+                        await new Promise(resolve => setTimeout(resolve, 1500));
+                        if (premium_message) {
+                            premium_message.textContent = `Retrying server fetch (attempt ${retry}/${retrycap})`;
+                        }
+                        ConsoleLogEnabled(`Retry attempt ${retry}/${retrycap}...`);
+                        servers = await fetchPublicServers(gameId, totalLimit);
+                    }
+                }
+                
                 const totalServers = servers.length;
                 let skippedServers = 0;
+
+                if (totalServers === 0) {
+                    showMessage("END");
+                    notifications('No servers found. The game may not have active public servers right now. Try refreshing the page.', 'error', '⚠️', '5000');
+                    Loadingbar(false);
+                    disableFilterButton(false);
+                    return;
+                }
 
                 if (premium_message) {
                     premium_message.textContent = `Filtering servers... Please stay on this page to ensure a faster and more accurate search. ${totalServers} servers found, 0 loaded so far.`;
