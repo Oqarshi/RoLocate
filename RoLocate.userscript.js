@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RoLocate
 // @namespace    https://oqarshi.github.io/
-// @version      44.5
+// @version      45.5
 // @description  Adds filter options to roblox server page. Alternative to paid extensions like RoPro, RoGold®, RoQol, and RoKit.
 // @author       Oqarshi
 // @match        https://www.roblox.com/*
@@ -14,7 +14,7 @@
 // @grant        GM_setValue
 // @grant        GM_deleteValue
 // @require      https://update.greasyfork.org/scripts/535590/1586769/Rolocate%20Base64%20Image%20Library%2020.js
-// @require      https://update.greasyfork.org/scripts/547134/1722939/Rolocate%20Server%20Region%20Data%20%28Data%20Saving%29.js
+// @require      https://update.greasyfork.org/scripts/547134/1754967/Rolocate%20Server%20Region%20Data%20%28Data%20Saving%29.js
 // @require      https://update.greasyfork.org/scripts/540553/1648593/Rolocate%20Flag%20Base64%20Data.js
 // @require      https://update.greasyfork.org/scripts/544437/1642116/Rolocate%20Restore%20Classic%20Terms%20All%20Languages.js
 // @connect      thumbnails.roblox.com
@@ -33,7 +33,7 @@
  * -- RoLocate Userscript --------------------------------
  * Author: Oqarshi
  * License: Custom - Personal Use Only
- * Copyright (c) 2025 Oqarshi
+ * Copyright (c) 2026 Oqarshi
  *
  * This license grants limited rights to end users and does not imply
  * any transfer of copyright ownership.
@@ -43,7 +43,7 @@
  *
  * You MAY NOT:
  *   * Redistribute or reupload this script (original or modified)
- *   ** Publish it on any website (GreasyFork, GitHub, UserScripts.org, etc.)
+ *   * Publish it on any website (GreasyFork, GitHub, UserScripts.org, etc.)
  *   * Include it in commercial, monetized, or donation-based tools
  *   * Remove or alter this license or attribution
  *
@@ -111,10 +111,85 @@
     description: console.logs everything if settings is turned
     on
     *******************************************************/
+    const MAX_LOG_BYTES = 3 * 1024 * 1024; // 3 mb
+    let rolocateLogSize = 0;
+
     function ConsoleLogEnabled(...args) {
-        if (localStorage.getItem("ROLOCATE_enableLogs") === "true") {
-            escapeHtmlnoxssattackvectors(console.log("[ROLOCATE]", ...args)); // be safe
+        if (localStorage.getItem("ROLOCATE_enableLogs") !== "true") return;
+
+        window.rolocateLogBuffer ??= [];
+
+        const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' ');
+        const entry = { time: new Date().toLocaleTimeString(), msg };
+        const size = JSON.stringify(entry).length;
+
+        window.rolocateLogBuffer.push(entry);
+        rolocateLogSize += size;
+
+        while (rolocateLogSize > MAX_LOG_BYTES) {
+            const removed = window.rolocateLogBuffer.shift();
+            rolocateLogSize -= JSON.stringify(removed).length;
         }
+
+        console.log("[ROLOCATE]", ...args);
+    }
+
+    /*******************************************************
+    name of function: isDarkMode
+    description: tells if user is using dark mode on roblox
+    *******************************************************/
+    function isDarkMode(bypass = false) {
+        if (!bypass && localStorage.getItem("ROLOCATE_forcedarkmode") === "true") { // exception
+            return true;
+        }
+        const bg = getComputedStyle(document.body).backgroundColor;
+        const rgb = bg.match(/\d+/g).map(Number);
+        const brightness = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000; // funny vision formula from google
+        return brightness < 128; // true = dark, false = light
+    }
+
+    /*******************************************************
+    name of function: getCurrentGameId
+    description: uh gets gameid
+    *******************************************************/
+    const getCurrentGameId = () => {
+        const urlMatch = window.location.href.match(/games\/(\d+)/);
+        const gameId = urlMatch ? urlMatch[1] : null;
+        ConsoleLogEnabled(`getCurrentGameId: ${gameId}`);
+        return sanitizeUserId(gameId); // protection
+    };
+
+    /*******************************************************
+    name of function: getCurrentUserId
+    description: gets user's id from roblox page.
+    *******************************************************/
+    function getCurrentUserId() {
+        // 1st: try to grab the userId directly from Roblox's JS object
+        const primaryUserId = sanitizeUserId(Roblox?.CurrentUser?.userId);
+
+        // some extensions like roseal break this and set the userId to 0
+        // so if user id is not 0, return if it is then try another method
+        if (primaryUserId && primaryUserId !== 0) {
+            return primaryUserId;
+        }
+
+        // 2nd: check in dom for user id instead
+        const Userid2ndmethodcauserosealbreakyeayeay = document.querySelector('meta[name="user-data"]');
+        if (Userid2ndmethodcauserosealbreakyeayeay) {
+            // get it then yea
+            const fallbackUserId = parseInt(
+                Userid2ndmethodcauserosealbreakyeayeay.getAttribute('data-userid'),
+                10
+            );
+
+            // xtikhgiasgd protedtion what ever
+            if (fallbackUserId > 0) {
+                return sanitizeUserId(fallbackUserId);
+            }
+        }
+
+        // lowkey just give up, im too lazy to find an api that exposes the userid
+        return 0;
     }
 
     /*******************************************************
@@ -122,213 +197,185 @@
     description: notifications function (XSS-safe)
     *******************************************************/
     function notifications(message, type = 'info', emoji = '', duration = 3000) {
-            if (localStorage.getItem('ROLOCATE_enablenotifications') !== 'true') return;
+        if (localStorage.getItem('ROLOCATE_enablenotifications') !== 'true') return;
 
-            if (!document.getElementById('toast-styles')) {
-                const style = document.createElement('style');
-                style.id = 'toast-styles';
-                style.innerHTML = `
-            @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
-            @keyframes slideOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(100%); } }
-            @keyframes shrink { from { width: 100%; } to { width: 0%; } }
+        if (!document.getElementById('toast-styles')) {
+            const style = document.createElement('style');
+            style.id = 'toast-styles';
+            style.innerHTML = `
+        @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes slideOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(100%); } }
+        @keyframes shrink { from { width: 100%; } to { width: 0%; } }
 
-            #toast-container {
-                position: fixed; top: 20px; right: 20px; z-index: 999999999999999999;
-                display: flex; flex-direction: column; gap: 8px; pointer-events: none;
-            }
-
-            .toast {
-                background: #2d2d2d; color: #e8e8e8; padding: 12px 16px; border-radius: 8px;
-                font: 500 14px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-                min-width: 280px; max-width: 400px; border: 1px solid rgba(255,255,255,0.15);
-                box-shadow: 0 4px 12px rgba(0,0,0,0.25); animation: slideIn 0.3s ease-out;
-                pointer-events: auto; position: relative; overflow: hidden; will-change: transform;
-            }
-
-            .toast.removing { animation: slideOut 0.3s ease-in forwards; }
-            .toast:hover { background: #373737; }
-
-            .toast-content { display: flex; align-items: center; gap: 10px; }
-            .toast-icon { width: 16px; height: 16px; flex-shrink: 0; }
-            .toast-emoji { font-size: 16px; flex-shrink: 0; }
-            .toast-message { flex: 1; line-height: 1.4; white-space: pre-wrap; }
-
-            .toast-close {
-                position: absolute; top: 4px; right: 6px; width: 20px; height: 20px;
-                cursor: pointer; opacity: 0.6; display: flex; align-items: center;
-                justify-content: center; border-radius: 4px; transition: opacity 0.2s;
-            }
-            .toast-close:hover { opacity: 1; background: rgba(255,255,255,0.1); }
-            .toast-close::before, .toast-close::after {
-                content: ''; position: absolute; width: 10px; height: 1px; background: #ccc;
-            }
-            .toast-close::before { transform: rotate(45deg); }
-            .toast-close::after { transform: rotate(-45deg); }
-
-            .progress-bar {
-                position: absolute; bottom: 0; left: 0; height: 2px;
-                background: rgba(255,255,255,0.25); animation: shrink linear forwards;
-            }
-
-            .toast.success { border-left: 3px solid #4CAF50; }
-            .toast.error { border-left: 3px solid #F44336; }
-            .toast.warning { border-left: 3px solid #FF9800; }
-            .toast.info { border-left: 3px solid #2196F3; }
-            `;
-                document.head.appendChild(style);
-            }
-
-            let container = document.getElementById('toast-container');
-            if (!container) {
-                container = document.createElement('div');
-                container.id = 'toast-container';
-                document.body.appendChild(container);
-            }
-
-            const toast = document.createElement('div');
-            const validTypes = ['success', 'error', 'warning', 'info'];
-            const safeType = validTypes.includes(type) ? type : 'info';
-            toast.className = `toast ${safeType}`;
-
-            const icons = {
-                success: '<svg width="16" height="16" fill="none" stroke="#4CAF50" stroke-width="2" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>',
-                error: '<svg width="16" height="16" fill="none" stroke="#F44336" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>',
-                warning: '<svg width="16" height="16" fill="none" stroke="#FF9800" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>',
-                info: '<svg width="16" height="16" fill="none" stroke="#2196F3" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>'
-            };
-
-            // escape the user input sduyhgads
-            const safeMessage = escapeHtmlnoxssattackvectors(message);
-            const safeEmoji = escapeHtmlnoxssattackvectors(emoji);
-
-            toast.innerHTML = `
-            <div class="toast-content">
-                <div class="toast-icon">${icons[safeType]}</div>
-                ${emoji ? `<span class="toast-emoji">${safeEmoji}</span>` : ''}
-                <span class="toast-message">${safeMessage.replace(/\n/g, '<br>')}</span>
-            </div>
-            <div class="toast-close"></div>
-            <div class="progress-bar" style="animation-duration: ${parseInt(duration)}ms;"></div>
-        `;
-
-            container.appendChild(toast);
-
-            let timeout = setTimeout(removeToast, duration);
-            const progressBar = toast.querySelector('.progress-bar');
-
-            toast.addEventListener('mouseenter', () => {
-                progressBar.style.animationPlayState = 'paused';
-                clearTimeout(timeout);
-            });
-
-            toast.addEventListener('mouseleave', () => {
-                progressBar.style.animationPlayState = 'running';
-                const remaining = (progressBar.offsetWidth / toast.offsetWidth) * duration;
-                timeout = setTimeout(removeToast, remaining);
-            });
-
-            toast.querySelector('.toast-close').addEventListener('click', removeToast);
-
-            function removeToast() {
-                clearTimeout(timeout);
-                toast.classList.add('removing');
-                setTimeout(() => toast.remove(), 300);
-            }
-
-            return {
-                remove: removeToast,
-                update: (newMessage) => {
-                    const escaped = escapeHtmlnoxssattackvectors(newMessage);
-                    toast.querySelector('.toast-message').innerHTML = escaped.replace(/\n/g, '<br>');
-                },
-                setType: (newType) => {
-                    const validType = validTypes.includes(newType) ? newType : 'info';
-                    toast.className = `toast ${validType}`;
-                    toast.querySelector('.toast-icon').innerHTML = icons[validType];
-                },
-                setDuration: (newDuration) => {
-                    clearTimeout(timeout);
-                    const safeDuration = parseInt(newDuration);
-                    progressBar.style.animation = `shrink ${safeDuration}ms linear forwards`;
-                    timeout = setTimeout(removeToast, safeDuration);
-                },
-                updateEmoji: (newEmoji) => {
-                    const emojiEl = toast.querySelector('.toast-emoji');
-                    if (emojiEl) emojiEl.textContent = escapeHtmlnoxssattackvectors(newEmoji);
-                }
-            };
+        #toast-container {
+            position: fixed; top: 20px; right: 20px; z-index: 999999999999999999;
+            display: flex; flex-direction: column; gap: 8px; pointer-events: none;
         }
+
+        .toast {
+            background: #2d2d2d; color: #e8e8e8; padding: 12px 16px; border-radius: 8px;
+            font: 500 14px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            min-width: 280px; max-width: 400px; border: 1px solid rgba(255,255,255,0.15);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25); animation: slideIn 0.3s ease-out;
+            pointer-events: auto; position: relative; overflow: hidden; will-change: transform;
+        }
+
+        .toast.removing { animation: slideOut 0.3s ease-in forwards; }
+        .toast:hover { background: #373737; }
+
+        .toast-content { display: flex; align-items: center; gap: 10px; }
+        .toast-icon { width: 16px; height: 16px; flex-shrink: 0; }
+        .toast-emoji { font-size: 16px; flex-shrink: 0; }
+        .toast-message { flex: 1; line-height: 1.4; white-space: pre-wrap; }
+
+        .toast-close {
+            position: absolute; top: 4px; right: 6px; width: 20px; height: 20px;
+            cursor: pointer; opacity: 0.6; display: flex; align-items: center;
+            justify-content: center; border-radius: 4px; transition: opacity 0.2s;
+        }
+        .toast-close:hover { opacity: 1; background: rgba(255,255,255,0.1); }
+        .toast-close::before, .toast-close::after {
+            content: ''; position: absolute; width: 10px; height: 1px; background: #ccc;
+        }
+        .toast-close::before { transform: rotate(45deg); }
+        .toast-close::after { transform: rotate(-45deg); }
+
+        .progress-bar {
+            position: absolute; bottom: 0; left: 0; height: 2px;
+            background: rgba(255,255,255,0.25); animation: shrink linear forwards;
+        }
+
+        .toast.success { border-left: 3px solid #4CAF50; }
+        .toast.error { border-left: 3px solid #F44336; }
+        .toast.warning { border-left: 3px solid #FF9800; }
+        .toast.info { border-left: 3px solid #2196F3; }
+        `;
+            document.head.appendChild(style);
+        }
+
+        let container = document.getElementById('toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            document.body.appendChild(container);
+        }
+
+        const toast = document.createElement('div');
+        const validTypes = ['success', 'error', 'warning', 'info'];
+        const safeType = validTypes.includes(type) ? type : 'info';
+        toast.className = `toast ${safeType}`;
+
+        const icons = {
+            success: '<svg width="18" height="18" fill="none" stroke="#4CAF50" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#4CAF50" opacity=".1"/><path d="M8 12.5l3 3 5-6"/></svg>',
+            error: '<svg width="18" height="18" fill="none" stroke="#f44336" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#f44336" opacity=".1"/><path d="m15 9-6 6m0-6 6 6"/></svg>',
+            warning: '<svg width="18" height="18" fill="none" stroke="#ff9800" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path fill="#ff9800" opacity=".1" d="M12 2 2 20h20z"/><path d="M12 2 2 20h20zm0 7v5m0 3h.01"/></svg>',
+            info: '<svg width="18" height="18" fill="none" stroke="#2196f3" stroke-width="2.5" stroke-linecap="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#2196f3" opacity=".1"/><circle cx="12" cy="12" r="10"/><path d="M12 11v6m0-9h.01"/></svg>'
+        };
+
+        // escape the user input sduyhgads
+        const safeMessage = escapeHtmlnoxssattackvectors(message);
+        const safeEmoji = escapeHtmlnoxssattackvectors(emoji);
+
+        toast.innerHTML = `
+        <div class="toast-content">
+            <div class="toast-icon">${icons[safeType]}</div>
+            ${emoji ? `<span class="toast-emoji">${safeEmoji}</span>` : ''}
+            <span class="toast-message">${safeMessage.replace(/\n/g, '<br>')}</span>
+        </div>
+        <div class="toast-close"></div>
+        <div class="progress-bar" style="animation-duration: ${parseInt(duration)}ms;"></div>
+    `;
+
+        container.appendChild(toast);
+
+        let timeout = setTimeout(removeToast, duration);
+        const progressBar = toast.querySelector('.progress-bar');
+
+        toast.addEventListener('mouseenter', () => {
+            progressBar.style.animationPlayState = 'paused';
+            clearTimeout(timeout);
+        });
+
+        toast.addEventListener('mouseleave', () => {
+            progressBar.style.animationPlayState = 'running';
+            const remaining = (progressBar.offsetWidth / toast.offsetWidth) * duration;
+            timeout = setTimeout(removeToast, remaining);
+        });
+
+        toast.querySelector('.toast-close').addEventListener('click', removeToast);
+
+        function removeToast() {
+            clearTimeout(timeout);
+            toast.classList.add('removing');
+            setTimeout(() => toast.remove(), 300);
+        }
+
+        return {
+            remove: removeToast,
+            update: (newMessage) => {
+                const escaped = escapeHtmlnoxssattackvectors(newMessage);
+                toast.querySelector('.toast-message').innerHTML = escaped.replace(/\n/g, '<br>');
+            },
+            setType: (newType) => {
+                const validType = validTypes.includes(newType) ? newType : 'info';
+                toast.className = `toast ${validType}`;
+                toast.querySelector('.toast-icon').innerHTML = icons[validType];
+            },
+            setDuration: (newDuration) => {
+                clearTimeout(timeout);
+                const safeDuration = parseInt(newDuration);
+                progressBar.style.animation = `shrink ${safeDuration}ms linear forwards`;
+                timeout = setTimeout(removeToast, safeDuration);
+            },
+            updateEmoji: (newEmoji) => {
+                const emojiEl = toast.querySelector('.toast-emoji');
+                if (emojiEl) emojiEl.textContent = escapeHtmlnoxssattackvectors(newEmoji);
+            }
+        };
+    }
 
     /*******************************************************
     name of function: Update_Popup
-    description: basically update for every upodate
+    description: notifications for updates!
     *******************************************************/
     function Update_Popup() {
+        localStorage.removeItem('ROLOCATE_compactprivateservers'); // remove this cause its called better private servers now
 
-        const VERSION = "V44.5";
-        const PREV_VERSION = "V44.4";
+        const VERSION = "V45.5";
+        const PREV_VERSION = "V44.5";
 
         const CHANGELOG = {
             Mobilemode: {
                 title: "Mobile Mode",
                 icon: "📱",
-                subtitle: "Mobile Mode (Android Only)",
-                description: "Note: Still very buggy. Mobile users can now use RoLocate on Mobile! Join Server Regions using your phone! A Video is available on how to do this is available here: https://www.youtube.com/watch?v=gz5SHAro08Q",
-                badge: "New", // badges: New, Updated, Removed
-                settings: [
-                    { label: "Enabled by default", value: "False" },
-                    { label: "Toggle Location", value: "Advanced Tab" },
-                    { label: "Scope", value: "Roblox.com/*" }
-                ]
+                description: "Mobile users can now use RoLocate on Android! Join server regions using your phone.",
+                badge: "New",
+                link: "https://www.youtube.com/watch?v=gz5SHAro08Q"
             },
             Serverversions: {
                 title: "Server Regions",
                 icon: "🌐",
-                subtitle: "Server Regions",
                 description: "Fixed some servers being confused between the UK and Poland.",
-                badge: "Updated", // badges: New, Updated, Removed
-                settings: [
-                    { label: "Enabled by default", value: "True" },
-                    { label: "Toggle Location", value: "Advanced Tab" },
-                    { label: "Scope", value: "Roblox.com/games/*" }
-                ]
+                badge: "Updated"
             },
             mutualfriends: {
                 title: "Mutual Friends",
                 icon: "😎",
-                subtitle: "Mutual Friends",
-                description: "Mutual Friends has been optimized so now it loads faster.",
-                badge: "Updated", // badges: New, Updated, Removed
-                settings: [
-                    { label: "Enabled by default", value: "True" },
-                    { label: "Toggle Location", value: "Extras Tab" },
-                    { label: "Scope", value: "Roblox.com/users/*" }
-                ]
+                description: "Mutual Friends has been optimized and now loads faster.",
+                badge: "Updated"
             },
             securityupdate: {
                 title: "Security Update",
                 icon: "🛡️",
-                subtitle: "Security Update",
-                description: "Improved the xss attack vectors protection.",
-                badge: "Updated", // badges: New, Updated, Removed
-                settings: [
-                    { label: "Always On (Cannot Disable)", value: "True" },
-                    { label: "User Control", value: "Not Available" },
-                    { label: "Applies To", value: "Roblox.com/*" }
-                ]
+                description: "Improved XSS attack vector protection.",
+                badge: "Updated"
             },
             autoserverregions: {
                 title: "Auto Server Regions",
                 icon: "🛜",
-                subtitle: "Auto Server Regions",
                 description: "Select how many servers to search. Customizable in settings.",
-                badge: "Updated", // badges: New, Updated, Removed
-                settings: [
-                    { label: "Always On (Cannot Disable)", value: "True" },
-                    { label: "User Control", value: "Not Available" },
-                    { label: "Applies To", value: "Roblox.com/games/*" }
-                ]
-            },
+                badge: "Updated"
+            }
         };
 
         const currentVersion = localStorage.getItem('version') || "V0.0";
@@ -336,7 +383,7 @@
         localStorage.setItem('version', VERSION);
         if (localStorage.getItem(PREV_VERSION)) localStorage.removeItem(PREV_VERSION);
 
-        const style = document.createElement('style'); // compact css in readablt format so it can save space.
+        const style = document.createElement('style');
         style.innerHTML = `
     .rup-popup {
         display: flex; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5);
@@ -344,17 +391,20 @@
         animation: rup-fadeIn 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
     }
     .rup-content {
-        background: #2a2a2a; border-radius: 20px; padding: 0; width: 900px; max-width: 95%;
+        background: #2a2a2a; border-radius: 20px; padding: 0; width: 650px; max-width: 95%;
         max-height: 85vh; overflow: hidden; box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4);
         border: 1px solid #404040; color: #e8e8e8; transform: scale(0.95);
         animation: rup-scaleUp 0.6s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
-        position: relative; display: flex; flex-direction: column; will-change: transform;
+        display: flex; flex-direction: column;
     }
     .rup-header {
         padding: 24px 32px; border-bottom: 1px solid #404040; display: flex;
-        align-items: center; gap: 16px; background: #1f1f1f; position: relative;
+        align-items: flex-start; gap: 16px; background: #1f1f1f; position: relative;
     }
-    .rup-logo { width: 56px; height: 56px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); flex-shrink: 0; }
+    .rup-logo {
+        width: 56px; height: 56px; border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); flex-shrink: 0;
+    }
     .rup-header-content { flex: 1; }
     .rup-title {
         font-size: 24px; font-weight: 600; color: #ffffff; margin: 0 0 4px;
@@ -364,150 +414,143 @@
         display: inline-block; background: #1a1a1a; color: #ffffff; padding: 6px 12px;
         border-radius: 6px; font-size: 13px; font-weight: 500; border: 1px solid #404040;
     }
-    .rup-main { display: flex; flex: 1; min-height: 0; }
-    .rup-left {
-        flex: 1; padding: 24px; border-right: 1px solid #404040;
-        overflow-y: auto; background: #252525;
-    }
-    .rup-right {
-        flex: 1; padding: 24px; overflow-y: auto; background: #2a2a2a;
-        display: flex; flex-direction: column;
-    }
-    .rup-close {
-        position: absolute; top: 16px; right: 16px; width: 32px; height: 32px;
-        display: flex; align-items: center; justify-content: center; cursor: pointer;
-        color: #888888; font-size: 18px; font-weight: 300; border-radius: 8px;
-        transition: all 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
-        background: rgba(255, 255, 255, 0.05); border: 1px solid transparent; z-index: 10;
-    }
-    .rup-close:hover {
-        color: #ffffff; background: rgba(255, 255, 255, 0.1);
-        border-color: #555555; transform: rotate(90deg);
-    }
-    .rup-features-title {
-        font-size: 18px; font-weight: 600; color: #ffffff; margin-bottom: 16px;
+    .rup-refresh-btn {
+        background: #3a3a3a; color: #e8e8e8; border: 1px solid #505050;
+        padding: 8px 16px; border-radius: 8px; font-size: 13px;
+        font-weight: 500; cursor: pointer; transition: all 0.3s ease;
         display: flex; align-items: center; gap: 8px;
+        position: absolute; top: 16px; right: 16px;
     }
-    .rup-feature-item {
-        margin-bottom: 12px; border-radius: 10px; overflow: hidden; border: 1px solid #404040;
-        transition: all 0.4s cubic-bezier(0.22, 0.61, 0.36, 1); cursor: pointer;
+    .rup-refresh-btn:hover {
+        background: #454545; transform: translateY(-1px);
     }
-    .rup-feature-item:hover {
-        border-color: #555555; background: #303030; transform: translateY(-2px);
+    .rup-refresh-btn:active {
+        transform: translateY(0);
     }
-    .rup-feature-item.rup-active { border-color: #666666; background: #303030; }
-    .rup-feature-header {
-        display: flex; align-items: center; padding: 16px; background: #1f1f1f;
-        transition: all 0.4s cubic-bezier(0.22, 0.61, 0.36, 1); user-select: none;
+
+    .rup-main {
+        padding: 24px 32px; overflow-y: auto; background: #252525; flex: 1;
     }
-    .rup-feature-item:hover .rup-feature-header { background: #2a2a2a; }
-    .rup-feature-item.rup-active .rup-feature-header { background: #333333; }
-    .rup-feature-icon {
-        font-size: 20px; margin-right: 12px; min-width: 24px;
-        transition: transform 0.3s ease;
+    .rup-top-section {
+        display: flex; gap: 12px; margin-bottom: 20px;
     }
-    .rup-feature-item:hover .rup-feature-icon { transform: scale(1.1); }
-    .rup-feature-title { flex: 1; font-size: 15px; font-weight: 500; color: #ffffff; margin: 0; }
-    .rup-feature-badge {
-        background: #404040; color: #cccccc; padding: 4px 8px; border-radius: 4px;
-        font-size: 11px; font-weight: 500; text-transform: uppercase;
-        letter-spacing: 0.5px; transition: all 0.3s ease;
-    }
-    .rup-feature-item:hover .rup-feature-badge { transform: translateX(3px); }
-    .rup-detail-panel {
-        background: #1f1f1f; border-radius: 12px; padding: 24px; margin-bottom: 20px;
-        border: 1px solid #404040; flex: 1; display: flex; flex-direction: column;
-        opacity: 0; transform: translateY(15px);
-        animation: rup-fadeInUp 0.6s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
-        will-change: transform, opacity;
-    }
-    .rup-detail-title {
-        font-size: 20px; font-weight: 600; color: #ffffff; margin: 0 0 8px;
-        display: flex; align-items: center; gap: 10px;
-    }
-    .rup-detail-subtitle {
-        font-size: 13px; color: #999999; margin-bottom: 16px;
-        text-transform: uppercase; letter-spacing: 0.5px;
-    }
-    .rup-detail-description {
-        font-size: 14px; color: #cccccc; line-height: 1.6; margin-bottom: 16px; flex: 1;
-    }
-    .rup-detail-settings {
-        padding: 16px; background: #252525; border-radius: 8px; border: 1px solid #404040; margin-top: auto;
-    }
-    .rup-setting-row {
-        display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
-    }
-    .rup-setting-row:last-child { margin-bottom: 0; }
-    .rup-setting-label { font-size: 13px; color: #cccccc; font-weight: 500; }
-    .rup-setting-value {
-        font-size: 12px; color: #999999; padding: 4px 8px; background: #1a1a1a;
-        border-radius: 4px; border: 1px solid #404040;
-    }
-    .rup-welcome-panel {
-        text-align: center; padding: 40px 20px; color: #999999; display: flex;
-        flex-direction: column; align-items: center; justify-content: center; height: 100%;
-    }
-    .rup-welcome-icon {
-        font-size: 48px; margin-bottom: 16px; opacity: 0.5;
-        animation: rup-float 4s ease-in-out infinite;
-    }
-    .rup-welcome-text { font-size: 16px; margin-bottom: 8px; }
-    .rup-welcome-subtext { font-size: 13px; color: #666666; }
     .rup-developer-message {
-        background: #1a1a1a; border-radius: 8px; padding: 16px; margin-bottom: 20px;
-        border-left: 3px solid #555555; transition: all 0.4s ease;
+        background: #1a1a1a; border-radius: 8px; padding: 16px;
+        border-left: 3px solid #555555; flex: 1;
     }
-    .rup-developer-message:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); }
     .rup-developer-message-title {
         font-weight: 600; color: #ffffff; margin-bottom: 8px; font-size: 14px;
     }
-    .rup-developer-message-text { font-size: 13px; color: #cccccc; line-height: 1.5; }
-    .rup-help-section {
-        background: #1f1f1f; border-radius: 8px; padding: 16px; border: 1px solid #404040;
+    .rup-developer-message-text {
+        font-size: 13px; color: #cccccc; line-height: 1.5;
     }
-    .rup-help-title { font-size: 14px; font-weight: 600; color: #ffffff; margin-bottom: 12px; }
+    .rup-help-section {
+        background: #1a1a1a; border-radius: 8px; padding: 16px;
+        border: 1px solid #404040; min-width: 200px;
+    }
+    .rup-help-title {
+        font-size: 14px; font-weight: 600; color: #ffffff; margin-bottom: 12px;
+    }
     .rup-help-link {
-        color: #70a5ff; text-decoration: none; font-size: 13px; display: flex;
-        align-items: center; gap: 8px; padding: 10px 12px; border-radius: 6px;
-        transition: all 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+        color: #70a5ff; text-decoration: none; font-size: 13px;
+        display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+        border-radius: 6px; transition: all 0.3s ease;
         background: rgba(112, 165, 255, 0.1); border: 1px solid rgba(112, 165, 255, 0.2);
+        margin-bottom: 8px;
+    }
+    .rup-help-link:last-child {
+        margin-bottom: 0;
     }
     .rup-help-link:hover {
         color: #ffffff; background: rgba(112, 165, 255, 0.2);
-        border-color: rgba(112, 165, 255, 0.4); transform: translateY(-2px);
+        border-color: rgba(112, 165, 255, 0.4); transform: translateX(2px);
     }
-    .rup-help-link-icon { font-size: 16px; transition: transform 0.3s ease; }
-    .rup-help-link:hover .rup-help-link-icon { transform: translateY(-2px); }
+    .rup-help-link-icon {
+        font-size: 16px;
+    }
+    .rup-features-title {
+        font-size: 18px; font-weight: 600; color: #ffffff; margin-bottom: 16px;
+    }
+    .rup-feature-item {
+        margin-bottom: 12px; border-radius: 10px; padding: 16px;
+        background: #1f1f1f; border: 1px solid #404040;
+        transition: all 0.3s ease;
+    }
+    .rup-feature-item:hover {
+        border-color: #555555; background: #2a2a2a; transform: translateY(-2px);
+    }
+    .rup-feature-header {
+        display: flex; align-items: center; gap: 12px; margin-bottom: 8px;
+    }
+    .rup-feature-icon { font-size: 20px; min-width: 24px; }
+    .rup-feature-title {
+        flex: 1; font-size: 15px; font-weight: 500; color: #ffffff; margin: 0;
+    }
+    .rup-feature-badge {
+        background: #404040; color: #cccccc; padding: 4px 8px; border-radius: 4px;
+        font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .rup-feature-description {
+        font-size: 14px; color: #aaaaaa; line-height: 1.5; margin: 0;
+    }
+    .rup-feature-link {
+        display: inline-block; margin-top: 8px; color: #70a5ff;
+        text-decoration: none; font-size: 13px; transition: all 0.3s ease;
+    }
+    .rup-feature-link:hover {
+        color: #90b5ff; transform: translateX(2px);
+    }
     .rup-footer {
-        padding: 16px 32px; border-top: 1px solid #404040; background: #1f1f1f; text-align: center;
+        padding: 20px 32px; border-top: 1px solid #404040; background: #1f1f1f;
+        display: flex; align-items: center; justify-content: center;
     }
-    .rup-note { font-size: 12px; color: #999999; margin: 0; }
+    .rup-note {
+        font-size: 12px; color: #999999; margin: 0;
+    }
+    .rup-main::-webkit-scrollbar { width: 6px; }
+    .rup-main::-webkit-scrollbar-track { background: #1a1a1a; }
+    .rup-main::-webkit-scrollbar-thumb {
+        background: #555555; border-radius: 3px;
+    }
+    .rup-main::-webkit-scrollbar-thumb:hover { background: #666666; }
 
-    .rup-left::-webkit-scrollbar, .rup-right::-webkit-scrollbar { width: 6px; }
-    .rup-left::-webkit-scrollbar-track, .rup-right::-webkit-scrollbar-track { background: #1a1a1a; }
-    .rup-left::-webkit-scrollbar-thumb, .rup-right::-webkit-scrollbar-thumb {
-        background: #555555; border-radius: 3px; transition: background 0.3s ease;
+    @keyframes rup-fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
     }
-    .rup-left::-webkit-scrollbar-thumb:hover, .rup-right::-webkit-scrollbar-thumb:hover {
-        background: #666666;
+    @keyframes rup-fadeOut {
+        from { opacity: 1; }
+        to { opacity: 0; }
     }
-
-    @keyframes rup-fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes rup-fadeOut { from { opacity: 1; } to { opacity: 0; } }
-    @keyframes rup-scaleUp { 0% { transform: scale(0.95) translateY(10px); } 100% { transform: scale(1) translateY(0); } }
-    @keyframes rup-scaleDown { from { transform: scale(1); } to { transform: scale(0.9); opacity: 0; } }
-    @keyframes rup-fadeInUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes rup-float { 0% { transform: translateY(0px); } 50% { transform: translateY(-5px); } 100% { transform: translateY(0px); } }
+    @keyframes rup-scaleUp {
+        0% { transform: scale(0.95) translateY(10px); }
+        100% { transform: scale(1) translateY(0); }
+    }
+    @keyframes rup-scaleDown {
+        from { transform: scale(1); }
+        to { transform: scale(0.9); opacity: 0; }
+    }
 
     @media (max-width: 768px) {
-        .rup-content { width: 95%; flex-direction: column; }
-        .rup-main { flex-direction: column; }
-        .rup-left, .rup-right { flex: none; }
-        .rup-left { border-right: none; border-bottom: 1px solid #404040; }
+        .rup-content { width: 95%; }
+        .rup-footer { flex-direction: column; text-align: center; }
+        .rup-top-section { flex-direction: column; }
+        .rup-help-section { min-width: auto; }
     }
     `;
         document.head.appendChild(style);
+
+        const featuresHTML = Object.entries(CHANGELOG).map(([key, feat]) => `
+            <div class="rup-feature-item">
+                <div class="rup-feature-header">
+                    <span class="rup-feature-icon">${feat.icon}</span>
+                    <div class="rup-feature-title">${feat.title}</div>
+                    <span class="rup-feature-badge">${feat.badge}</span>
+                </div>
+                <p class="rup-feature-description">${feat.description}</p>
+                ${feat.link ? `<a href="${feat.link}" target="_blank" class="rup-feature-link">Watch Tutorial →</a>` : ''}
+            </div>
+        `).join('');
 
         const popupHTML = `
             <div class="rup-popup">
@@ -518,35 +561,17 @@
                             <h1 class="rup-title">Rolocate Update</h1>
                             <div class="rup-version">${VERSION}</div>
                         </div>
-                        <span class="rup-close">&times;</span>
+                        <button class="rup-refresh-btn" onclick="this.style.transform='scale(0.95)';setTimeout(()=>location.reload(),100)">
+                            Exit (Refresh) <span style="font-size: 16px;">✕</span>
+                        </button>
                     </div>
 
                     <div class="rup-main">
-                        <div class="rup-left">
+                        <div class="rup-top-section">
                             <div class="rup-developer-message">
                                 <div class="rup-developer-message-title">From Oqarshi:</div>
                                 <div class="rup-developer-message-text">Please report any issues on GreasyFork if something breaks! Thank you! RoLocate is designed to be used with Roblox's dark mode or dark theme.</div>
                             </div>
-                            <div class="rup-features-title">✨${VERSION}🚀</div>
-                            ${Object.entries(CHANGELOG).map(([key, feat]) => `
-                            <div class="rup-feature-item" data-feature="${key}">
-                                <div class="rup-feature-header">
-                                    <span class="rup-feature-icon">${feat.icon}</span>
-                                    <div class="rup-feature-title">${feat.title}</div>
-                                    <span class="rup-feature-badge">${feat.badge}</span>
-                                </div>
-                            </div>
-                            `).join('')}
-                        </div>
-
-                        <div class="rup-right">
-                            <div class="rup-welcome-panel" id="rup-welcome-panel">
-                                <div class="rup-welcome-icon">🚀</div>
-                                <div class="rup-welcome-text">Select a feature to learn more</div>
-                                <div class="rup-welcome-subtext">Click on any feature from the left to see detailed information</div>
-                            </div>
-
-                            <div class="rup-detail-panel" id="rup-detail-panel" style="display: none;"></div>
 
                             <div class="rup-help-section">
                                 <div class="rup-help-title">Need Help?</div>
@@ -554,13 +579,15 @@
                                     <span class="rup-help-link-icon">📖</span>
                                     <span>Documentation</span>
                                 </a>
-                                <a>&nbsp;</a>
                                 <a href="https://greasyfork.org/en/scripts/523727-rolocate/feedback" target="_blank" class="rup-help-link">
                                     <span class="rup-help-link-icon">🛡️</span>
-                                    <span>Greasyfork Support</span>
+                                    <span>Support</span>
                                 </a>
                             </div>
                         </div>
+
+                        <div class="rup-features-title">✨ What's New in ${VERSION}</div>
+                        ${featuresHTML}
                     </div>
 
                     <div class="rup-footer">
@@ -574,68 +601,7 @@
         popupContainer.innerHTML = popupHTML;
         document.body.appendChild(popupContainer);
 
-        const closeButton = popupContainer.querySelector('.rup-close');
-        const popup = popupContainer.querySelector('.rup-popup');
-        const featureItems = popupContainer.querySelectorAll('.rup-feature-item');
-        const welcomePanel = popupContainer.querySelector('#rup-welcome-panel');
-        const detailPanel = popupContainer.querySelector('#rup-detail-panel');
 
-        featureItems.forEach(item => {
-            item.addEventListener('click', () => {
-                featureItems.forEach(i => i.classList.remove('rup-active'));
-                item.classList.add('rup-active');
-
-                const key = item.dataset.feature;
-                const feat = CHANGELOG[key];
-
-                if (feat) {
-                    welcomePanel.style.display = 'none';
-                    detailPanel.style.display = 'flex';
-
-                    detailPanel.classList.remove('rup-detail-panel');
-                    void detailPanel.offsetWidth;
-                    detailPanel.classList.add('rup-detail-panel');
-
-                    detailPanel.innerHTML = `
-                        <div class="rup-detail-title">
-                            <span>${feat.icon}</span>
-                            <span>${feat.title}</span>
-                        </div>
-                        <div class="rup-detail-subtitle">${feat.subtitle.replace(/\n/g, '<br>')}</div>
-                        <div class="rup-detail-description">${feat.description.replace(/\\n/g, '<br>')}</div>
-                        <div class="rup-detail-settings">
-                            ${feat.settings.map(setting => `
-                                <div class="rup-setting-row">
-                                    <span class="rup-setting-label">${setting.label}:</span>
-                                    <span class="rup-setting-value">${setting.value}</span>
-                                </div>
-                            `).join('')}
-                        </div>
-                    `;
-                }
-            });
-        });
-
-        closeButton.addEventListener('click', () => {
-            popup.style.animation = 'rup-fadeOut 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) forwards';
-            popup.querySelector('.rup-content').style.animation = 'rup-scaleDown 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) forwards';
-            setTimeout(() => {
-                popup.parentNode.removeChild(popup);
-                document.body.appendChild(document.createRange().createContextualFragment(`
-                    <style>
-                        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-                        @keyframes slideIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-                    </style>
-                    <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 999999; display: flex; align-items: center; justify-content: center; animation: fadeIn 0.3s ease-out;">
-                        <div style="background: #1a1c23; padding: 35px; border-radius: 16px; max-width: 420px; text-align: center; color: #fff; font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; box-shadow: 0 20px 40px rgba(0,0,0,0.5); animation: slideIn 0.3s ease-out;">
-                            <h3 style="margin: 0 0 16px 0; font-size: 22px; font-weight: 600; color: #f8f9fa;">RoLocate</h3>
-                            <p style="margin: 0 0 28px 0; font-size: 16px; line-height: 1.5; color: #e9ecef;">RoLocate needs to refresh the page to enable some features.</p>
-                            <button onclick="this.style.transform='scale(0.95)';setTimeout(()=>location.reload(),100)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#2563eb'" style="background: #2563eb; color: #fff; border: none; padding: 14px 28px; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: 500; transition: all 0.2s ease; transform: scale(1);">Refresh Now</button>
-                        </div>
-                    </div>
-                `));
-            }, 300);
-        });
     }
 
 
@@ -648,7 +614,7 @@
         ShowOldGreeting: true, // enabled by default
         togglerecentserverbutton: true, // enable by default
         prioritylocation: "automatic", // automatic by default
-        fastservers: false, // enabled by default
+        fastservers: true, // enabled by default
         invertplayercount: false, // disabled by default
         enablenotifications: true, // enabled by default
         disabletrailer: true, // enabled by default
@@ -660,10 +626,13 @@
         smartjoinpopup: true, // enabled by default
         betterfriends: true, // enabled by default
         restoreclassicterms: true, // enabled by default
-        compactprivateservers: true, // enabled by default
+        betterprivateservers: true, // enabled by default
         custombackgrounds: false, // disabled by default
         btrobloxfix: false, // disabled by default
-        mobilemode: false // disabled by default
+        mobilemode: false, // disabled by default
+        joinconfirmation: true, // enabled by default
+        forcedarkmode: false, // disabled by default
+        responsivegamecards: true // enabled by default
     };
 
     const presetConfigurations = {
@@ -678,7 +647,7 @@
                 ShowOldGreeting: true,
                 togglerecentserverbutton: true,
                 prioritylocation: "automatic",
-                fastservers: false,
+                fastservers: true,
                 invertplayercount: false,
                 enablenotifications: true,
                 disabletrailer: true,
@@ -690,10 +659,13 @@
                 smartjoinpopup: true,
                 betterfriends: true,
                 restoreclassicterms: true,
-                compactprivateservers: true,
+                betterprivateservers: true,
                 custombackgrounds: false,
                 btrobloxfix: false,
-                mobilemode: false
+                mobilemode: false,
+                joinconfirmation: true,
+                forcedarkmode: false,
+                responsivegamecards: true
             }
         },
         mobilesettings: {
@@ -705,7 +677,7 @@
                 toggleserverhopbutton: true,
                 AutoRunServerRegions: false,
                 ShowOldGreeting: true,
-                togglerecentserverbutton: false,
+                togglerecentserverbutton: true,
                 prioritylocation: "automatic",
                 fastservers: true,
                 invertplayercount: false,
@@ -714,15 +686,18 @@
                 gamequalityfilter: false,
                 mutualfriends: false,
                 disablechat: true,
-                smartsearch: false,
+                smartsearch: true,
                 quicklaunchgames: true,
                 smartjoinpopup: false,
                 betterfriends: true,
                 restoreclassicterms: true,
-                compactprivateservers: true,
+                betterprivateservers: true,
                 custombackgrounds: false,
                 btrobloxfix: false,
-                mobilemode: true
+                mobilemode: true,
+                joinconfirmation: true,
+                forcedarkmode: false,
+                responsivegamecards: false
             }
         },
         developerpref: {
@@ -748,10 +723,77 @@
                 smartjoinpopup: true,
                 betterfriends: true,
                 restoreclassicterms: true,
-                compactprivateservers: true,
+                betterprivateservers: true,
                 custombackgrounds: false,
                 btrobloxfix: false,
-                mobilemode: false
+                mobilemode: false,
+                joinconfirmation: true,
+                forcedarkmode: false,
+                responsivegamecards: true
+            }
+        },
+        serverfiltersonly: {
+            name: "Server Filters Only",
+            settings: {
+                enableLogs: false,
+                removeads: false,
+                togglefilterserversbutton: true,
+                toggleserverhopbutton: false,
+                AutoRunServerRegions: false,
+                ShowOldGreeting: false,
+                togglerecentserverbutton: false,
+                prioritylocation: "automatic",
+                fastservers: true,
+                invertplayercount: false,
+                enablenotifications: true,
+                disabletrailer: false,
+                gamequalityfilter: false,
+                mutualfriends: false,
+                disablechat: false,
+                smartsearch: false,
+                quicklaunchgames: false,
+                smartjoinpopup: true,
+                betterfriends: false,
+                restoreclassicterms: false,
+                betterprivateservers: false,
+                custombackgrounds: false,
+                btrobloxfix: false,
+                mobilemode: false,
+                joinconfirmation: true,
+                forcedarkmode: false,
+                responsivegamecards: false
+            }
+        },
+        smartsearchonly: {
+            name: "Smart Search Only",
+            settings: {
+                enableLogs: false,
+                removeads: false,
+                togglefilterserversbutton: false,
+                toggleserverhopbutton: false,
+                AutoRunServerRegions: false,
+                ShowOldGreeting: false,
+                togglerecentserverbutton: false,
+                prioritylocation: "automatic",
+                fastservers: false,
+                invertplayercount: false,
+                enablenotifications: true,
+                disabletrailer: false,
+                gamequalityfilter: false,
+                mutualfriends: false,
+                disablechat: false,
+                smartsearch: true,
+                quicklaunchgames: false,
+                smartjoinpopup: false,
+                betterfriends: false,
+                restoreclassicterms: false,
+                betterprivateservers: false,
+                custombackgrounds: false,
+                btrobloxfix: false,
+                mobilemode: false,
+                joinconfirmation: false,
+                forcedarkmode: false,
+                responsivegamecards: false
             }
         },
         disablerolocate: {
@@ -777,10 +819,13 @@
                 smartjoinpopup: false,
                 betterfriends: false,
                 restoreclassicterms: false,
-                compactprivateservers: false,
+                betterprivateservers: false,
                 custombackgrounds: false,
                 btrobloxfix: false,
-                mobilemode: false
+                mobilemode: false,
+                joinconfirmation: false,
+                forcedarkmode: false,
+                responsivegamecards: false
             }
         }
     };
@@ -818,8 +863,8 @@
                     localStorage.setItem("ROLOCATE_prioritylocation", "automatic");
                 }
             }
-        } catch (e) {
-            ConsoleLogEnabled("Error initializing coordinates storage:", e);
+        } catch (error) {
+            ConsoleLogEnabled("Error initializing coordinates storage:", error);
             // used like the userscript manager storage (cannot be accessed by other extensions) to store coordinates.
             GM_setValue("ROLOCATE_coordinates", JSON.stringify({
                 lat: "",
@@ -837,7 +882,7 @@
             return `
         <div class="home-section">
             <img class="rolocate-logo" src="${window.Base64Images.logo}" alt="ROLOCATE Logo">
-            <div class="version">Rolocate: Version 44.5</div>
+            <div class="version">Rolocate: Version 45.5</div>
             <div class="section-separator"></div>
             <p>Rolocate by Oqarshi.</p>
             <p class="license-note">
@@ -873,6 +918,14 @@
                             <h4>👑 Dev Settings</h4>
                             <p>Settings used by the developer Oqarshi.</p>
                         </div>
+                        <div class="preset-card" data-preset="serverfiltersonly">
+                            <h4>🌍 Server Filters</h4>
+                            <p>Only Enables Server Filters.</p>
+                        </div>
+                        <div class="preset-card" data-preset="smartsearchonly">
+                            <h4>🧠 Smart Search</h4>
+                            <p>Only Enables Smart Seach.</p>
+                        </div>
                         <div class="preset-card" data-preset="disablerolocate">
                             <h4>🚫 RoLocate Off </h4>
                             <p>Turns off all settings.</p>
@@ -885,6 +938,7 @@
         if (section === "appearance") {
             return `
         <div class="appearance-section">
+            <span class="appearance_section">Visual settings 🎨🖌️</span>
 
             <label class="toggle-slider">
                 <input type="checkbox" id="disabletrailer">
@@ -916,21 +970,32 @@
             </label>
 
             <label class="toggle-slider new_label">
-                <input type="checkbox" id="compactprivateservers">
+                <input type="checkbox" id="responsivegamecards">
                 <span class="slider"></span>
-                Compact Private Servers
+                Responsive Game Cards
                 <span class="new">New
                     <span class="tooltip">Just Released/Updated</span>
                 </span>
-                <span class="help-icon" data-help="Compact Private Servers">?</span>
+                <span class="help-icon" data-help="Responsive Game Cards">?</span>
             </label>
 
             <label class="toggle-slider new_label">
+                <input type="checkbox" id="betterprivateservers">
+                <span class="slider"></span>
+                Better Private Servers
+                <span class="new">New
+                    <span class="tooltip">Just Released/Updated</span>
+                </span>
+                <button id="edit-betterprivateservers-btn" class="edit-button" type="button" style="display: none;">Edit</button>
+                <span class="help-icon" data-help="Better Private Servers">?</span>
+            </label>
+
+            <label class="toggle-slider experiment_label">
                 <input type="checkbox" id="custombackgrounds">
                 <span class="slider"></span>
                 Custom Backgrounds
-                <span class="new">New
-                    <span class="tooltip">Just Released/Updated</span>
+                <span class="experimental">EXP
+                    <span class="tooltip">Experimental: Still being tested</span>
                 </span>
                 <button id="edit-backgrounds-btn" class="edit-button" type="button" style="display: none;">Edit</button>
                 <span class="help-icon" data-help="Backgrounds">?</span>
@@ -943,7 +1008,6 @@
             return `
         <div class="advanced-section">
             <span class="warning_advanced">For Experienced Users Only🧠🙃</span>
-            <div class="section-separator"></div>
 
             <label class="toggle-slider">
                 <input type="checkbox" id="enableLogs">
@@ -956,6 +1020,7 @@
                 <input type="checkbox" id="togglefilterserversbutton">
                 <span class="slider"></span>
                 Enable Server Filters
+                <button id="edit-serverfilters-btn" class="edit-button" type="button" style="display: none;">Edit</button>
                 <span class="help-icon" data-help="Enable Server Filters">?</span>
             </label>
 
@@ -988,14 +1053,23 @@
                 <span class="new">New
                     <span class="tooltip">Just Released/Updated</span>
                 </span>
-                <a href="https://example.com/help/mobile-mode" target="_blank" class="help-icon" data-help="Mobile Mode">?</a>
+                <a class="help-icon" data-help="Mobile Mode">?</a>
             </label>
 
+            <label class="toggle-slider new_label">
+                <input type="checkbox" id="forcedarkmode">
+                <span class="slider"></span>
+                Force Dark Mode Styles
+                <span class="new">New
+                    <span class="tooltip">Just Released/Updated</span>
+                </span>
+                <a class="help-icon" data-help="Force Dark Mode Styles">?</a>
+            </label>
 
             <div class="location-settings">
                 <div class="setting-header">
                     <span>Set Default Location Mode</span>
-                    <span class="help-icon" data-help="Set default location">?</span>
+                    <span class="help-icon" data-help="Set Default Location Mode">?</span>
                 </div>
 
                 <select id="prioritylocation-select">
@@ -1004,8 +1078,8 @@
                 </select>
 
                 <div id="location-hint">
-                    <strong>Manual:</strong> Set your location manually below
-                    <strong>Automatic:</strong> Auto detect your device's location
+                    <div><strong>Manual:</strong> Set your location manually below</div>
+                    <div><strong>Automatic:</strong> Auto detect your device's location</div>
                 </div>
 
                 <div id="manual-coordinates" style="margin-top: 15px; display: none;">
@@ -1025,7 +1099,7 @@
                         Save Coordinates
                     </button>
                     <div class="hint-text" style="margin-top: 12px; font-size: 13px; color: #a0a0a0;">
-                        Enter your location's decimal coordinates, or if you're not comfortable sharing them, use the nearest Roblox server coordinates (e.g., Los Angeles: 34.0549, -118.2426).
+                        Enter your location's decimal coordinates, or if you're not comfortable sharing them with the script, use the nearest Roblox server coordinates (e.g., Los Angeles: 34.0549, -118.2426).
                     </div>
                 </div>
             </div>
@@ -1033,14 +1107,11 @@
     `;
         }
 
-
-
-
         if (section === "extras") {
             return `
         <div class="extras-section">
 
-            <span class="extras_section">Features that might be useful!</span>
+            <span class="extras_section">Features that might be useful! 💡✨</span>
 
             <label class="toggle-slider">
                 <input type="checkbox" id="gamequalityfilter">
@@ -1108,11 +1179,20 @@
         if (section === "about") {
             return `
         <div class="about-section">
-            <h3 class="grayish-center">Credits</h3>
-            <p>This project was created by:</p>
+            <h3 class="grayish-center">Contributors</h3>
+            <p>Special thanks to everyone who has contributed to this project:</p>
+            <ul>
+                <li><a href="https://www.roblox.com/users/545334824/profile" target="_blank">Oqarshi</a> <span style="color: #888;">• Creator & Maintainer</span></li>
+                <li><a href="https://www.roblox.com/users/3795846072/profile" target="_blank">Waivy</a> <span style="color: #888;">• Bug Fixes</span></li>
+            </ul>
+
+            <div class="section-separator"></div>
+
+            <p>Resources & Links:</p>
             <ul>
                 <li><strong>Developer:</strong> <a href="https://www.roblox.com/users/545334824/profile" target="_blank">Oqarshi</a></li>
-                <li><strong>Rolocate Source Code:</strong> <a href="https://greasyfork.org/en/scripts/523727-rolocate/code" target="_blank">GreasyFork</a></li>
+                <li><strong>Want to Contribute?:</strong> <a href="https://github.com/Oqarshi/RoLocate" target="_blank">Github</a></li>
+                <li><strong>Rolocate Source Code:</strong> <a href="https://greasyfork.org/en/scripts/523727-rolocate/code" target="_blank">GreasyFork</a><a> | </a><a href="https://greasyfork.org/en/scripts/523727-rolocate/code" target="_blank">Github</a></li>
                 <li><strong>Invite & FAQ Source Code:</strong> <a href="https://github.com/Oqarshi/Invite" target="_blank">GitHub</a></li>
                 <li><strong>Official Website:</strong> <a href="https://oqarshi.github.io/Invite/rolocate/index.html" target="_blank">RoLocate Website</a></li>
                 <li><strong>Suggest or Report Issues:</strong> <a href="https://greasyfork.org/en/scripts/523727-rolocate/feedback" target="_blank">Submit Feedback</a></li>
@@ -1122,10 +1202,217 @@
     `;
         }
 
+        if (section === "technical") {
+            // stop it from updating if nothing changed
+            let lastRenderedHash = '';
+            let storageUpdateInterval;
+            const MB = 1024 * 1024;
+
+            // helper to make the storage math
+            const getStats = (size, limit) => {
+                const mb = (size / MB).toFixed(2);
+                const percent = (size / limit) * 100;
+                const display = percent >= 0.01 ? `${mb} MB` : `${size.toLocaleString()} bytes`;
+                return { size, mb, percent, display };
+            };
+
+            function calculateStorages() {
+                // calc localstorag size
+                let lsSize = 0;
+                for (let key in localStorage) {
+                    if (localStorage.hasOwnProperty(key)) lsSize += key.length + (localStorage[key]?.length || 0);
+                }
+
+                // do the same for gm storage
+                let gmSize = 0;
+                GM_listValues().forEach(key => {
+                    const val = GM_getValue(key, '');
+                    gmSize += key.length + (typeof val === 'string' ? val.length : JSON.stringify(val).length);
+                });
+
+                return {
+                    ls: getStats(lsSize, 5 * MB),
+                    gm: getStats(gmSize, 50 * MB)
+                };
+            }
+
+            // shortcut to update the bars so we dont write this 3 times
+            // save some code storage to keep it under 1mb
+            const updateBar = (id, percent, colors) => {
+                const bar = document.getElementById(`rolocate-${id}-bar`); // this is the bar for the storage
+                const txt = document.getElementById(`rolocate-${id}-display`); // this is the display
+                if (bar) {
+                    bar.style.width = `${Math.min(percent, 100)}%`;
+                    bar.style.background = percent > 90 ? colors[0] : percent > 80 ? colors[1] : colors[2];
+                }
+                return txt;
+            };
+
+            function updateAllDisplays() {
+                const { ls, gm } = calculateStorages();
+
+                const lsTxt = updateBar('localstorage', ls.percent, ['#f44336', '#ff9800', '#4CAF50']);
+                if (lsTxt) lsTxt.textContent = `${ls.display} / 5 MB`;
+
+                const gmTxt = updateBar('gmstorage', gm.percent, ['#f44336', '#ff9800', '#2196F3']);
+                if (gmTxt) gmTxt.textContent = `${gm.display} / 50 MB`;
+
+                const logMB = rolocateLogSize / MB;
+                const logPercent = (rolocateLogSize / (3 * MB)) * 100;
+                const logTxt = updateBar('logstorage', logPercent, ['#f44336', '#ff9800', '#C8A2C8']);
+                if (logTxt) logTxt.textContent = `${logMB.toFixed(2)} MB / 3 MB`;
+
+                updateLogDisplay();
+            }
+
+            // it updates the log display
+            function updateLogDisplay() {
+                const logEl = document.getElementById('rolocate-logs');
+                if (!logEl) return;
+
+                const allLogs = window.rolocateLogBuffer || [];
+                const displayLogs = allLogs.slice(-50);
+                const currentHash = displayLogs.length ? `${displayLogs[0].time}-${displayLogs.length}` : 'empty';
+
+                if (currentHash === lastRenderedHash) return;
+                lastRenderedHash = currentHash;
+
+                if (!displayLogs.length) {
+                    logEl.innerHTML = '<div style="color: #666; text-align: center; padding: 20px;">No Logs. Enable in Advanced Tab.</div>';
+                } else {
+                    const atBottom = logEl.scrollHeight - logEl.scrollTop <= logEl.clientHeight + 50;
+                    logEl.innerHTML = displayLogs.map(l => `
+                        <div style="margin-bottom: 6px; padding: 6px 8px; background: #252525; border-radius: 4px; font-family: monospace; font-size: 12px;">
+                            <span style="color: #666;">[${l.time}]</span> <span style="color: #4CAF50;">${l.msg}</span>
+                        </div>`).join('');
+                    if (atBottom) logEl.scrollTop = logEl.scrollHeight;
+                }
+
+                const countEl = document.getElementById('rolocate-log-count');
+                if (countEl) {
+                    countEl.style.display = allLogs.length > 50 ? 'block' : 'none';
+                    countEl.textContent = `Showing last 50 of ${allLogs.length} logs`;
+                }
+            }
+
+            setTimeout(() => {
+                updateAllDisplays();
+
+                // buttons logic
+                document.getElementById('rolocate-copy-logs-btn')?.addEventListener('click', () => {
+                    const text = (window.rolocateLogBuffer || []).map(l => `[${l.time}] ${l.msg}`).join('\n');
+                    navigator.clipboard.writeText(text).then(() => notifications(`Copied logs!`, 'success', '', 3000));
+                });
+
+                document.getElementById('rolocate-clear-logs-btn')?.addEventListener('click', () => {
+                    window.rolocateLogBuffer = [];
+                    rolocateLogSize = 0;
+                    lastRenderedHash = '';
+                    updateAllDisplays();
+                    notifications('Logs Cleared!', 'success', '', 3000);
+                });
+
+                // the big reset popup
+                document.getElementById('rolocate-factory-reset-btn')?.addEventListener('click', () => {
+                    const modal = document.createElement('div');
+                    modal.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10000;display:flex;justify-content:center;align-items:center;transition: opacity 0.2s ease-out;`;
+                    modal.innerHTML = `
+                        <div id="rolocate-modal-box" style="background:#1e1e1e;width:320px;padding:24px;border-radius:12px;text-align:center;animation:rolocateFadeIn 0.2s forwards; border: 1px solid #333;">
+                            <div style="font-size:32px; margin-bottom: 12px;">⚠️</div>
+                            <h3 style="color:#e0e0e0; margin-bottom: 8px;">Factory Reset?</h3>
+                            <p style="color:#999;font-size:13px; margin-bottom: 20px;">This will delete all data and reset RoLocate to a fresh install.</p>
+                            <div style="display:flex; gap: 10px; justify-content: center;">
+                                <button id="cancel-res" style="padding:8px 16px;background:transparent;color:#ccc;border:1px solid #444;border-radius:6px;cursor:pointer;">Cancel</button>
+                                <button id="confirm-res" style="padding:8px 16px;background:#d32f2f;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;">Reset</button>
+                            </div>
+                        </div>`;
+                    document.body.appendChild(modal);
+
+                    // fade in aniamtion
+                    const close = () => {
+                        document.getElementById('rolocate-modal-box').style.animation = 'rolocateFadeOut 0.2s forwards';
+                        modal.style.opacity = '0';
+                        setTimeout(() => modal.remove(), 200);
+                    };
+
+                    // reset stuff
+                    document.getElementById('cancel-res').onclick = close;
+                    document.getElementById('confirm-res').onclick = () => {
+                        localStorage.removeItem("version"); // remove localstorage version
+                        GM_listValues().forEach(localstoragevaluesreset => GM_deleteValue(localstoragevaluesreset)); // delete all gm values in storage
+                        notifications('Reset Complete. Refreshing in 2 seconds...', 'warning', '', '2000'); // we do this before resetting settings becasue notifications won't work if we delete settings first
+                        Object.keys(localStorage).forEach(localstoragevaluesreset => localstoragevaluesreset.startsWith("ROLOCATE_") && localStorage.removeItem(localstoragevaluesreset)); // delete all localostorage setting keys
+                        close(); // close the popup
+                        setTimeout(() => location.reload(), 2000); // refresh page in 2 seconds
+                    };
+                });
+
+                storageUpdateInterval = setInterval(updateAllDisplays, 3000);
+            }, 100);
+
+            window.rolocateStorageInterval = storageUpdateInterval;
+
+            return `
+                <style>
+                  @keyframes rolocateFadeIn {
+                    from {
+                      opacity: 0;
+                      transform: scale(.95);
+                    }
+
+                    to {
+                      opacity: 1;
+                      transform: scale(1);
+                    }
+                  }
+
+                  @keyframes rolocateFadeOut {
+                    from {
+                      opacity: 1;
+                      transform: scale(1);
+                    }
+
+                    to {
+                      opacity: 0;
+                      transform: scale(.95);
+                    }
+                  }
+                </style>
+                <div class="about-section">
+                    <span class="warning_advanced">Used For Development/Support🔧🧠🙃</span>
+                    <h3 class="grayish-center">Script Storage & Console</h3>
+                    ${['localstorage', 'gmstorage', 'logstorage'].map(id => `
+                        <div style="margin-bottom:20px;padding:12px;background:#1e1e1e;border-radius:8px;border:1px solid #333;">
+                            <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                                <span style="font-weight:600;font-size:13px;color:#e0e0e0;">${id === 'logstorage' ? 'Console RAM' : id === 'gmstorage' ? 'GM Storage' : 'LocalStorage'}</span>
+                                <span id="rolocate-${id}-display" style="font-size:12px;color:#999;"></span>
+                            </div>
+                            <div style="width:100%;height:6px;background:#2a2a2a;border-radius:3px;overflow:hidden;">
+                                <div id="rolocate-${id}-bar" style="width:0;height:100%;transition:width .3s ease;"></div>
+                            </div>
+                            ${id === 'logstorage' ? '<div style="font-size: 11px; color: #777; margin-top: 4px;">Resets after page refresh</div>' : ''}
+                        </div>`).join('')}
+                    <div style="margin-bottom:20px;padding:12px;background:#1e1e1e;border-radius:8px;border:1px solid #333;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                            <span style="font-weight:600;font-size:13px;color:#e0e0e0;">Live Console</span>
+                            <div style="display:flex;gap:8px;">
+                                <button id="rolocate-copy-logs-btn" style="padding:4px 10px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;">Copy</button>
+                                <button id="rolocate-clear-logs-btn" style="padding:4px 10px;background:#f44336;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;">Clear</button>
+                            </div>
+                        </div>
+                        <div id="rolocate-log-count" style="display:none;font-size:11px;color:#999;text-align:center;margin-bottom:5px;"></div>
+                        <div id="rolocate-logs" style="max-height:200px;overflow-y:auto;background:#0a0a0a;border-radius:4px;padding:8px;"></div>
+                    </div>
+                    <div style="display:flex; justify-content:center;">
+                        <button id="rolocate-factory-reset-btn" style="background:rgba(211,47,47,0.1);color:#ef5350;border:1px solid #ef5350;padding:8px 20px;border-radius:6px;cursor:pointer;font-weight:600;font-size:12px;">⚠️ FACTORY RESET</button>
+                    </div>
+                </div>`;
+        }
+
+
         if (section === "help") {
             return `
         <div class="help-section">
-            <div class="section-separator"></div>
             <h3 class="grayish-center">⚙️ General Tab</h3>
             <ul>
                 <li id="help-Smart Search"><strong>SmartSearch:</strong> <span>Improves the Roblox website’s search bar by enabling instant searches for games, users, and groups.</span></li>
@@ -1133,6 +1420,7 @@
                 <li id="help-Fast Server Search"><strong>Fast Server Search:</strong> <span>Boosts server search speed up to 100x (experimental). Replaces player thumbnails with Builderman/Roblox icons to bypass rate limits.</span></li>
                 <li id="help-Invert Player Count"><strong>Invert Player Count:</strong> <span>For server regions: shows low-player servers when enabled, high-player servers when disabled. You can also control this on the Roblox server popup.</span></li>
                 <li id="help-Recent Servers"><strong>Recent Servers:</strong> <span>Shows the most recent servers you have joined in the past 3 days.</span></li>
+                <li id="help-Join Confirmation"><strong>Join Confirmation:</strong> <span>Shows a popup when the user is trying to join a server/game when the user is already in a game.</span></li>
             </ul>
 
             <div class="section-separator"></div>
@@ -1141,9 +1429,10 @@
             <ul>
                 <li id="help-Disable Trailer Autoplay"><strong>Disable Trailer Autoplay:</strong> <span>Prevents trailers from autoplaying on Roblox game pages.</span></li>
                 <li id="help-Smart Join Popup"><strong>Smart Join Popup:</strong> <span>Shows a custom join popup that displays server location about the server before joining it.</span></li>
-                <li id="help-Remove All Roblox Ads"><strong>Remove All Roblox Ads:</strong> <span>Blocks most ads on the Roblox site.</span></li>
+                <li id="help-Remove All Roblox Ads"><strong>Remove All Roblox Ads:</strong> <span>Blocks most ads on the Roblox site. You can customize what it blocks.</span></li>
                 <li id="help-Restore Classic Terms"><strong>Restore Classic Terms:</strong> <span>Reverts corporate buzzwords Roblox has added. Example: “Connections” becomes “Friends”. May not be translated into all languages yet.</span></li>
-                <li id="help-Compact Private Servers"><strong>Compact Private Servers:</strong> <span>Compacts private servers on game pages, so that they do not take up so much space.</span></li>
+                <li id="help-Better Private Servers"><strong>Better Private Servers:</strong> <span>Compacts private servers on game pages, so that they do not take up so much space.</span></li>
+                <li id="help-Responsive Game Cards"><strong>Responsive Game Cards:</strong> <span>Makes game cards on the website more responsive when hovering over them.</span></li>
                 <li id="help-Backgrounds"><strong>Backgrounds:</strong> <span>Allows you to change the background of your roblox page and customize the colors of other stuff on the page.</span></li>
             </ul>
 
@@ -1151,13 +1440,14 @@
 
             <h3 class="grayish-center">🚀 Advanced Tab</h3>
             <ul>
-                <li id="help-Enable Console Logs"><strong>Enable Console Logs:</strong> <span>Enables console.log messages from the script.</span></li>
-                <li id="help-Enable Server Filters"><strong>Enable Server Filters:</strong> <span>Enables server filter features on the game page.</span></li>
+                <li id="help-Enable Console Logs"><strong>Enable Console Logs:</strong> <span>Enables console.log messages from the script. You can view this in the browser console or under the Technical tab.</span></li>
+                <li id="help-Enable Server Filters"><strong>Enable Server Filters:</strong> <span>Enables server filter features on the game page. You can customize what server regions it displays.</span></li>
                 <li id="help-Enable Server Hop Button"><strong>Enable Server Hop Button:</strong> <span>Enables server hop feature on the game page.</span></li>
                 <li id="help-Enable Notifications"><strong>Enable Notifications:</strong> <span>Enables helpful notifications from the script.</span></li>
                 <li id="help-Fix BTRoblox"><strong>Fix Btroblox Compatability:</strong> <span>Uses alternative methods to make the script compatible with BTRoblox.</span></li>
-                <li id="help-Mobile Mode"><strong>Mobile Mode:</strong> <span>Allows you to join server regions on mobile devices.</span></li>
-                <li id="help-Set default location"><strong>Set default location:</strong> <span>Enables the user to set a default location for Roblox server regions. Turn this on if the script cannot automatically detect your location.</span></li>
+                <li id="help-Mobile Mode"><strong>Mobile Mode:</strong> <span>Allows you to join server regions on mobile devices. May work on other devices that prevent direct joining servers like chromebooks.</span></li>
+                <li id="help-Force Dark Mode Styles"><strong>Force Dark Mode Styles:</strong> <span>When enabled, dark mode styles will be used regardless of whether Roblox is in Light or Dark Mode.</span></li>
+                <li id="help-Set Default Location Mode"><strong>Set Default Location Mode:</strong> <span>Enables the user to set a default location for Roblox server regions. Turn this on if the script cannot automatically detect your location.</span></li>
             </ul>
 
             <h3 class="grayish-center">✨ Extra Tab</h3>
@@ -1185,6 +1475,7 @@
         return `
     <div class="general-section">
 
+        <span class="general_section">Common settings in most extensions! ⚙️🔧</span>
         <label class="toggle-slider new_label">
             <input type="checkbox" id="smartsearch">
             <span class="slider"></span>
@@ -1207,8 +1498,8 @@
             <input type="checkbox" id="fastservers">
             <span class="slider"></span>
             Fast Server Search
-            <span class="experimental">Experimental
-                <span class="tooltip">Still being tested</span>
+            <span class="experimental">EXP
+                <span class="tooltip">Experimental: Still being tested</span>
             </span>
             <span class="help-icon" data-help="Fast Server Search">?</span>
         </label>
@@ -1226,6 +1517,16 @@
             Recent Servers
             <span class="help-icon" data-help="Recent Servers">?</span>
         </label>
+
+        <label class="toggle-slider new_label">
+            <input type="checkbox" id="joinconfirmation">
+            <span class="slider"></span>
+            Join Confirmation
+            <span class="new">New
+                <span class="tooltip">Just Released/Updated</span>
+            </span>
+            <span class="help-icon" data-help="Join Confirmation">?</span>
+        </label>
     </div>
 `;
     }
@@ -1237,6 +1538,10 @@
     description: opens setting menu and makes it look good
     *******************************************************/
     function openSettingsMenu() {
+        if (isDarkMode() === false) {
+          notifications('You’re using light mode on Roblox. While RoLocate may work, it’s not fully optimized for light mode. For the best experience, please switch to dark mode.', 'info', '📌', 16000);
+        }
+
         if (document.getElementById("userscript-settings-menu")) return;
         // storage make go uyea
         initializeLocalStorage();
@@ -1248,6 +1553,10 @@
         <button id="close-settings">✖</button>
         <div class="settings-sidebar">
             <h2>RoLocate</h2>
+            <div class="search-container">
+                <input type="text" id="settings-search" placeholder="🔍 Search settings...">
+                <div id="search-suggestions"></div>
+            </div>
             <ul>
                 <li class="active" data-section="home">🏠 Home</li>
                 <li data-section="presets">🧩 Presets</li>
@@ -1259,6 +1568,7 @@
                 <li class="section-divider"></li>
                 <li data-section="help">❓ Help</li>
                 <li data-section="about">📘 About</li>
+                <li data-section="technical">🔧 Technical</li>
             </ul>
         </div>
         <div class="settings-content">
@@ -1271,6 +1581,184 @@
         // put css in
         const style = document.createElement("style");
         style.textContent = `
+.highlight-setting {
+    animation: highlightPulse 2s ease;
+    background: rgba(76, 175, 80, 0.2) !important;
+    border-left: 4px solid #4CAF50 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 0 20px rgba(76, 175, 80, 0.4) !important;
+}
+
+@keyframes highlightPulse {
+    0% {
+        background: rgba(76, 175, 80, 0.3);
+        box-shadow: 0 0 30px rgba(76, 175, 80, 0.6);
+    }
+    50% {
+        background: rgba(76, 175, 80, 0.25);
+        box-shadow: 0 0 25px rgba(76, 175, 80, 0.5);
+    }
+    100% {
+        background: rgba(76, 175, 80, 0.15);
+        box-shadow: 0 0 15px rgba(76, 175, 80, 0.3);
+    }
+}
+
+.search-container {
+    width: 100%;
+    position: relative;
+}
+
+#settings-search {
+    width: 100%;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #e0e0e0;
+    font-size: 14px;
+    transition: all 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+    box-sizing: border-box;
+}
+
+#settings-search:focus {
+    outline: none;
+    background: rgba(255, 255, 255, 0.08);
+    border-color: #4CAF50;
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.15);
+}
+
+#search-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #2a2a2a;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    margin-top: 4px;
+    max-height: 300px;
+    overflow-y: auto;
+    display: none;
+    z-index: 10002;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: opacity 0.3s cubic-bezier(0.19, 1, 0.22, 1),
+                transform 0.3s cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+#search-suggestions.show {
+    display: block;
+}
+
+@keyframes fadeInItem {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.search-suggestion-item {
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: all 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 13px;
+    opacity: 0;
+    animation: fadeInItem 0.3s ease forwards;
+    position: relative;
+    overflow: hidden;
+}
+
+.search-suggestion-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 3px;
+    height: 100%;
+    background: transparent;
+    transition: background 0.3s cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+.search-suggestion-item.matched {
+    background: rgba(76, 175, 80, 0.08);
+    border-left: 3px solid #4CAF50;
+}
+
+.search-suggestion-item.matched::before {
+    background: #4CAF50;
+}
+
+.search-suggestion-item.unmatched {
+    background: rgba(255, 255, 255, 0.02);
+    opacity: 0.7;
+}
+
+.search-suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.search-suggestion-item:hover {
+    background: rgba(76, 175, 80, 0.15);
+    transform: translateX(2px);
+    padding-left: 16px;
+}
+
+.search-suggestion-item.matched:hover {
+    background: rgba(76, 175, 80, 0.2);
+}
+
+.search-suggestion-item:active {
+    transform: translateX(5px) scale(0.98);
+}
+
+.suggestion-title {
+    color: #4CAF50;
+    font-weight: 600;
+    display: block;
+    margin-bottom: 2px;
+    transition: color 0.3s ease;
+}
+
+.search-suggestion-item.unmatched .suggestion-title {
+    color: #999;
+}
+
+.search-suggestion-item:hover .suggestion-title {
+    color: #5fd663;
+}
+
+.suggestion-section {
+    color: #999;
+    font-size: 11px;
+    transition: color 0.3s ease;
+}
+
+.search-suggestion-item:hover .suggestion-section {
+    color: #b0b0b0;
+}
+
+#search-suggestions::-webkit-scrollbar {
+    width: 6px;
+}
+
+#search-suggestions::-webkit-scrollbar-track {
+    background: #1a1a1a;
+    border-radius: 3px;
+}
+
+#search-suggestions::-webkit-scrollbar-thumb {
+    background: #4CAF50;
+    border-radius: 3px;
+}
+
+#search-suggestions::-webkit-scrollbar-thumb:hover {
+    background: #5fd663;
+}
 .presets-section {
     text-align: center;
 }
@@ -1423,11 +1911,12 @@
 li a.about-link {
   position: relative !important;
   font-weight: bold !important;
-  color: #dc2626 !important;
+  color: #60a5fa !important;
   text-decoration: none !important;
   cursor: pointer !important;
   transition: color 0.2s ease !important;
 }
+
 li a.about-link::after {
   content: '' !important;
   position: absolute !important;
@@ -1435,25 +1924,29 @@ li a.about-link::after {
   bottom: -2px !important;
   height: 2px !important;
   width: 100% !important;
-  background-color: #dc2626 !important;
+  background-color: #60a5fa !important;
   transform: scaleX(0) !important;
   transform-origin: left !important;
   transition: transform 0.3s ease !important;
 }
+
 li a.about-link:hover {
-  color: #b91c1c !important;
+  color: #3b82f6 !important;
 }
+
 li a.about-link:hover::after {
   transform: scaleX(1) !important;
 }
+
 .about-section ul li a {
   position: relative;
   font-weight: bold;
-  color: #dc2626;
+  color: #60a5fa;
   text-decoration: none;
   cursor: pointer;
   transition: color 0.2s ease;
 }
+
 .about-section ul li a::after {
   content: '';
   position: absolute;
@@ -1461,19 +1954,21 @@ li a.about-link:hover::after {
   bottom: -2px;
   height: 2px;
   width: 100%;
-  background-color: #dc2626;
+  background-color: #60a5fa;
   transform: scaleX(0);
   transform-origin: left;
   transition: transform 0.3s ease;
 }
+
 .about-section ul li a:hover {
-  color: #b91c1c;
+  color: #3b82f6;
 }
+
 .about-section ul li a:hover::after {
   transform: scaleX(1);
 }
 .license-note {
-    font-size: 0.65em;
+    font-size: 0.8em;
     color: #999;
     margin-top: 12px;
     font-style: italic;
@@ -1483,21 +1978,18 @@ li a.about-link:hover::after {
     margin-left: auto;
     padding: 2px 8px;
     font-size: 12px;
-    border: none;
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 6px;
-    background: linear-gradient(145deg, #3a3a3a, #2c2c2c);
+    background: #2a2a2a;
     color: #f0f0f0;
     cursor: pointer;
     font-weight: 500;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05),
-                0 2px 4px rgba(0, 0, 0, 0.25);
     transition: all 0.2s ease;
 }
 .edit-button:hover {
-    background: linear-gradient(145deg, #4a4a4a, #343434);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
-                0 3px 6px rgba(0, 0, 0, 0.35);
-    transform: translateY(-0.5px);
+    background: #323232;
+    border-color: rgba(255, 255, 255, 0.15);
+    color: #ffffff;
 }
 .help-icon {
     display: inline-flex;
@@ -1950,6 +2442,40 @@ li a.about-link:hover::after {
 .warning_advanced:hover {
     box-shadow: 0 0 12px rgba(220, 53, 69, 0.6);
 }
+.general_section {
+    font-size: 14px;
+    color: #858585;
+    font-weight: bold;
+    padding: 8px 14px;
+    background: rgba(140, 140, 140, 0.12);
+    border-radius: 6px;
+    margin-bottom: 16px;
+    display: inline-block;
+    border: 1px solid rgba(120, 120, 120, 0.2);
+    box-shadow: 0 0 6px rgba(120, 120, 120, 0.2);
+    transition: box-shadow 0.3s ease;
+}
+
+.general_section:hover {
+    box-shadow: 0 0 10px rgba(120, 120, 120, 0.35);
+}
+.appearance_section {
+    font-size: 14px;
+    color: #6b5cff;
+    font-weight: bold;
+    padding: 8px 14px;
+    background: rgba(107, 92, 255, 0.1);
+    border-radius: 6px;
+    margin-bottom: 16px;
+    display: inline-block;
+    border: 1px solid rgba(107, 92, 255, 0.25);
+    box-shadow: 0 0 6px rgba(107, 92, 255, 0.25);
+    transition: box-shadow 0.3s ease;
+}
+
+.appearance_section:hover {
+    box-shadow: 0 0 12px rgba(107, 92, 255, 0.5);
+}
 .extras_section {
     font-size: 14px;
     color: #0d6efd;
@@ -2169,6 +2695,17 @@ li a.about-link:hover::after {
                             });
                         }
 
+                        const betterprivateserversCheckbox = document.getElementById("betterprivateservers");
+                        const editBetterPrivateServersButton = document.getElementById("edit-betterprivateservers-btn");
+                        if (betterprivateserversCheckbox && editBetterPrivateServersButton) {
+                            editBetterPrivateServersButton.style.display = localStorage.getItem("ROLOCATE_betterprivateservers") === "true" ? "block" : "none";
+                            betterprivateserversCheckbox.addEventListener("change", function() {
+                                const isEnabled = this.checked;
+                                localStorage.setItem("ROLOCATE_betterprivateservers", isEnabled);
+                                editBetterPrivateServersButton.style.display = isEnabled ? "block" : "none";
+                            });
+                        }
+
                         // custom backtgrounds
                         const customBackgroundsCheckbox = document.getElementById("custombackgrounds");
                         const editBackgroundsButton = document.getElementById("edit-backgrounds-btn");
@@ -2185,6 +2722,19 @@ li a.about-link:hover::after {
                         }
                     }
 
+                    if (section === "advanced") {
+                        const serverfilterscheckbox = document.getElementById("togglefilterserversbutton");
+                        const editButton_serverfiltersbtn = document.getElementById("edit-serverfilters-btn");
+                        if (serverfilterscheckbox && editButton_serverfiltersbtn) {
+                            // show edit button
+                            editButton_serverfiltersbtn.style.display = localStorage.getItem("ROLOCATE_togglefilterserversbutton") === "true" ? "block" : "none";
+                            // uhh on and off for edit buttoin
+                            serverfilterscheckbox.addEventListener("change", function() {
+                                const isEnabled = this.checked;
+                                editButton_serverfiltersbtn.style.display = isEnabled ? "block" : "none";
+                            });
+                        }
+                    }
 
                     if (section === "extras") {
                         const gameQualityCheckbox = document.getElementById("gamequalityfilter");
@@ -2293,6 +2843,164 @@ li a.about-link:hover::after {
                 }
             }
         });
+        // all settings that are shown in search in settings
+        // js for the search funcitonality
+        const searchableSettings = [
+            ["SmartSearch", "general", "smartsearch", "search smart instant"],
+            ["Auto Server Regions", "general", "AutoRunServerRegions", "server region auto location"],
+            ["Fast Server Search", "general", "fastservers", "fast server speed quick"],
+            ["Invert Player Count", "general", "invertplayercount", "invert player count"],
+            ["Recent Servers", "general", "togglerecentserverbutton", "recent server history"],
+            ["Join Confirmation", "general", "joinconfirmation", "join confirm popup"],
+            ["Disable Trailer Autoplay", "appearance", "disabletrailer", "trailer autoplay video"],
+            ["Smart Join Popup", "appearance", "smartjoinpopup", "join popup smart"],
+            ["Remove All Roblox Ads", "appearance", "removeads", "ads remove block"],
+            ["Restore Classic Terms", "appearance", "restoreclassicterms", "classic terms restore"],
+            ["Responsive Game Cards", "appearance", "responsivegamecards", "game cards responsive"],
+            ["Better Private Servers", "appearance", "betterprivateservers", "private server compact"],
+            ["Custom Backgrounds", "appearance", "custombackgrounds", "background custom theme"],
+            ["Enable Console Logs", "advanced", "enableLogs", "console log debug"],
+            ["Enable Server Filters", "advanced", "togglefilterserversbutton", "server filter"],
+            ["Enable Server Hop Button", "advanced", "toggleserverhopbutton", "server hop button"],
+            ["Enable Notifications", "advanced", "enablenotifications", "notification alert"],
+            ["Fix BTRoblox Compatability", "advanced", "btrobloxfix", "btroblox fix compatible"],
+            ["Mobile Mode", "advanced", "mobilemode", "mobile mode phone"],
+            ["Force Dark Mode Styles", "advanced", "forcedarkmode", "dark mode force theme"],
+            ["Set Default Location Mode", "advanced", "prioritylocation-select", "location gps coordinates"],
+            ["Game Quality Filter", "extras", "gamequalityfilter", "game quality filter"],
+            ["Mutual Friends", "extras", "mutualfriends", "mutual friends shared"],
+            ["Disable Chat", "extras", "disablechat", "chat disable hide"],
+            ["Quick Launch Games", "extras", "quicklaunchgames", "quick launch favorite"],
+            ["Show Old Greeting", "extras", "ShowOldGreeting", "old greeting classic"],
+            ["Better Friends", "extras", "betterfriends", "friends better best"]
+        ].map(([name, section, id, keywords]) => ({
+            name, section, id, keywords: keywords.split(' ')
+        }));
+
+        const searchInput = document.getElementById('settings-search');
+        const suggestionsBox = document.getElementById('search-suggestions');
+
+        if (searchInput && suggestionsBox) {
+            let debounceTimer;
+
+            // holy crap this was annoying af
+            searchInput.addEventListener('input', function() {
+                clearTimeout(debounceTimer);
+                const q = this.value.toLowerCase().trim();
+
+                debounceTimer = setTimeout(() => {
+                    const results = searchableSettings.map(s => ({
+                        ...s,
+                        match: !q || s.name.toLowerCase().includes(q) ||
+                               s.section.toLowerCase().includes(q) ||
+                               s.keywords.some(k => k.includes(q))
+                    })).sort((a, b) => b.match - a.match);
+
+                    suggestionsBox.innerHTML = results.map((r, i) => `
+                        <div class="search-suggestion-item ${r.match && q ? 'matched' : 'unmatched'}"
+                             data-section="${r.section}" data-setting="${r.name}"
+                             style="animation-delay: ${i * 0.05}s">
+                            <span class="suggestion-title">${r.name}</span>
+                            <span class="suggestion-section">${r.section[0].toUpperCase() + r.section.slice(1)}</span>
+                        </div>
+                    `).join('');
+
+                    suggestionsBox.classList.add('show');
+                    // Add a small delay to let display: block render first
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            suggestionsBox.style.opacity = '1';
+                            suggestionsBox.style.transform = 'translateY(0)';
+                        });
+                    });
+                }, 100);
+            });
+
+            // also show all suggestions when search box is focused & nothing is shown
+            searchInput.addEventListener('focus', function() {
+                 // show suggestions if there is text too
+                 this.dispatchEvent(new Event('input'));
+            });
+
+            // hide suggestions when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!searchInput.contains(e.target) && !suggestionsBox.contains(e.target)) {
+                    suggestionsBox.style.opacity = '0';
+                    suggestionsBox.style.transform = 'translateY(-10px)';
+                    setTimeout(() => {
+                        suggestionsBox.classList.remove('show');
+                    }, 200);
+                }
+            });
+
+            // hde suggestions when search box loses focus unless is clisnign the suggestions
+            searchInput.addEventListener('blur', function() {
+                setTimeout(() => {
+                    if (!suggestionsBox.matches(':hover')) {
+                        suggestionsBox.style.opacity = '0';
+                        suggestionsBox.style.transform = 'translateY(-10px)';
+                        setTimeout(() => {
+                            suggestionsBox.classList.remove('show');
+                        }, 200);
+                    }
+                }, 150);
+            });
+
+            // click on suggestion
+            suggestionsBox.addEventListener('click', function(e) {
+                const item = e.target.closest('.search-suggestion-item');
+                if (item) {
+                    const section = item.getAttribute('data-section');
+                    const settingName = item.getAttribute('data-setting');
+
+                    // add click animation
+                    item.style.transform = 'scale(0.95)';
+                    setTimeout(() => item.style.transform = '', 100);
+
+                    // go to section
+                    const sectionTab = document.querySelector(`.settings-sidebar li[data-section="${section}"]`);
+                    if (sectionTab) {
+                        sectionTab.click();
+
+                        // highlight and scroll to the actual setting toggle
+                        setTimeout(() => {
+                            // try to find the setting by its ID or text content
+                            const settingElement = findSettingElement(settingName, section);
+
+                            if (settingElement) {
+                                settingElement.scrollIntoView({
+                                    behavior: 'smooth',
+                                    block: 'center'
+                                });
+
+                                // add highlight class
+                                settingElement.classList.add('highlight-setting');
+
+                                // remove highlight after 2 seconds
+                                setTimeout(() => {
+                                    settingElement.classList.remove('highlight-setting');
+                                }, 2000);
+                            }
+                        }, 400); // wait for section transition
+                    }
+
+                    searchInput.value = '';
+                    suggestionsBox.style.opacity = '0';
+                    suggestionsBox.style.transform = 'translateY(-10px)';
+                    setTimeout(() => {
+                        suggestionsBox.classList.remove('show');
+                        suggestionsBox.style.transform = 'translateY(0)';
+                    }, 200);
+                }
+            });
+            // helper function to find the setting element and stufdf
+            function findSettingElement(settingName) {
+                const setting = searchableSettings.find(s => s.name === settingName);
+                if (!setting?.id) return null;
+                const el = document.getElementById(setting.id);
+                return el?.closest('.toggle-slider') || el?.closest('.location-settings');
+            }
+        }
     }
 
 
@@ -2412,7 +3120,19 @@ li a.about-link:hover::after {
             });
         }
 
+        const editServerfilters = document.getElementById("edit-serverfilters-btn");
+        if (editServerfilters) {
+            editServerfilters.addEventListener("click", () => {
+                editserverregions();
+            });
+        }
 
+        const editBetterPrivateServers = document.getElementById("edit-betterprivateservers-btn");
+        if (editBetterPrivateServers) {
+            editBetterPrivateServers.addEventListener("click", () => {
+                editprivateserversettings();
+            });
+        }
 
         // save coordinates button duh
         const saveCoordinatesBtn = document.getElementById("save-coordinates");
@@ -2670,97 +3390,171 @@ li a.about-link:hover::after {
     name of function: editremoveads
     description: popup for customizing the ads
     *******************************************************/
-    function editremoveads() {
+    function editremoveads () {
+      // don’t open it twice
       if (document.getElementById('rolocate-ad-settings-modal')) return;
 
-      const defaults = {
-        adIframes: true, sponsoredGames: true, sponsoredSections: true,
-        todaysPicks: true, recommendedForYou: true, feedItems: true
+      // default toggle values
+      const defaultSettings = {
+        adIframes: true,
+        sponsoredGames: true,
+        sponsoredSections: true,
+        todaysPicks: true,
+        recommendedForYou: true,
+        feedItems: true
       };
-      const settings = { ...defaults, ...JSON.parse(localStorage.getItem("ROLOCATE_editremoveads") || '{}') };
 
+      // load saved settings and fall back to defaults
+      const savedSettings = JSON.parse(
+        localStorage.getItem('ROLOCATE_editremoveads') || '{}'
+      );
+      const settings = { ...defaultSettings, ...savedSettings };
+
+      // dark background overlay
       const overlay = document.createElement('div');
       overlay.id = 'rolocate-ad-settings-modal';
       overlay.style.cssText = `
         position:fixed;inset:0;display:flex;justify-content:center;align-items:center;
-        background:rgba(0,0,0,.3);z-index:10000;opacity:0;transition:.2s;
+        background:rgba(0,0,0,.45);z-index:10000;opacity:0;transition:.2s;
       `;
 
+      // main modal box
       const modal = document.createElement('div');
       modal.style.cssText = `
-        background:#1a1a1a;border-radius:12px;padding:20px;width:320px;max-width:90vw;
-        color:#fff;border:1px solid #333;transform:scale(.95) translateY(10px);
-        box-shadow:0 4px 20px rgba(0,0,0,.5);transition:.2s;
+        background:#181818;border-radius:14px;padding:18px;width:340px;max-width:92vw;
+        color:#fff;border:1px solid #2f2f2f;box-shadow:0 10px 30px rgba(0,0,0,.6);
+        transform:scale(.96) translateY(12px);transition:.2s;
       `;
 
-      modal.innerHTML = `<h2 style="text-align:center;font-size:18px;margin:0 0 12px">Ad Settings</h2>`;
+      // title + subtitle
+      modal.innerHTML = `
+        <h2 style="margin:0;font-size:18px;text-align:center">Ad Settings</h2>
+        <p style="margin:6px 0 0px;text-align:center;font-size:12px;color:#aaa">
+          Choose what you want hidden
+        </p>
+      `;
 
-      const options = [
-        ['adIframes', 'Hide Ad Iframes'],
-        ['sponsoredGames', 'Hide Sponsored Games'],
-        ['sponsoredSections', 'Hide Sponsored Sections'],
-        ['todaysPicks', 'Hide "Today\'s Picks"'],
-        ['recommendedForYou', 'Hide "Recommended For You"'],
-        ['feedItems', 'Hide Feed Posts']
+      // toggle definitions
+      const toggleOptions = [
+        ['adIframes', 'Ad Iframes'],
+        ['sponsoredGames', 'Sponsored Games'],
+        ['sponsoredSections', 'Sponsored Sections'],
+        ['todaysPicks', "Today's Picks"],
+        ['recommendedForYou', 'Recommended For You'],
+        ['feedItems', 'Feed Posts']
       ];
 
-      const optsDiv = document.createElement('div');
-      optsDiv.style.cssText = `background:#2a2a2a;padding:12px;border-radius:8px;`;
+      // container for all toggles
+      const togglesContainer = document.createElement('div');
+      togglesContainer.style.cssText = `
+        background:#222;padding:10px;border-radius:10px;display:grid;gap:8px;
+      `;
 
-      options.forEach(([key, label]) => {
-        const div = document.createElement('div');
-        div.innerHTML = `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-          <input type="checkbox" id="${key}" ${settings[key] ? 'checked' : ''} style="transform:scale(1.2)">
-          <span style="font-size:13px">${label}</span></label>`;
-        optsDiv.appendChild(div);
+      // build each toggle row
+      toggleOptions.forEach(([key, label]) => {
+        const row = document.createElement('label');
+        row.style.cssText = `
+          display:flex;justify-content:space-between;align-items:center;
+          padding:8px 10px;border-radius:8px;cursor:pointer;
+          transition:.15s;background:#262626;
+        `;
+
+        // hover effect
+        row.onmouseenter = () => (row.style.background = '#2d2d2d');
+        row.onmouseleave = () => (row.style.background = '#262626');
+
+        row.innerHTML = `
+          <span style="font-size:13px">${label}</span>
+          <input type="checkbox" id="${key}" ${settings[key] ? 'checked' : ''} style="display:none">
+          <div class="tgl" style="
+            width:36px;height:20px;border-radius:20px;
+            background:${settings[key] ? '#16a34a' : '#444'};
+            position:relative;transition:.15s;
+          ">
+            <div style="
+              width:16px;height:16px;border-radius:50%;background:#fff;
+              position:absolute;top:2px;left:${settings[key] ? '18px' : '2px'};
+              transition:.15s;
+            "></div>
+          </div>
+        `;
+
+        const checkbox = row.querySelector('input');
+        const toggle = row.querySelector('.tgl');
+        const knob = toggle.querySelector('div');
+
+        // handle toggle click
+        row.onclick = (e) => {
+          e.preventDefault();
+          checkbox.checked = !checkbox.checked;
+          toggle.style.background = checkbox.checked ? '#16a34a' : '#444';
+          knob.style.left = checkbox.checked ? '18px' : '2px';
+        };
+
+        togglesContainer.appendChild(row);
       });
 
-      const btns = document.createElement('div');
-      btns.style.cssText = `display:flex;justify-content:end;gap:8px;margin-top:14px;`;
+      // buttons container
+      const buttonRow = document.createElement('div');
+      buttonRow.style.cssText = `
+        display:flex;justify-content:flex-end;gap:8px;margin-top:14px;
+      `;
 
-      const makeBtn = (txt, bg, fn) => {
-        const b = document.createElement('button');
-        b.textContent = txt;
-        b.style.cssText = `
-          padding:8px 14px;border-radius:6px;border:1px solid ${bg};
-          background:${bg};color:#fff;cursor:pointer;font-size:13px;
+      // reusable button factory
+      const createButton = (text, bgColor, onClick) => {
+        const button = document.createElement('button');
+        button.textContent = text;
+        button.style.cssText = `
+          padding:8px 14px;border-radius:8px;border:1px solid ${bgColor};
+          background:${bgColor};color:#fff;font-size:13px;cursor:pointer;
           transition:.15s;
         `;
-        b.onmouseenter = () => b.style.opacity = .85;
-        b.onmouseleave = () => b.style.opacity = 1;
-        b.onclick = fn;
-        return b;
+        button.onmouseenter = () => (button.style.opacity = 0.85);
+        button.onmouseleave = () => (button.style.opacity = 1);
+        button.onclick = onClick;
+        return button;
       };
 
-      const close = () => {
-        modal.style.transform = 'scale(.95) translateY(10px)';
+      // close animation + cleanup
+      const closeModal = () => {
+        modal.style.transform = 'scale(.96) translateY(12px)';
         overlay.style.opacity = '0';
         setTimeout(() => overlay.remove(), 200);
       };
 
-      btns.append(
-        makeBtn('Cancel', '#333', close),
-        makeBtn('Save', '#166534', () => {
+      // add buttons
+      buttonRow.append(
+        createButton('Cancel', '#333', closeModal),
+        createButton('Save', '#16a34a', () => {
           const newSettings = {};
-          options.forEach(([k]) => newSettings[k] = document.getElementById(k).checked);
-          localStorage.setItem('ROLOCATE_editremoveads', JSON.stringify(newSettings));
+          toggleOptions.forEach(([key]) => {
+            newSettings[key] = document.getElementById(key).checked;
+          });
+
+          localStorage.setItem(
+            'ROLOCATE_editremoveads',
+            JSON.stringify(newSettings)
+          );
+
+          // feedback stuff
           ConsoleLogEnabled('Ad settings saved:', newSettings);
           notifications('Settings saved', 'success', '👍', '5000');
-          close();
+
+          closeModal();
         })
       );
 
-      modal.append(optsDiv, btns);
+      // assemble modal
+      modal.append(togglesContainer, buttonRow);
       overlay.append(modal);
       document.body.append(overlay);
 
+      // animate in
       requestAnimationFrame(() => {
         overlay.style.opacity = '1';
         modal.style.transform = 'scale(1) translateY(0)';
       });
     }
-
-
 
     /*******************************************************
     name of function: removeAds
@@ -2907,7 +3701,7 @@ li a.about-link:hover::after {
         });
 
         // wait a bit before initial run to let ublock orgin do its thing first if its installed
-        // master at glitch fixing ikr
+        // im a master at glitch fixing ikr
         setTimeout(removeElements, 100);
     }
 
@@ -2916,62 +3710,572 @@ li a.about-link:hover::after {
     name of function: changeServerCount
     description: gui to cyhange autoservergion count
     *******************************************************/
-    function ChangeAutoServerRegionCount() {
-        const current = localStorage.getItem('ROLOCATE_AutoRunServerRegionsnumber') || '16';
+    function ChangeAutoServerRegionCount () {
+      const currentCount = localStorage.getItem('ROLOCATE_AutoRunServerRegionsnumber') || '16';
 
-        // Create overlay
-        const overlay = document.createElement('div');
-        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99998;opacity:0;transition:opacity 0.3s ease-in-out';
+      // create dark overlay
+      const overlay = document.createElement('div');
+      overlay.id = 'rolocate-server-count-modal';
+      overlay.style.cssText = `
+        position:fixed;inset:0;display:flex;justify-content:center;align-items:center;
+        background:rgba(0,0,0,.45);z-index:10000;opacity:0;transition:.2s;
+      `;
 
-        // Create modal
-        const div = document.createElement('div');
-        div.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1a1a1a;padding:20px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.5);z-index:99999;color:white;font-family:system-ui;opacity:0;transition:opacity 0.3s ease-in-out';
-        div.innerHTML = `
-            <div style="font-size:18px;margin-bottom:15px;font-weight:bold"># of Servers to Search</div>
-            <input type="number" value="${current}" min="1" max="1000" style="width:200px;padding:8px;border-radius:6px;border:1px solid #444;background:#2a2a2a;color:white;font-size:16px;margin-bottom:15px">
-            <div style="display:flex;gap:10px">
-                <button style="flex:1;padding:8px;border:none;border-radius:6px;background:#667eea;color:white;cursor:pointer;font-weight:600">Save</button>
-                <button style="padding:8px 15px;border:none;border-radius:6px;background:#444;color:white;cursor:pointer">Cancel</button>
-            </div>
+      // main modal box
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        background:#181818;border-radius:14px;padding:18px;width:340px;max-width:92vw;
+        color:#fff;border:1px solid #2f2f2f;box-shadow:0 10px 30px rgba(0,0,0,.6);
+        transform:scale(.96) translateY(12px);transition:.2s;
+      `;
+
+      // title + input + buttons
+      modal.innerHTML = `
+        <h2 style="margin:0;font-size:18px;text-align:center"># of Servers to Search</h2>
+        <h4 style="margin:0;font-size:13px;color:#888;text-align:center">Default is 16 (Range: 1–700)</h4>
+        <input type="number" value="${currentCount}" min="1" max="700"
+          style="
+            width:100%;padding:8px;margin:12px 0 14px;
+            border-radius:8px;border:1px solid #444;background:#222;color:#fff;
+            font-size:14px;
+          "
+        >
+      `;
+
+      const input = modal.querySelector('input');
+
+      // buttons container
+      const btnRow = document.createElement('div');
+      btnRow.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;';
+
+      // helper to make buttons
+      const makeBtn = (text, bg, fn) => {
+        const b = document.createElement('button');
+        b.textContent = text;
+        b.style.cssText = `
+          padding:8px 14px;border-radius:8px;border:1px solid ${bg};
+          background:${bg};color:#fff;font-size:13px;cursor:pointer;transition:.15s;
+        `;
+        b.onmouseenter = () => b.style.opacity = .85;
+        b.onmouseleave = () => b.style.opacity = 1;
+        b.onclick = fn;
+        return b;
+      };
+
+      // fade out modal
+      const closeModal = () => {
+        modal.style.transform = 'scale(.96) translateY(12px)';
+        overlay.style.opacity = '0';
+        setTimeout(() => overlay.remove(), 200);
+      };
+
+      // add cancel + save buttons
+      const cancelBtn = makeBtn('Cancel', '#333', closeModal);
+      const saveBtn = makeBtn('Save', '#16a34a', () => {
+        const val = parseInt(input.value);
+        if (val >= 1 && val <= 700) {
+          localStorage.setItem('ROLOCATE_AutoRunServerRegionsnumber', val.toString());
+          saveBtn.textContent = '✓ Saved!';
+          saveBtn.style.background = '#10b981';
+          setTimeout(() => closeModal(), 1000);
+        } else {
+          notifications("Please enter a valid number from 1-700", "warning", "", 4000);
+        }
+      });
+
+      btnRow.append(cancelBtn, saveBtn);
+      modal.append(btnRow);
+      overlay.append(modal);
+      document.body.append(overlay);
+
+      // animate in like editRemoveAds
+      requestAnimationFrame(() => {
+        overlay.style.opacity = '1';
+        modal.style.transform = 'scale(1) translateY(0)';
+      });
+
+      // focus input
+      input.focus();
+
+      // click outside closes
+      overlay.onclick = (e) => {
+        if (e.target === overlay) closeModal();
+      };
+    }
+
+    /*******************************************************
+    name of function: editserverregions
+    description: popup for customizing allowed/banned server regions
+    *******************************************************/
+    function editserverregions() {
+      // don't open it twice
+      if (document.getElementById('rolocate-region-settings-modal')) return;
+
+      // ensure server regions are loaded
+      if (typeof window.loadServerRegions === 'function') {
+        window.loadServerRegions();
+      }
+
+      // preload flag data
+      getFlagEmoji();
+
+      // get all unique locations from the library
+      const locations = window.serverRegionsByIp?._locations || {};
+
+      // load saved settings or create defaults (all allowed)
+      const savedSettings = JSON.parse(
+        localStorage.getItem('ROLOCATE_serverRegions') || '{}'
+      );
+
+      // create default settings with all regions allowed
+      const defaultSettings = {};
+      Object.keys(locations).forEach(locationId => {
+        const location = locations[locationId];
+        const key = `${location.city}_${location.country.code}`;
+        defaultSettings[key] = savedSettings[key] !== undefined ? savedSettings[key] : 'allowed';
+      });
+
+      const settings = { ...defaultSettings };
+
+      // dark background overlay
+      const overlay = document.createElement('div');
+      overlay.id = 'rolocate-region-settings-modal';
+      overlay.style.cssText = `
+        position:fixed;inset:0;display:flex;justify-content:center;align-items:center;
+        background:rgba(0,0,0,.45);z-index:10000;opacity:0;transition:.2s;
+      `;
+
+      // main modal box
+      const modal = document.createElement('div');
+      modal.className = 'dummy-class-for-server-region-edit-so-restoreclassicterms-can-target-this'; // yea ik im the best at naming stuff
+      modal.style.cssText = `
+        background:#181818;border-radius:14px;padding:18px;width:420px;max-width:92vw;
+        max-height:85vh;color:#fff;border:1px solid #2f2f2f;
+        box-shadow:0 10px 30px rgba(0,0,0,.6);
+        transform:scale(.96) translateY(12px);transition:.2s;
+        display:flex;flex-direction:column;
+      `;
+
+      // title + subtitle
+      const header = document.createElement('div');
+      header.innerHTML = `
+        <h2 style="margin:0;font-size:18px;text-align:center">Server Region Settings</h2>
+        <p style="margin:0px 0 0px;text-align:center;font-size:12px;color:#aaa">
+          Only join servers from enabled regions
+        </p>
+        <p style="margin:0px 0 6px;text-align:center;font-size:12px;color:#aaa">
+          Affects ServerHop, Server Regions, and Best Connection
+        </p>
+      `;
+
+      // scrollable container for toggles
+      const scrollContainer = document.createElement('div');
+      scrollContainer.style.cssText = `
+        overflow-y:auto;max-height:50vh;
+      `;
+
+      // container for all toggles
+      const togglesContainer = document.createElement('div');
+      togglesContainer.style.cssText = `
+        background:#222;padding:10px;border-radius:10px;display:grid;gap:8px;
+      `;
+
+      // build toggle for each unique region
+      const uniqueRegions = {};
+      Object.keys(locations).forEach(locationId => {
+        const location = locations[locationId];
+        const key = `${location.city}_${location.country.code}`;
+        if (!uniqueRegions[key]) {
+          uniqueRegions[key] = location;
+        }
+      });
+
+      // sort regions alphabetically by city
+      const sortedKeys = Object.keys(uniqueRegions).sort((a, b) => {
+        return uniqueRegions[a].city.localeCompare(uniqueRegions[b].city);
+      });
+
+      sortedKeys.forEach(key => {
+        const location = uniqueRegions[key];
+        const isAllowed = settings[key] === 'allowed';
+
+        const row = document.createElement('label');
+        row.style.cssText = `
+          display:flex;justify-content:space-between;align-items:center;
+          padding:8px 10px;border-radius:8px;cursor:pointer;
+          transition:.15s;background:#262626;
         `;
 
-        document.body.appendChild(overlay);
-        document.body.appendChild(div);
+        // hover effect
+        row.onmouseenter = () => (row.style.background = '#2d2d2d');
+        row.onmouseleave = () => (row.style.background = '#262626');
 
-        // Fade in
-        setTimeout(() => {
-            overlay.style.opacity = '1';
-            div.style.opacity = '1';
-        }, 10);
+        // create flag element
+        const flagImg = getFlagEmoji(location.country.code);
+        if (flagImg) {
+          flagImg.style.borderRadius = '3px';
+          flagImg.style.objectFit = 'cover';
+          flagImg.style.marginRight = '10px';
+        }
 
-        const input = div.querySelector('input');
-        const saveBtn = div.querySelectorAll('button')[0];
-        const cancelBtn = div.querySelectorAll('button')[1];
+        // create left side container
+        const leftContainer = document.createElement('div');
+        leftContainer.style.cssText = 'display:flex;align-items:center;gap:10px;flex:1;';
 
-        input.focus();
+        if (flagImg) {
+          leftContainer.appendChild(flagImg);
+        }
 
-        // Helper function to fade out and remove
-        const fadeOutAndRemove = () => {
-            overlay.style.opacity = '0';
-            div.style.opacity = '0';
-            setTimeout(() => {
-                overlay.remove();
-                div.remove();
-            }, 300);
+        const textContainer = document.createElement('div');
+        textContainer.style.cssText = 'display:flex;flex-direction:column;gap:2px;';
+        textContainer.innerHTML = `
+          <span style="font-size:13px;font-weight:500">${location.city}, ${location.country.code}</span>
+          <span style="font-size:11px;color:#888">${location.region.name}</span>
+        `;
+        leftContainer.appendChild(textContainer);
+
+        // create checkbox (hidden)
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = key;
+        checkbox.checked = isAllowed;
+        checkbox.style.display = 'none';
+
+        // create toggle switch
+        const toggle = document.createElement('div');
+        toggle.className = 'tgl';
+        toggle.style.cssText = `
+          width:36px;height:20px;border-radius:20px;
+          background:${isAllowed ? '#16a34a' : '#dc2626'};
+          position:relative;transition:.15s;flex-shrink:0;
+        `;
+
+        const knob = document.createElement('div');
+        knob.style.cssText = `
+          width:16px;height:16px;border-radius:50%;background:#fff;
+          position:absolute;top:2px;left:${isAllowed ? '18px' : '2px'};
+          transition:.15s;
+        `;
+        toggle.appendChild(knob);
+
+        // assemble row
+        row.appendChild(leftContainer);
+        row.appendChild(checkbox);
+        row.appendChild(toggle);
+
+        // handle toggle click
+        row.onclick = (e) => {
+          e.preventDefault();
+          checkbox.checked = !checkbox.checked;
+          toggle.style.background = checkbox.checked ? '#16a34a' : '#dc2626';
+          knob.style.left = checkbox.checked ? '18px' : '2px';
         };
 
-        saveBtn.onclick = () => {
-            const val = parseInt(input.value);
-            if (val >= 1 && val <= 1000) {
-                localStorage.setItem('ROLOCATE_AutoRunServerRegionsnumber', val.toString());
-                saveBtn.textContent = '✓ Saved!';
-                saveBtn.style.background = '#10b981';
-                setTimeout(() => fadeOutAndRemove(), 1000);
+        togglesContainer.appendChild(row);
+      });
+
+      scrollContainer.appendChild(togglesContainer);
+
+      // buttons container
+      const buttonRow = document.createElement('div');
+      buttonRow.style.cssText = `
+        display:flex;justify-content:space-between;gap:8px;margin-top:14px;
+      `;
+
+      // reusable button factory
+      const createButton = (text, bgColor, onClick) => {
+        const button = document.createElement('button');
+        button.textContent = text;
+        button.style.cssText = `
+          padding:8px 14px;border-radius:8px;border:1px solid ${bgColor};
+          background:${bgColor};color:#fff;font-size:13px;cursor:pointer;
+          transition:.15s;flex:1;
+        `;
+        button.onmouseenter = () => (button.style.opacity = 0.85);
+        button.onmouseleave = () => (button.style.opacity = 1);
+        button.onclick = onClick;
+        return button;
+      };
+
+      // close animation & cleanup
+      const closeModal = () => {
+        modal.style.transform = 'scale(.96) translateY(12px)';
+        overlay.style.opacity = '0';
+        setTimeout(() => overlay.remove(), 200);
+      };
+
+      // add buttons
+      const leftButtons = document.createElement('div');
+      leftButtons.style.cssText = 'display:flex;gap:8px;';
+
+      const rightButtons = document.createElement('div');
+      rightButtons.style.cssText = 'display:flex;gap:8px;';
+
+      leftButtons.append(
+        createButton('Reset', '#0ea5e9', () => {
+          sortedKeys.forEach(key => {
+            const checkbox = document.getElementById(key);
+            const row = checkbox.closest('label');
+            const toggle = row.querySelector('.tgl');
+            const knob = toggle.querySelector('div');
+
+            checkbox.checked = true;
+            toggle.style.background = '#16a34a';
+            knob.style.left = '18px';
+          });
+        }, true),
+        createButton('Disable All', '#bf7c0a', () => {
+          sortedKeys.forEach(key => {
+            const checkbox = document.getElementById(key);
+            const row = checkbox.closest('label');
+            const toggle = row.querySelector('.tgl');
+            const knob = toggle.querySelector('div');
+
+            checkbox.checked = false;
+            toggle.style.background = '#dc2626';
+            knob.style.left = '2px';
+          });
+        }, true)
+      );
+
+      rightButtons.append(
+        createButton('Cancel', '#333', closeModal),
+        createButton('Save', '#16a34a', () => {
+          const newSettings = {};
+          sortedKeys.forEach(key => {
+            const isChecked = document.getElementById(key).checked;
+            newSettings[key] = isChecked ? 'allowed' : 'banned';
+          });
+
+          localStorage.setItem(
+            'ROLOCATE_serverRegions',
+            JSON.stringify(newSettings)
+          );
+
+          // feedback
+          if (typeof ConsoleLogEnabled === 'function') {
+            ConsoleLogEnabled('Server region settings saved:', newSettings);
+          }
+          if (typeof notifications === 'function') {
+            notifications('Region settings saved', 'success', '🌍', '5000');
+          }
+
+          closeModal();
+        })
+      );
+
+      buttonRow.append(leftButtons, rightButtons);
+
+      // assemble modal
+      modal.append(header, scrollContainer, buttonRow);
+      overlay.append(modal);
+      document.body.append(overlay);
+
+      // animate in
+      requestAnimationFrame(() => {
+        overlay.style.opacity = '1';
+        modal.style.transform = 'scale(1) translateY(0)';
+      });
+    }
+
+    /*******************************************************
+    name of function: editprivateserversettings
+    description: popup for customizing better private server settings
+    *******************************************************/
+    function editprivateserversettings() {
+      // check if Better Private Servers is enabled
+      const bpsEnabled = localStorage.getItem('ROLOCATE_betterprivateservers');
+      if (bpsEnabled !== 'true') return;
+
+      // don't open it twice
+      if (document.getElementById('rolocate-ps-settings-modal')) return;
+
+      notifications('“Compact Private Servers” and “Private Server Search” are temporarily locked due to stability issues and will be available to be changed in the next update. Sorry about this!', 'info', '😢', '15000');
+
+      // default toggle values
+      const defaultSettings = {
+        compactPrivateServers: true,
+        onlyYourPrivateServers: false,
+        privateServerSearch: false
+      };
+
+      // load saved settings and fall back to defaults
+      const savedSettings = JSON.parse(
+        localStorage.getItem('ROLOCATE_editprivateserversettings') || '{}'
+      );
+      const settings = { ...defaultSettings, ...savedSettings };
+
+      // Force compact to always be true
+      settings.compactPrivateServers = true;
+      // Force privateServerSearch to always be false
+      settings.privateServerSearch = false;
+
+      // dark background overlay
+      const overlay = document.createElement('div');
+      overlay.id = 'rolocate-ps-settings-modal';
+      overlay.style.cssText = `
+        position:fixed;inset:0;display:flex;justify-content:center;align-items:center;
+        background:rgba(0,0,0,.45);z-index:10000;opacity:0;transition:.2s;
+      `;
+
+      // main modal box
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        background:#181818;border-radius:14px;padding:18px;width:340px;max-width:92vw;
+        color:#fff;border:1px solid #2f2f2f;box-shadow:0 10px 30px rgba(0,0,0,.6);
+        transform:scale(.96) translateY(12px);transition:.2s;
+      `;
+
+      // title + subtitle
+      modal.innerHTML = `
+        <h2 style="margin:0;font-size:18px;text-align:center">Private Server Settings</h2>
+        <p style="margin:6px 0 0px;text-align:center;font-size:12px;color:#aaa">
+          Change Settings for Private Servers
+        </p>
+      `;
+
+      // toggle definitions
+      const toggleOptions = [
+        ['compactPrivateServers', 'Compact Private Servers'],
+        ['onlyYourPrivateServers', 'Only Your Private Servers'],
+        ['privateServerSearch', 'Private Server Search']
+      ];
+
+      // container for all toggles
+      const togglesContainer = document.createElement('div');
+      togglesContainer.style.cssText = `
+        background:#222;padding:10px;border-radius:10px;display:grid;gap:8px;
+      `;
+
+      // store toggle elements for mutual exclusion logic
+      const toggleElements = {};
+
+      // build each toggle row
+      toggleOptions.forEach(([key, label]) => {
+        const isDisabled = key === 'compactPrivateServers' || key === 'privateServerSearch';
+
+        const row = document.createElement('label');
+        row.style.cssText = `
+          display:flex;justify-content:space-between;align-items:center;
+          padding:8px 10px;border-radius:8px;
+          cursor:${isDisabled ? 'not-allowed' : 'pointer'};
+          transition:.15s;background:${isDisabled ? '#1a1a1a' : '#262626'};
+          opacity:${isDisabled ? '0.6' : '1'};
+        `;
+
+        // hover effect (only for enabled toggles)
+        if (!isDisabled) {
+          row.onmouseenter = () => (row.style.background = '#2d2d2d');
+          row.onmouseleave = () => (row.style.background = '#262626');
+        }
+
+        row.innerHTML = `
+          <span style="font-size:13px;color:${isDisabled ? '#888' : '#fff'}">${label}</span>
+          <input type="checkbox" id="${key}" ${settings[key] ? 'checked' : ''} style="display:none">
+          <div class="tgl" style="
+            width:36px;height:20px;border-radius:20px;
+            background:${settings[key] ? (isDisabled ? '#0d7a34' : '#16a34a') : '#444'};
+            position:relative;transition:.15s;
+          ">
+            <div style="
+              width:16px;height:16px;border-radius:50%;background:${isDisabled ? '#ccc' : '#fff'};
+              position:absolute;top:2px;left:${settings[key] ? '18px' : '2px'};
+              transition:.15s;
+            "></div>
+          </div>
+        `;
+
+        const checkbox = row.querySelector('input');
+        const toggle = row.querySelector('.tgl');
+        const knob = toggle.querySelector('div');
+
+        // store references
+        toggleElements[key] = { checkbox, toggle, knob };
+
+        // handle toggle click (skip if disabled)
+        if (!isDisabled) {
+          row.onclick = (e) => {
+            e.preventDefault();
+
+            const willBeChecked = !checkbox.checked;
+
+            // update current toggle
+            checkbox.checked = willBeChecked;
+            toggle.style.background = checkbox.checked ? '#16a34a' : '#444';
+            knob.style.left = checkbox.checked ? '18px' : '2px';
+          };
+        }
+
+        togglesContainer.appendChild(row);
+      });
+
+      // buttons container
+      const buttonRow = document.createElement('div');
+      buttonRow.style.cssText = `
+        display:flex;justify-content:flex-end;gap:8px;margin-top:14px;
+      `;
+
+      // reusable button factory
+      const createButton = (text, bgColor, onClick) => {
+        const button = document.createElement('button');
+        button.textContent = text;
+        button.style.cssText = `
+          padding:8px 14px;border-radius:8px;border:1px solid ${bgColor};
+          background:${bgColor};color:#fff;font-size:13px;cursor:pointer;
+          transition:.15s;
+        `;
+        button.onmouseenter = () => (button.style.opacity = 0.85);
+        button.onmouseleave = () => (button.style.opacity = 1);
+        button.onclick = onClick;
+        return button;
+      };
+
+      // close animation + cleanup
+      const closeModal = () => {
+        modal.style.transform = 'scale(.96) translateY(12px)';
+        overlay.style.opacity = '0';
+        setTimeout(() => overlay.remove(), 200);
+      };
+
+      // add buttons
+      buttonRow.append(
+        createButton('Cancel', '#333', closeModal),
+        createButton('Save', '#16a34a', () => {
+          const newSettings = {};
+          toggleOptions.forEach(([key]) => {
+            // Force compact to always be true and privateServerSearch to always be false
+            if (key === 'compactPrivateServers') {
+              newSettings[key] = true;
+            } else if (key === 'privateServerSearch') {
+              newSettings[key] = false;
+            } else {
+              newSettings[key] = document.getElementById(key).checked;
             }
-        };
+          });
 
-        cancelBtn.onclick = () => fadeOutAndRemove();
-        overlay.onclick = () => fadeOutAndRemove();
+          localStorage.setItem(
+            'ROLOCATE_editprivateserversettings',
+            JSON.stringify(newSettings)
+          );
+
+          // feedback stuff
+          ConsoleLogEnabled('Private server settings saved:', newSettings);
+          notifications('Settings saved', 'success', '👍', '5000');
+
+          closeModal();
+        })
+      );
+
+      // assemble modal
+      modal.append(togglesContainer, buttonRow);
+      overlay.append(modal);
+      document.body.append(overlay);
+
+      // animate in
+      requestAnimationFrame(() => {
+        overlay.style.opacity = '1';
+        modal.style.transform = 'scale(1) translateY(0)';
+      });
     }
 
     /*******************************************************
@@ -4131,9 +5435,9 @@ li a.about-link:hover::after {
                         align-items: center;
                         margin-bottom: 16px;
                         padding: 30px;
-                        background: #1a1c23;
+                        background: ${isDarkMode() ? '#1a1c23' : '#E0D8CC'};
                         border-radius: 12px;
-                        border: 1px solid #2a2a30;
+                        border: 1px solid ${isDarkMode() ? '#2a2a30' : '#C1B19A'};
                         min-height: 180px;
                     }
                     .rolocate-profile-frame {
@@ -4141,7 +5445,7 @@ li a.about-link:hover::after {
                         height: 140px;
                         border-radius: 50%;
                         overflow: hidden;
-                        border: 3px solid #2a2a30;
+                        border: 3px solid ${isDarkMode() ? '#2a2a30' : '#C1B19A'};
                     }
                     .rolocate-profile-img {
                         width: 100%;
@@ -4154,7 +5458,7 @@ li a.about-link:hover::after {
                     .rolocate-user-name {
                         font-size: 2em;
                         font-weight: 600;
-                        color: #ffffff;
+                        color: ${isDarkMode() ? '#ffffff' : 'black'};
                         margin: 0;
                         font-family: 'Segoe UI', Roboto, sans-serif;
                     }
@@ -4334,9 +5638,6 @@ li a.about-link:hover::after {
         // store for spedup
         let localAvatarCache = {};
 
-        // function to get current user ID
-        const getCurrentUserId = () => Roblox?.CurrentUser?.userId || null;
-
         // function to fetch user details in batch (up to 100 at once)
         const fetchUserDetailsBatch = (userIds) => {
             if (userIds.length === 0) return Promise.resolve([]);
@@ -4485,7 +5786,7 @@ li a.about-link:hover::after {
                 style.id = 'mutual-friends-styles';
                 style.textContent = `
                     .mutual-friends-container {
-                      background: linear-gradient(135deg, #111114 0%, #1a1a1d 100%);
+                      background: ${isDarkMode() ? 'linear-gradient(135deg, #111114 0%, #1a1a1d 100%)' : '#E0D8CC'};
                       border: 1px solid rgba(255, 255, 255, 0.1);
                       border-radius: 12px;
                       padding: 20px;
@@ -4497,7 +5798,7 @@ li a.about-link:hover::after {
                       animation: slideInUp 0.3s ease-out;
                     }
                     .mutual-friends-container:hover {
-                      background: linear-gradient(135deg, #1a1a1d 0%, #222226 100%);
+                      background: ${isDarkMode() ? 'linear-gradient(135deg, #1a1a1d 0%, #222226 100%);' : '#E0D8CC'};
                       box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
                       transform: translateY(-1px);
                       border-color: rgba(255, 255, 255, 0.2);
@@ -4516,7 +5817,7 @@ li a.about-link:hover::after {
                       display: flex;
                       align-items: center;
                       margin-bottom: 16px;
-                      color: #ffffff;
+                      color: ${isDarkMode() ? 'white' : 'black'};
                       font-size: 18px;
                       font-weight: 700;
                       font-family: "Source Sans Pro", Arial, sans-serif;
@@ -4563,7 +5864,7 @@ li a.about-link:hover::after {
                       gap: 12px;
                     }
                     .mutual-friend-tag {
-                      background: rgba(255, 255, 255, 0.08);
+                      background: ${isDarkMode() ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.1)'};
                       color: #ffffff;
                       padding: 8px 16px;
                       border-radius: 25px;
@@ -5172,12 +6473,51 @@ li a.about-link:hover::after {
 
     /*******************************************************
     name: SmartSearch
-    desc: Enhanced Smart Search with friend integration
+    desc: smartsearch like better search with games, users, catalog, and groups
     *******************************************************/
     function SmartSearch() {
         if (localStorage.ROLOCATE_smartsearch !== "true") return;
-        const SMARTSEARCH_getCurrentUserId = () => Roblox?.CurrentUser?.userId || null;
+        // set friend list so later on in the user tab if a friend is found add friend label
         let friendList = [], friendIdSet = new Set(), friendListFetched = false, friendListFetching = false;
+
+        // quick l;aunch on like the smart search yeeeeeee
+        function triggerQuickLaunchUpdate(placeId, action) {
+            // basicalyl if on homepage uopdates it liike isntanyl
+            const event = new CustomEvent('quicklaunch-update', {
+                detail: { placeId: placeId, action: action }
+            });
+            window.dispatchEvent(event);
+        }
+
+        function isGameInQuickLaunch(placeId) {
+            const games = JSON.parse(localStorage.getItem('ROLOCATE_quicklaunch_games_storage') || '[]');
+            return games.includes(placeId.toString());
+        }
+
+        function isQuickLaunchEnabled() {
+            return localStorage.getItem('ROLOCATE_quicklaunchgames') === 'true';
+        }
+
+        function addToQuickLaunch(placeId) {
+            const games = JSON.parse(localStorage.getItem('ROLOCATE_quicklaunch_games_storage') || '[]');
+            if (games.length >= 10) {
+                notifications('Maximum 10 games allowed in Quick Launch', 'error', '⚠️', '4000');
+                return false;
+            }
+
+            if (!games.includes(placeId.toString())) {
+                games.push(placeId.toString());
+                localStorage.setItem('ROLOCATE_quicklaunch_games_storage', JSON.stringify(games));
+                return true;
+            }
+            return false;
+        }
+
+        function removeFromQuickLaunch(placeId) {
+            const games = JSON.parse(localStorage.getItem('ROLOCATE_quicklaunch_games_storage') || '[]');
+            const updatedGames = games.filter(id => id !== placeId.toString());
+            localStorage.setItem('ROLOCATE_quicklaunch_games_storage', JSON.stringify(updatedGames));
+        }
 
         async function fetchFriendList(userId) {
             return new Promise((resolve) => {
@@ -5225,6 +6565,7 @@ li a.about-link:hover::after {
             return matrix[b.length][a.length];
         }
 
+        // custom similarity function to determine similarity
         function getSimilarityScore(str1, str2) {
             ConsoleLogEnabled("Original strings:", {str1, str2});
 
@@ -5309,21 +6650,22 @@ li a.about-link:hover::after {
             return finalScore; // this is the final score to rank the items
         }
 
+        // uh like u know shorten numbers
         function formatNumberCount(num) {
             if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M+';
             else if (num >= 1000) return (num / 1000).toFixed(1) + 'K+';
             else return num.toString();
         }
 
+        // format dates
         function formatDate(dateString) {
             const date = new Date(dateString);
             const options = {year: 'numeric', month: 'short', day: 'numeric'};
             return date.toLocaleDateString('en-US', options);
         }
 
-        /*******************************************************
-        Optimized thumbnail fetching
-        *******************************************************/
+
+        // find game icons in a batch
         async function fetchGameIconsBatch(universeIds) {
             if (!universeIds.length) return [];
             const apiUrl = `https://thumbnails.roblox.com/v1/games/icons?universeIds=${universeIds.join(',')}&size=512x512&format=Png&isCircular=false`;
@@ -5341,6 +6683,7 @@ li a.about-link:hover::after {
             });
         }
 
+        // find the playerth8mbnbs in a batch
         async function fetchPlayerThumbnailsBatch(userIds) {
             if (!userIds.length) return [];
             const params = new URLSearchParams({userIds: userIds.join(","), size: "150x150", format: "Png", isCircular: "false"});
@@ -5359,6 +6702,7 @@ li a.about-link:hover::after {
             });
         }
 
+        // find group icons in a batch
         async function fetchGroupIconsBatch(groupIds) {
             if (!groupIds.length) return [];
             const params = new URLSearchParams({groupIds: groupIds.join(","), size: "150x150", format: "Png", isCircular: "false"});
@@ -5377,6 +6721,65 @@ li a.about-link:hover::after {
             });
         }
 
+        // fubd yser fruiebd for the likie smtartseafch
+        async function fetchUserFriendCount(userId) {
+            return new Promise((resolve) => {
+                GM_xmlhttpRequest({
+                    method: "GET",
+                    url: `https://friends.roblox.com/v1/users/${userId}/friends/count`,
+                    headers: {"Accept": "application/json"},
+                    onload: function(response) {
+                        if (response.status === 200) {
+                            try {
+                                const data = JSON.parse(response.responseText);
+                                resolve(data.count || 0);
+                            }
+                            catch (e) { resolve(0); }
+                        } else resolve(0);
+                    },
+                    onerror: function() { resolve(0); }
+                });
+            });
+        }
+
+        // find user follower count in a batch ig
+        async function fetchUserFollowerCount(userId) {
+            return new Promise((resolve) => {
+                GM_xmlhttpRequest({
+                    method: "GET",
+                    url: `https://friends.roblox.com/v1/users/${userId}/followers/count`,
+                    headers: {"Accept": "application/json"},
+                    onload: function(response) {
+                        if (response.status === 200) {
+                            try {
+                                const data = JSON.parse(response.responseText);
+                                resolve(data.count || 0);
+                            }
+                            catch (e) { resolve(0); }
+                        } else resolve(0);
+                    },
+                    onerror: function() { resolve(0); }
+                });
+            });
+        }
+
+        // get user stats like friends and followers in a bathc. calls 2 functuions
+        async function fetchUserStatsBatch(userIds) {
+            const statsPromises = userIds.map(async (userId) => {
+                const [friendCount, followerCount] = await Promise.all([
+                    fetchUserFriendCount(userId),
+                    fetchUserFollowerCount(userId)
+                ]);
+                return {
+                    userId,
+                    friendCount,
+                    followerCount
+                };
+            });
+            return Promise.all(statsPromises);
+        }
+
+        // find the liike stats for the items
         async function fetchCatalogItemDetails(assetId) {
             return new Promise((resolve) => {
                 GM_xmlhttpRequest({
@@ -5394,6 +6797,7 @@ li a.about-link:hover::after {
             });
         }
 
+        // find thumbnail for items in batch
         async function fetchCatalogThumbnailsBatch(assetIds) {
             if (!assetIds.length) return [];
             const params = new URLSearchParams({assetIds: assetIds.join(","), size: "150x150", format: "png", isCircular: "false"});
@@ -5459,36 +6863,104 @@ li a.about-link:hover::after {
                         contentArea.innerHTML = '<div class="ROLOCATE_SMARTSEARCH_no-results">No results found</div>';
                         return;
                     }
-                    contentArea.innerHTML = games.map(game => `
-                    <div class="ROLOCATE_SMARTSEARCH_game-card-container">
-                        <a href="https://www.roblox.com/games/${game.rootPlaceId}" class="ROLOCATE_SMARTSEARCH_game-card-link" target="_self">
-                            <div class="ROLOCATE_SMARTSEARCH_game-card">
-                                <div class="ROLOCATE_SMARTSEARCH_thumbnail-loading" data-universe-id="${game.universeId}"></div>
-                                <div class="ROLOCATE_SMARTSEARCH_game-info">
-                                    <h3 class="ROLOCATE_SMARTSEARCH_game-name">${game.name}</h3>
-                                    <p class="ROLOCATE_SMARTSEARCH_game-stats">
-                                        Players: ${formatNumberCount(game.playerCount)} |
-                                        <span class="ROLOCATE_SMARTSEARCH_thumbs-up">👍      ${formatNumberCount(game.totalUpVotes)}</span> |
-                                        <span class="ROLOCATE_SMARTSEARCH_thumbs-down">👎      ${formatNumberCount(game.totalDownVotes)}</span>
-                                    </p>
+                    // the game cards in smart search yea crap thgis took ma long time
+                    contentArea.innerHTML = games.map(game => {
+                        const isInQuickLaunch = isGameInQuickLaunch(game.rootPlaceId);
+                        const quickLaunchEnabled = isQuickLaunchEnabled(); // yea im cool for making a variable to calla function
+                        return `
+                        <div class="ROLOCATE_SMARTSEARCH_game-card-container">
+                            <a href="https://www.roblox.com/games/${game.rootPlaceId}" class="ROLOCATE_SMARTSEARCH_game-card-link" target="_self">
+                                <div class="ROLOCATE_SMARTSEARCH_game-card">
+                                    <div class="ROLOCATE_SMARTSEARCH_thumbnail-loading" data-universe-id="${game.universeId}"></div>
+                                    <div class="ROLOCATE_SMARTSEARCH_game-info">
+                                        <h3 class="ROLOCATE_SMARTSEARCH_game-name">${game.name}</h3>
+                                        <p class="ROLOCATE_SMARTSEARCH_game-stats">
+                                            Players: ${formatNumberCount(game.playerCount)} |
+                                            <span class="ROLOCATE_SMARTSEARCH_thumbs-up">👍      ${formatNumberCount(game.totalUpVotes)}</span> |
+                                            <span class="ROLOCATE_SMARTSEARCH_thumbs-down">👎      ${formatNumberCount(game.totalDownVotes)}</span>
+                                        </p>
+                                    </div>
                                 </div>
-                            </div>
-                        </a>
-                        <button class="ROLOCATE_SMARTSEARCH_play-button"
-                                data-place-id="${game.rootPlaceId}"
-                                title="Quick Join">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M8 5V19L19 12L8 5Z" fill="#4CAF50"/>
-                            </svg>
-                        </button>
-                    </div>
-                `).join('');
+                            </a>
+                            <button class="ROLOCATE_SMARTSEARCH_quicklaunch-button ${isInQuickLaunch ? 'added' : ''} ${!quickLaunchEnabled ? 'disabled' : ''}"
+                                    data-place-id="${game.rootPlaceId}"
+                                    title="${!quickLaunchEnabled ? 'Button disabled: Quick Launch is disabled' : (isInQuickLaunch ? 'Remove from Quick Launch' : 'Add to Quick Launch')}">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="checkmark">
+                                    ${isInQuickLaunch
+                                        ? '<path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+                                        : '<path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+                                    }
+                                </svg>
+                                ${isInQuickLaunch ? `
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="x-mark">
+                                    <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                ` : ''}
+                            </button>
+                            <button class="ROLOCATE_SMARTSEARCH_play-button"
+                                    data-place-id="${game.rootPlaceId}"
+                                    title="Quick Join">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M8 5V19L19 12L8 5Z" fill="#4CAF50"/>
+                                </svg>
+                            </button>
+                        </div>
+                    `}).join('');
                     setTimeout(() => {
+                        // Play button listeners
                         document.querySelectorAll('.ROLOCATE_SMARTSEARCH_play-button').forEach(button => {
                             button.addEventListener('click', function(e) {
-                                e.preventDefault(); e.stopPropagation();
+                                e.preventDefault();
+                                e.stopPropagation();
                                 const placeId = this.getAttribute('data-place-id');
                                 window.location.href = `https://www.roblox.com/games/${placeId}#?ROLOCATE_QUICKJOIN`;
+                            });
+                        });
+
+                        // quick Launch button listeners
+                        document.querySelectorAll('.ROLOCATE_SMARTSEARCH_quicklaunch-button').forEach(button => {
+                            button.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                e.stopPropagation();
+
+                                // a check to do nothing if something breaks and button isnt grayed out for some reason
+                                if (!isQuickLaunchEnabled()) {
+                                    notifications('Button disabled because Quick Launch Games is Disabled.', 'error', '⚠️', '6000');
+                                    return; // do ntohign if disabled
+                                }
+
+                                const placeId = this.getAttribute('data-place-id');
+                                const isAdded = this.classList.contains('added');
+
+                                // ok so basically this like shows the buttons for quicklaunchn. check amrk, x mark, the plus mark, and gray out stuff
+                                if (isAdded) {
+                                    removeFromQuickLaunch(placeId);
+                                    this.classList.remove('added');
+                                    this.title = 'Add to Quick Launch';
+                                    this.innerHTML = `
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        </svg>
+                                    `;
+                                    triggerQuickLaunchUpdate(placeId, 'remove');
+                                    notifications('Removed from Quick Launch Games!', 'success', '', '3000');
+                                } else {
+                                    const success = addToQuickLaunch(placeId);
+                                    if (success) {
+                                        this.classList.add('added');
+                                        this.title = 'Remove from Quick Launch';
+                                        this.innerHTML = `
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="checkmark">
+                                                <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                            </svg>
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="x-mark">
+                                                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                            </svg>
+                                        `;
+                                        triggerQuickLaunchUpdate(placeId, 'add');
+                                        notifications('Added to Quick Launch Games!', 'success', '', '3000');
+                                    }
+                                }
                             });
                         });
                     }, 100);
@@ -5512,6 +6984,7 @@ li a.about-link:hover::after {
             }
         }
 
+        // Uhh user results for the suer thing in smartsearch
         async function fetchUserSearchResults(query) {
             const sessionId = Date.now();
             const apiUrl = `https://apis.roblox.com/search-api/omni-search?verticalType=user&searchQuery=${encodeURIComponent(query)}&pageToken=&globalSessionId=${sessionId}&sessionId=${sessionId}`;
@@ -5524,7 +6997,7 @@ li a.about-link:hover::after {
                     const data = JSON.parse(response.responseText);
                     const userGroup = data.searchResults?.find(group => group.contentGroupType === "User");
                     const apiUsers = userGroup?.contents || [];
-                    const currentUserId = SMARTSEARCH_getCurrentUserId();
+                    const currentUserId = getCurrentUserId();
                     if (currentUserId && !friendListFetched && !friendListFetching) {
                         friendListFetching = true;
                         friendList = await fetchFriendList(currentUserId);
@@ -5543,10 +7016,12 @@ li a.about-link:hover::after {
                                     username: friend.name,
                                     displayName: friend.displayName || friend.name,
                                     isFriend: true,
+                                    hasVerifiedBadge: false,
                                 });
                             }
                         });
                     }
+                    // wow cool programming donehere
                     let combinedResults = [
                         ...apiUsers.map(user => ({...user, isFriend: friendIdSet.has(user.contentId)})),
                         ...matchedFriends.filter(friend => !apiUsers.some(u => u.contentId === friend.contentId))
@@ -5561,20 +7036,30 @@ li a.about-link:hover::after {
                         contentArea.innerHTML = '<div class="ROLOCATE_SMARTSEARCH_no-results">No users found</div>';
                         return;
                     }
+
+                    // whats in the user cards like name, follors, verify badge, friends, and the loading stats text for stats
                     contentArea.innerHTML = users.map(user => `
                         <a href="https://www.roblox.com/users/${user.contentId}/profile" class="ROLOCATE_SMARTSEARCH_user-card-link" target="_self">
                             <div class="ROLOCATE_SMARTSEARCH_user-card">
                                 <div class="ROLOCATE_SMARTSEARCH_thumbnail-loading" data-user-id="${user.contentId}"></div>
                                 <div class="ROLOCATE_SMARTSEARCH_user-info">
-                                    <h3 class="ROLOCATE_SMARTSEARCH_user-display-name">${user.displayName || user.username}</h3>
+                                    <h3 class="ROLOCATE_SMARTSEARCH_user-display-name">
+                                        ${user.displayName || user.username}
+                                        ${user.hasVerifiedBadge ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 28 28" fill="none"><g clip-path="url(#a)"><path fill="#06f" d="m5.888 0 22.11 5.924-5.924 22.11-22.11-5.924z"/><path fill-rule="evenodd" clip-rule="evenodd" d="m20.543 8.75.006.007a1.54 1.54 0 0 1 0 2.176l-8.732 8.732-4.367-4.368a1.54 1.54 0 0 1 0-2.175l.007-.007a1.54 1.54 0 0 1 2.176 0l2.184 2.185 6.55-6.55a1.54 1.54 0 0 1 2.176 0" fill="#fff"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h28v28H0z"/></clipPath></defs></svg>' : ''}
+                                    </h3>
                                     <p class="ROLOCATE_SMARTSEARCH_user-username">
                                         @${user.username}
                                         ${user.isFriend ? '<span class="ROLOCATE_SMARTSEARCH_friend-badge">Friend</span>' : ''}
+                                    </p>
+                                    <p class="ROLOCATE_SMARTSEARCH_user-stats" data-user-id="${user.contentId}">
+                                        <span class="ROLOCATE_SMARTSEARCH_stats-loading">Loading stats...</span>
                                     </p>
                                 </div>
                             </div>
                         </a>
                     `).join('');
+
+                    // this gets the user thumbnails for smartsearch
                     const userIds = users.map(user => user.contentId);
                     const thumbnailBatches = chunkArray(userIds, 10);
                     for (const batch of thumbnailBatches) {
@@ -5588,6 +7073,28 @@ li a.about-link:hover::after {
                             });
                         } catch (error) { ConsoleLogEnabled('Error fetching user thumbnails:', error); }
                     }
+
+                    const statsBatches = chunkArray(userIds, 10);
+                    for (const batch of statsBatches) {
+                        try {
+                            const stats = await fetchUserStatsBatch(batch);
+                            stats.forEach(stat => {
+                            const statsElement = document.querySelector(`.ROLOCATE_SMARTSEARCH_user-stats[data-user-id="${stat.userId}"]`);
+                            if (statsElement) { // ok so basically this is the place for thge svg for the users friends and folowoers yea
+                                statsElement.innerHTML = `
+                                    <span class="ROLOCATE_SMARTSEARCH_stat-item">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:4px"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M23 21v-2a4 4 0 0 0-3-3.87m-4-12a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                        ${formatNumberCount(stat.friendCount)} Friends
+                                    </span>&nbsp|&nbsp
+                                    <span class="ROLOCATE_SMARTSEARCH_stat-item">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:4px"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 8v6m3-3h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                        ${formatNumberCount(stat.followerCount)} Followers
+                                    </span>
+                                `;
+                            }
+                            });
+                        } catch (error) { ConsoleLogEnabled('Error fetching user stats:', error); }
+                    }
                 } else contentArea.innerHTML = '<div class="ROLOCATE_SMARTSEARCH_error">Error loading user results</div>';
             } catch (error) {
                 ConsoleLogEnabled('Error in user search:', error);
@@ -5595,6 +7102,8 @@ li a.about-link:hover::after {
             }
         }
 
+        // reading the furnciton name should tell u what this is
+        // ok so basically it shows members created and verified and logo and yea more stuff
         async function fetchGroupSearchResults(query) {
             const apiUrl = `https://groups.roblox.com/v1/groups/search?cursor=&keyword=${encodeURIComponent(query)}&limit=25&prioritizeExactMatch=true&sortOrder=Asc`;
             contentArea.innerHTML = '<div class="ROLOCATE_SMARTSEARCH_loading">Loading groups...</div>';
@@ -5610,18 +7119,22 @@ li a.about-link:hover::after {
                         return;
                     }
                     contentArea.innerHTML = groups.map(group => `
-                    <a href="https://www.roblox.com/groups/${group.id}" class="ROLOCATE_SMARTSEARCH_group-card-link" target="_self">
-                        <div class="ROLOCATE_SMARTSEARCH_group-card">
-                            <div class="ROLOCATE_SMARTSEARCH_thumbnail-loading" data-group-id="${group.id}"></div>
-                            <div class="ROLOCATE_SMARTSEARCH_group-info">
-                                <h3 class="ROLOCATE_SMARTSEARCH_group-name">${group.name}</h3>
-                                <p class="ROLOCATE_SMARTSEARCH_group-members">Members: ${formatNumberCount(group.memberCount)}</p>
-                                <p class="ROLOCATE_SMARTSEARCH_group-created">Created: ${formatDate(group.created)}</p>
+                        <a href="https://www.roblox.com/groups/${group.id}" class="ROLOCATE_SMARTSEARCH_group-card-link" target="_self">
+                            <div class="ROLOCATE_SMARTSEARCH_group-card">
+                                <div class="ROLOCATE_SMARTSEARCH_thumbnail-loading" data-group-id="${group.id}"></div>
+                                <div class="ROLOCATE_SMARTSEARCH_group-info">
+                                    <h3 class="ROLOCATE_SMARTSEARCH_group-name">
+                                        ${group.name}
+                                        ${group.hasVerifiedBadge ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 28 28" fill="none"><g clip-path="url(#a)"><path fill="#06f" d="m5.888 0 22.11 5.924-5.924 22.11-22.11-5.924z"/><path fill-rule="evenodd" clip-rule="evenodd" d="m20.543 8.75.006.007a1.54 1.54 0 0 1 0 2.176l-8.732 8.732-4.367-4.368a1.54 1.54 0 0 1 0-2.175l.007-.007a1.54 1.54 0 0 1 2.176 0l2.184 2.185 6.55-6.55a1.54 1.54 0 0 1 2.176 0" fill="#fff"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h28v28H0z"/></clipPath></defs></svg>' : ''}
+                                    </h3>
+                                    <p class="ROLOCATE_SMARTSEARCH_group-members">Members: ${formatNumberCount(group.memberCount)}</p>
+                                    <p class="ROLOCATE_SMARTSEARCH_group-created">Created: ${formatDate(group.created)}</p>
+                                </div>
                             </div>
-                        </div>
-                    </a>
-                `).join('');
+                        </a>
+                    `).join('');
                     const groupIds = groups.map(group => group.id);
+                    // ten thumbnail batchs at a time
                     const thumbnailBatches = chunkArray(groupIds, 10);
                     for (const batch of thumbnailBatches) {
                         try {
@@ -5927,13 +7440,13 @@ li a.about-link:hover::after {
             align-items: center !important;
             border: 2px solid #2c2f36 !important;
             border-radius: 8px !important;
-            background-color: #191a1f !important;
+            background-color: ${isDarkMode() ? '#191a1f' : '#C1B19A'} !important;
             transition: all 0.3s ease !important;
             z-index: 1000 !important;
         }
         .ROLOCATE_SMARTSEARCH_form-has-feedback:focus-within,
         .ROLOCATE_SMARTSEARCH_form-has-feedback.ROLOCATE_SMARTSEARCH_menu-open {
-            border-color: #00b2ff !important;
+            border-color: ${isDarkMode() ? '#00b2ff' : '#2c2f36'} !important;
         }
         .ROLOCATE_SMARTSEARCH_form-has-feedback.ROLOCATE_SMARTSEARCH_menu-open {
             border-bottom-left-radius: 0 !important;
@@ -5948,8 +7461,8 @@ li a.about-link:hover::after {
             left: -2px !important;
             right: -2px !important;
             height: 12px !important;
-            border-left: 2px solid #00b2ff !important;
-            border-right: 2px solid #00b2ff !important;
+            border-left: 2px solid ${isDarkMode() ? '#00b2ff' : '#2c2f36'} !important;
+            border-right: 2px solid ${isDarkMode() ? '#00b2ff' : '#2c2f36'} !important;
             background-color: transparent !important;
             z-index: 1000 !important;
         }
@@ -5957,7 +7470,7 @@ li a.about-link:hover::after {
             width: 100% !important;
             border: none !important;
             background-color: transparent !important;
-            color: #ffffff !important;
+            color: ${isDarkMode() ? 'white' : 'black'} !important;
             padding: 8px 36px 8px 12px !important;
             font-size: 16px !important;
             height: 27px !important;
@@ -5968,7 +7481,7 @@ li a.about-link:hover::after {
             box-shadow: none !important;
         }
         .ROLOCATE_SMARTSEARCH_custom-search-input::placeholder {
-            color: #8a8d93 !important;
+            color: ${isDarkMode() ? '#8a8d93' : '#75726C'} !important;
             opacity: 1 !important;
         }
         .ROLOCATE_SMARTSEARCH_custom-search-icon {
@@ -5982,17 +7495,17 @@ li a.about-link:hover::after {
         }
         .ROLOCATE_SMARTSEARCH_form-has-feedback:focus-within .ROLOCATE_SMARTSEARCH_custom-search-icon,
         .ROLOCATE_SMARTSEARCH_form-has-feedback.ROLOCATE_SMARTSEARCH_menu-open .ROLOCATE_SMARTSEARCH_custom-search-icon {
-            color: #00b2ff !important;
+            color: ${isDarkMode() ? '#00b2ff' : '#C1B19A'} !important;
         }
         .ROLOCATE_SMARTSEARCH_search-dropdown-menu {
             position: absolute !important;
             top: calc(100% - 2px) !important;
             left: 0 !important;
             width: 100% !important;
-            background-color: #191a1f !important;
-            border-left: 2px solid #00b2ff !important;
-            border-right: 2px solid #00b2ff !important;
-            border-bottom: 2px solid #00b2ff !important;
+            background-color: ${isDarkMode() ? '#191a1f' : '#E0D8CC'} !important;
+            border-left: 2px solid ${isDarkMode() ? '#00b2ff' : '#2c2f36'} !important;
+            border-right: 2px solid ${isDarkMode() ? '#00b2ff' : '#2c2f36'} !important;
+            border-bottom: 2px solid ${isDarkMode() ? '#00b2ff' : '#2c2f36'} !important;
             border-top: none !important;
             border-radius: 0 0 8px 8px !important;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
@@ -6008,15 +7521,15 @@ li a.about-link:hover::after {
         }
         .ROLOCATE_SMARTSEARCH_dropdown-nav-tabs {
             display: flex !important;
-            background-color: #1e2025 !important;
-            border-bottom: 1px solid #2c2f36 !important;
+            background-color: ${isDarkMode() ? '#1e2025' : '#C1B19A'} !important;
+            border-bottom: 1px solid ${isDarkMode() ? '#2c2f36' : '#2c2f36'} !important;
         }
         .ROLOCATE_SMARTSEARCH_dropdown-tab {
             flex: 1 !important;
             padding: 12px 16px !important;
             background: none !important;
             border: none !important;
-            color: #8a8d93 !important;
+            color: ${isDarkMode() ? '#8a8d93' : 'white'} !important;
             font-size: 16px !important;
             font-weight: 500 !important;
             cursor: pointer !important;
@@ -6024,13 +7537,13 @@ li a.about-link:hover::after {
             border-bottom: 2px solid transparent !important;
         }
         .ROLOCATE_SMARTSEARCH_dropdown-tab:hover {
-            color: #ffffff !important;
+            color: ${isDarkMode() ? 'white' : '#f7eddf'} !important;
             background-color: rgba(255, 255, 255, 0.05) !important;
         }
         .ROLOCATE_SMARTSEARCH_dropdown-tab.ROLOCATE_SMARTSEARCH_active {
-            color: #00b2ff !important;
-            border-bottom-color: #00b2ff !important;
-            background-color: rgba(0, 178, 255, 0.1) !important;
+            color: ${isDarkMode() ? '#00b2ff' : '#f7eddf'} !important;
+            border-bottom-color: ${isDarkMode() ? '#00b2ff' : '#2c2f36'} !important;
+            background-color: ${isDarkMode() ? 'rgba(0, 178, 255, 0.1)' : 'rgba(224, 216, 204, 0.25)'} !important;
         }
         .ROLOCATE_SMARTSEARCH_dropdown-content {
             padding: 10px !important;
@@ -6039,12 +7552,12 @@ li a.about-link:hover::after {
             display: block !important;
         }
         .ROLOCATE_SMARTSEARCH_content-text {
-            color: #ffffff !important;
+            color: ${isDarkMode() ? 'white' : 'black'} !important;
             font-size: 16px !important;
             text-align: center !important;
         }
         .ROLOCATE_SMARTSEARCH_content-text strong {
-            color: #00b2ff !important;
+            color: ${isDarkMode() ? '#00b2ff' : '#8a7e6d'} !important;
         }
         .navbar-left.navbar-search {
             z-index: 1001 !important;
@@ -6064,12 +7577,12 @@ li a.about-link:hover::after {
             display: flex;
             align-items: center;
             padding: 8px;
-            background-color: #1e2025;
+            background-color: ${isDarkMode() ? '#1e2025' : '#C1B19A'} !important;
             border-radius: 8px;
             transition: background-color 0.2s ease;
         }
         .ROLOCATE_SMARTSEARCH_game-card:hover {
-            background-color: #2c2f36;
+            background-color: ${isDarkMode() ? '#2c2f36' : '#b3a694'} !important;
         }
         .ROLOCATE_SMARTSEARCH_thumbnail-loading {
             width: 50px;
@@ -6104,8 +7617,89 @@ li a.about-link:hover::after {
         .ROLOCATE_SMARTSEARCH_game-info {
             flex: 1;
             overflow: hidden;
-            padding-right: 40px !important;
+            padding-right: 90px !important;
         }
+        /*QuickLaunchGames styles on smart search*/
+        .ROLOCATE_SMARTSEARCH_quicklaunch-button {
+            position: absolute;
+            right: 54px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 36px;
+            height: 36px;
+            border-radius: 6px;
+            background: rgba(93, 120, 255, 0.2);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            z-index: 2;
+            color: #5d78ff;
+        }
+
+        .ROLOCATE_SMARTSEARCH_quicklaunch-button:hover {
+            background: rgba(93, 120, 255, 0.3);
+            transform: translateY(-50%) scale(1.05);
+        }
+
+        .ROLOCATE_SMARTSEARCH_quicklaunch-button.added {
+            background: rgba(76, 175, 80, 0.2);
+            color: #4CAF50;
+        }
+
+        .ROLOCATE_SMARTSEARCH_quicklaunch-button.added:hover {
+            background: rgba(244, 67, 54, 0.3);
+            color: #f44336;
+        }
+
+        .ROLOCATE_SMARTSEARCH_quicklaunch-button svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        /* svg switching on smartsearch quicklaunch wow ik so cool */
+        .ROLOCATE_SMARTSEARCH_quicklaunch-button .x-mark {
+            display: none;
+            position: absolute;
+        }
+
+        .ROLOCATE_SMARTSEARCH_quicklaunch-button .checkmark {
+            display: block;
+        }
+
+        .ROLOCATE_SMARTSEARCH_quicklaunch-button.added:hover .checkmark {
+            display: none;
+        }
+
+        .ROLOCATE_SMARTSEARCH_quicklaunch-button.added:hover .x-mark {
+            display: block;
+        }
+        /* sisabled state oif thew quicklauncha dd buttons */
+        .ROLOCATE_SMARTSEARCH_quicklaunch-button.disabled,
+        .ROLOCATE_SMARTSEARCH_quicklaunch-button:disabled {
+            background: rgba(128, 128, 128, 0.2);
+            color: #6a6e7d;
+            opacity: 0.5;
+        }
+        .ROLOCATE_SMARTSEARCH_quicklaunch-button.disabled:hover,
+        .ROLOCATE_SMARTSEARCH_quicklaunch-button:disabled:hover {
+            background: rgba(128, 128, 128, 0.2);
+            transform: translateY(-50%) scale(1.05);
+            color: #6a6e7d;
+        }
+
+        .ROLOCATE_SMARTSEARCH_quicklaunch-button.disabled .checkmark,
+        .ROLOCATE_SMARTSEARCH_quicklaunch-button:disabled .checkmark {
+            display: block;
+        }
+
+        .ROLOCATE_SMARTSEARCH_quicklaunch-button.disabled .x-mark,
+        .ROLOCATE_SMARTSEARCH_quicklaunch-button:disabled .x-mark {
+            display: none;
+        }
+        /* game name stuff */
         .ROLOCATE_SMARTSEARCH_game-name {
             font-size: 16px;
             color: #ffffff;
@@ -6126,7 +7720,6 @@ li a.about-link:hover::after {
         .ROLOCATE_SMARTSEARCH_thumbs-down {
             color: #f44336;
         }
-        /* Play button styles - square with rounded edges */
         .ROLOCATE_SMARTSEARCH_play-button {
             position: absolute;
             right: 12px;
@@ -6163,12 +7756,12 @@ li a.about-link:hover::after {
             align-items: center;
             padding: 8px;
             margin: 6px 0;
-            background-color: #1e2025;
+            background-color: ${isDarkMode() ? '#1e2025' : '#C1B19A'} !important;
             border-radius: 8px;
             transition: background-color 0.2s ease;
         }
         .ROLOCATE_SMARTSEARCH_user-card:hover {
-            background-color: #2c2f36;
+            background-color: ${isDarkMode() ? '#2c2f36' : '#b3a694'} !important;
         }
         .ROLOCATE_SMARTSEARCH_user-thumbnail {
             width: 50px;
@@ -6195,8 +7788,26 @@ li a.about-link:hover::after {
             color: #8a8d93;
             margin: 0;
             white-space: nowrap;
+            overflow: visible;
+            text-overflow: ellipsis;
+            display: flex;
+            align-items: center;
+        }
+        .ROLOCATE_SMARTSEARCH_user-stats {
+            font-size: 14px;
+            color: #6d717a;
+            margin: 4px 0 0 0;
+            white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+        }
+        .ROLOCATE_SMARTSEARCH_stat-item {
+            color: #8a8d93;
+        }
+        .ROLOCATE_SMARTSEARCH_stats-loading {
+            color: #6d717a;
+            font-style: italic;
+            font-size: 13px;
         }
         /* Group card styles */
         .ROLOCATE_SMARTSEARCH_group-card-link {
@@ -6209,12 +7820,12 @@ li a.about-link:hover::after {
             align-items: center;
             padding: 8px;
             margin: 6px 0;
-            background-color: #1e2025;
+            background-color: ${isDarkMode() ? '#1e2025' : '#C1B19A'} !important;
             border-radius: 8px;
             transition: background-color 0.2s ease;
         }
         .ROLOCATE_SMARTSEARCH_group-card:hover {
-            background-color: #2c2f36;
+            background-color: ${isDarkMode() ? '#2c2f36' : '#b3a694'} !important;
         }
         .ROLOCATE_SMARTSEARCH_group-thumbnail {
             width: 50px;
@@ -6257,12 +7868,12 @@ li a.about-link:hover::after {
             align-items: center;
             padding: 8px;
             margin: 6px 0;
-            background-color: #1e2025;
+            background-color: ${isDarkMode() ? '#1e2025' : '#C1B19A'} !important;
             border-radius: 8px;
             transition: background-color 0.2s ease;
         }
         .ROLOCATE_SMARTSEARCH_catalog-card:hover {
-            background-color: #2c2f36;
+            background-color: ${isDarkMode() ? '#2c2f36' : '#b3a694'} !important;
         }
         .ROLOCATE_SMARTSEARCH_catalog-thumbnail {
             width: 50px;
@@ -6307,15 +7918,15 @@ li a.about-link:hover::after {
             display: inline-block;
             background-color: #6b7280;
             color: #ffffff;
-            font-size: 16px;
+            font-size: 14px;
             font-weight: 500;
-            padding: 3px 8px;
+            padding: 2px 6px;
             border-radius: 4px;
             margin-left: 8px;
             vertical-align: middle;
             line-height: 1.2;
             letter-spacing: 0.025em;
-            transform: translateY(-3px);
+            transform: translateY(-1px);
             border: 1px solid #d1d5db;
         }
         `;
@@ -6435,7 +8046,7 @@ li a.about-link:hover::after {
                     <div class="container-header people-list-header">
                         <div class="ROLOCATE_QUICKLAUNCHGAMES_header-content">
                             <div class="ROLOCATE_QUICKLAUNCHGAMES_title">Quick Launch Games</div>
-                            <div class="ROLOCATE_QUICKLAUNCHGAMES_subtitle">Click ◀ ▶ to reorder • Click to play</div>
+                            <div class="ROLOCATE_QUICKLAUNCHGAMES_subtitle">Drag to reorder • Click to play</div>
                         </div>
                     </div>
                     <div class="ROLOCATE_QUICKLAUNCHGAMES_game-grid-container">
@@ -6456,7 +8067,7 @@ li a.about-link:hover::after {
                 const style = document.createElement('style');
                 style.textContent = `
                     .ROLOCATE_QUICKLAUNCHGAMES_new-games-container {
-                        background: #1a1c23;
+                        background: ${isDarkMode() ? '#1a1c23' : '#E0D8CC'};
                         padding: 20px;
                         margin: 16px 0;
                         margin-bottom: 32px;
@@ -6528,15 +8139,14 @@ li a.about-link:hover::after {
                     .ROLOCATE_QUICKLAUNCHGAMES_add-tile {
                         flex: 0 0 auto;
                         width: 170px;
-                        height: 230px;
-                        background: linear-gradient(145deg, #23252d, #1e2028);
+                        height: 240px;
+                        background: ${isDarkMode() ? 'linear-gradient(145deg, #23252d, #1e2028)' : '#C1B19A'};
                         border-radius: 14px;
                         display: flex;
                         align-items: center;
                         justify-content: center;
                         cursor: pointer;
                         transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-                        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
                         position: relative;
                         overflow: hidden;
                         border: 1px solid rgba(255, 255, 255, 0.05);
@@ -6556,7 +8166,6 @@ li a.about-link:hover::after {
 
                     .ROLOCATE_QUICKLAUNCHGAMES_add-tile:hover {
                         transform: translateY(4px) scale(1.03);
-                        box-shadow: 0 14px 28px rgba(0, 0, 0, 0.35);
                     }
 
                     .ROLOCATE_QUICKLAUNCHGAMES_add-tile:hover::before {
@@ -6589,26 +8198,24 @@ li a.about-link:hover::after {
                     .ROLOCATE_QUICKLAUNCHGAMES_add-text {
                         font-size: 15px;
                         font-weight: 600;
-                        color: #d0d4e0;
+                        color: ${isDarkMode() ? '#d0d4e0' : 'black'};
                         letter-spacing: 0.3px;
                     }
 
                     .ROLOCATE_QUICKLAUNCHGAMES_game-tile {
                         flex: 0 0 auto;
                         width: 170px;
-                        background: linear-gradient(145deg, #23252d, #1e2028);
+                        background: ${isDarkMode() ? 'linear-gradient(145deg, #23252d, #1e2028)' : '#C1B19A'};
                         border-radius: 14px;
                         overflow: hidden;
                         transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease;
                         cursor: pointer;
                         position: relative;
-                        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
                         border: 1px solid rgba(255, 255, 255, 0.05);
                     }
 
                     .ROLOCATE_QUICKLAUNCHGAMES_game-tile:hover {
                         transform: translateY(-7px) scale(1.04);
-                        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
                         z-index: 10;
                     }
 
@@ -6635,7 +8242,7 @@ li a.about-link:hover::after {
                         padding: 14px 16px;
                         font-size: 14px;
                         font-weight: 600;
-                        color: #f0f2f6;
+                        color: ${isDarkMode() ? '#f0f2f6' : 'black'};
                         white-space: nowrap;
                         overflow: hidden;
                         text-overflow: ellipsis;
@@ -6649,7 +8256,7 @@ li a.about-link:hover::after {
                         display: flex;
                         justify-content: space-between;
                         align-items: center;
-                        background: rgba(28, 30, 38, 0.85);
+                        background: ${isDarkMode() ? 'rgba(28, 30, 38, 0.85);' : '#C1B19A'};
                         position: relative;
                         border-top: 1px solid rgba(255, 255, 255, 0.05);
                     }
@@ -6658,7 +8265,7 @@ li a.about-link:hover::after {
                         display: flex;
                         align-items: center;
                         font-size: 12px;
-                        color: #b8b9bf;
+                        color: ${isDarkMode() ? '#b8b9bf' : 'black'};
                         gap: 4px;
                         font-weight: 500;
                     }
@@ -6680,63 +8287,27 @@ li a.about-link:hover::after {
                         filter: drop-shadow(0 1px 1px rgba(0,0,0,0.3));
                     }
 
-                    .ROLOCATE_QUICKLAUNCHGAMES_arrow-controls {
-                        position: absolute;
-                        top: 55%;
-                        left: 50%;
-                        transform: translate(-50%, -50%);
-                        display: flex;
-                        flex-direction: row;
-                        gap: 8px;
-                        opacity: 0;
-                        transition: opacity 0.2s ease;
-                        z-index: 3;
-                        pointer-events: none;
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-tile {
+                        cursor: grab;
                     }
 
-                    .ROLOCATE_QUICKLAUNCHGAMES_game-tile:hover .ROLOCATE_QUICKLAUNCHGAMES_arrow-controls {
-                        opacity: 1;
-                        pointer-events: auto;
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-tile.dragging {
+                        border: 2px dashed #5d78ff !important;
+                        background: rgba(93, 120, 255, 0.1) !important;
+                        transform: scale(0.95);
+                        cursor: grabbing;
                     }
 
-                    .ROLOCATE_QUICKLAUNCHGAMES_arrow-btn {
-                        width: 25px;
-                        height: 25px;
-                        border-radius: 8px;
-                        background: rgba(20, 22, 30, 0.92);
-                        border: 1px solid rgba(255, 255, 255, 0.12);
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        cursor: pointer;
-                        color: #a0a5b1;
-                        font-size: 16px;
-                        font-weight: bold;
-                        transition: all 0.25s ease;
-                        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-tile.drag-over {
+                        border: 1px solid rgba(255, 255, 255, 0.05);
                     }
-
-                    .ROLOCATE_QUICKLAUNCHGAMES_arrow-btn:hover {
-                        background: rgba(93, 120, 255, 0.45);
-                        color: #ffffff;
-                        transform: scale(1.15) translateY(-2px);
-                        box-shadow: 0 4px 10px rgba(93, 120, 255, 0.3);
-                    }
-
-                    .ROLOCATE_QUICKLAUNCHGAMES_arrow-btn:disabled {
-                        opacity: 0.4;
-                        cursor: not-allowed;
-                        transform: none;
-                        background: rgba(60, 64, 78, 0.6);
-                    }
-
                     .ROLOCATE_QUICKLAUNCHGAMES_remove-button {
                         position: absolute;
                         top: 10px;
                         right: 10px;
                         width: 25px;
                         height: 25px;
-                        background: rgba(20, 22, 30, 0.85);
+                        background: ${isDarkMode() ? 'rgba(20, 22, 30, 0.85);' : '#C1B19A'};
                         border-radius: 8px;
                         display: flex;
                         align-items: center;
@@ -6812,7 +8383,6 @@ li a.about-link:hover::after {
                         animation: moveTile 0.4s ease;
                     }
 
-                    /* Popup styles (unchanged) */
                     .ROLOCATE_QUICKLAUNCHGAMES_popup-overlay {
                         position: fixed;
                         top: 0;
@@ -6834,7 +8404,6 @@ li a.about-link:hover::after {
                         padding: 32px;
                         width: 440px;
                         max-width: 90vw;
-                        box-shadow: 0 40px 70px rgba(0, 0, 0, 0.7);
                         border: 1px solid rgba(255, 255, 255, 0.08);
                         transform: scale(0.9);
                         animation: popupIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
@@ -6955,7 +8524,6 @@ li a.about-link:hover::after {
 
                     .ROLOCATE_QUICKLAUNCHGAMES_add-tile:active {
                         transform: translateY(2px) scale(0.97) !important;
-                        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
                     }
 
                     .ROLOCATE_QUICKLAUNCHGAMES_add-tile.clicked {
@@ -7010,26 +8578,6 @@ li a.about-link:hover::after {
                     localStorage.setItem('ROLOCATE_quicklaunch_games_storage', JSON.stringify(order));
                 }
 
-                function moveTile(tile, direction) {
-                    const gameGrid = document.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_game-grid');
-                    const tiles = Array.from(gameGrid.querySelectorAll('.ROLOCATE_QUICKLAUNCHGAMES_game-tile'));
-                    const index = tiles.indexOf(tile);
-
-                    if (direction === 'left' && index > 0) {
-                        const target = tiles[index - 1];
-                        gameGrid.insertBefore(tile, target);
-                        tile.classList.add('moving');
-                        setTimeout(() => tile.classList.remove('moving'), 400);
-                    } else if (direction === 'right' && index < tiles.length - 1) {
-                        const target = tiles[index + 1];
-                        gameGrid.insertBefore(tile, target.nextSibling);
-                        tile.classList.add('moving');
-                        setTimeout(() => tile.classList.remove('moving'), 400);
-                    }
-
-                    saveCurrentOrder();
-                }
-
                 function addGameTile(gameId, gameDetails = null) {
                     const gameGrid = document.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_game-grid');
                     if (!gameGrid) return;
@@ -7058,10 +8606,6 @@ li a.about-link:hover::after {
                             </div>
                         </a>
                         <div class="ROLOCATE_QUICKLAUNCHGAMES_remove-button"></div>
-                        <div class="ROLOCATE_QUICKLAUNCHGAMES_arrow-controls">
-                            <button class="ROLOCATE_QUICKLAUNCHGAMES_arrow-btn left" title="Move left">◀</button>
-                            <button class="ROLOCATE_QUICKLAUNCHGAMES_arrow-btn right" title="Move right">▶</button>
-                        </div>
                     `;
 
                     gameGrid.insertBefore(gameTile, gameGrid.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_add-tile'));
@@ -7080,26 +8624,57 @@ li a.about-link:hover::after {
                         }, 400);
                     });
 
-                    // arrow button
-                    const leftBtn = gameTile.querySelector('.left');
-                    const rightBtn = gameTile.querySelector('.right');
+                    // the drag and drop stuff
+                    gameTile.draggable = true;
 
-                    leftBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        moveTile(gameTile, 'left');
+                    gameTile.addEventListener('dragstart', (e) => {
+                        gameTile.classList.add('dragging');
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setDragImage(gameTile, 85, 120); // tells browser to use the actual cards as a dragging thingy
+                        e.dataTransfer.setData('text/html', gameTile.innerHTML);
                     });
 
-                    rightBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        moveTile(gameTile, 'right');
+                    gameTile.addEventListener('dragend', (e) => {
+                        gameTile.classList.remove('dragging');
+                        document.querySelectorAll('.ROLOCATE_QUICKLAUNCHGAMES_game-tile').forEach(tile => {
+                            tile.classList.remove('drag-over');
+                        });
                     });
 
-                    // udpat ethe vbuyttons whenever hover
-                    gameTile.addEventListener('mouseenter', () => {
-                        const tiles = Array.from(document.querySelectorAll('.ROLOCATE_QUICKLAUNCHGAMES_game-tile'));
-                        const index = tiles.indexOf(gameTile);
-                        leftBtn.disabled = index === 0;
-                        rightBtn.disabled = index === tiles.length - 1;
+                    gameTile.addEventListener('dragover', (e) => {
+                        e.preventDefault();
+                        const draggingTile = document.querySelector('.dragging');
+                        if (draggingTile && draggingTile !== gameTile) {
+                            const gameGrid = document.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_game-grid');
+                            const bounding = gameTile.getBoundingClientRect();
+
+                            // lets go geometry finally becoming useful.
+                            // calcualtes the midpoint
+                            const offset = e.clientX - bounding.left;
+                            const isPastMidpoint = offset > bounding.width / 2;
+
+                            const allTiles = [...gameGrid.querySelectorAll('.ROLOCATE_QUICKLAUNCHGAMES_game-tile')];
+                            const draggingIndex = allTiles.indexOf(draggingTile);
+                            const targetIndex = allTiles.indexOf(gameTile);
+
+                            // Ooly swap if we've actually moved past the center to prevent like a dumb flicker. this took too long to figure out a solution to
+                            if (draggingIndex < targetIndex && isPastMidpoint) {
+                                gameGrid.insertBefore(draggingTile, gameTile.nextSibling);
+                            } else if (draggingIndex > targetIndex && !isPastMidpoint) {
+                                gameGrid.insertBefore(draggingTile, gameTile);
+                            }
+                        }
+                    });
+
+                    gameTile.addEventListener('dragleave', (e) => {
+                        gameTile.classList.remove('drag-over');
+                    });
+
+                    gameTile.addEventListener('drop', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        gameTile.classList.remove('drag-over');
+                        saveCurrentOrder();
                     });
 
                     // load detials of the gmae
@@ -7151,7 +8726,11 @@ li a.about-link:hover::after {
                             <label for="gameIdInput">Game ID:</label>
                             <input type="text" id="gameIdInput" placeholder="Enter game ID | RoLocate by Oqarshi">
                             <small style="display:block; margin-top:4px; color:#aaa;">
-                                Example: roblox.com/games/<b style="color:#4da6ff;">17625359962</b>/RIVALS
+                              Example: roblox.com/games/<b style="color:#4da6ff;">17625359962</b>/RIVALS
+                              <br>
+                              OR
+                              <br>
+                              Use SmartSearch to add a new game
                             </small>
                             <div class="ROLOCATE_QUICKLAUNCHGAMES_popup-buttons" style="margin-top:12px;">
                                 <button class="ROLOCATE_QUICKLAUNCHGAMES_popup-button cancel">Cancel</button>
@@ -7221,6 +8800,27 @@ li a.about-link:hover::after {
                 addButton.addEventListener('click', showAddGamePopup);
 
                 setTimeout(loadSavedGames, 100);
+                // listen for updates from SmartSearch and then uopdate quicklaunch
+                window.addEventListener('quicklaunch-update', function(e) {
+                    const { placeId, action } = e.detail;
+
+                    if (action === 'add') {
+                        // Check if already exists
+                        const existingTile = document.querySelector(`.ROLOCATE_QUICKLAUNCHGAMES_game-tile[data-game-id="${placeId}"]`);
+                        if (!existingTile) {
+                            addGameTile(placeId);
+                        }
+                    } else if (action === 'remove') {
+                        // Find and remove the tile
+                        const tileToRemove = document.querySelector(`.ROLOCATE_QUICKLAUNCHGAMES_game-tile[data-game-id="${placeId}"]`);
+                        if (tileToRemove) {
+                            tileToRemove.classList.add('removing');
+                            setTimeout(() => {
+                                tileToRemove.remove();
+                            }, 400);
+                        }
+                    }
+                });
             }
         });
 
@@ -7292,7 +8892,7 @@ li a.about-link:hover::after {
 
 
             .friend-tile-dropdown {
-                background: #1a1c23 !important;
+                background: ${isDarkMode() ? '#1a1c23' : '#C1B19A'} !important;
                 border: 1px solid rgba(148, 163, 184, 0.2) !important;
                 border-radius: 8px !important;
                 box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
@@ -7650,13 +9250,13 @@ li a.about-link:hover::after {
             const bestFriends = getBestFriends();
             if (bestFriends.size === 0) return;
 
-            // create best friends section tf
+            // create best friends section
             const bestFriendsSection = document.createElement('div');
             bestFriendsSection.className = 'best-friends-section';
             bestFriendsSection.style.cssText = `
-        background-color: #1a1c23;
+        background-color: ${isDarkMode() ? '#1a1c23' : '#E0D8CC'};
         border-radius: 12px;
-        border: 1px solid #2a2a30;
+        border: 1px solid ${isDarkMode() ? '#2a2a30' : '#C1B19A'};
         padding: 12px;
         box-sizing: border-box;
         margin: 0 0 16px 0;
@@ -7674,7 +9274,7 @@ li a.about-link:hover::after {
             const headerTitle = document.createElement('h2');
             headerTitle.textContent = 'Best Friends';
             headerTitle.style.cssText = `
-        color: #ffffff;
+        color: ${isDarkMode() ? 'white' : 'black'};
         font-size: 18px;
         font-weight: 600;
         margin: 0;
@@ -7912,7 +9512,7 @@ li a.about-link:hover::after {
             nameLabel.className = 'friend-name';
             nameLabel.textContent = friend.displayName || friend.name;
             nameLabel.style.cssText = `
-        color: #ffffff;
+        color: ${isDarkMode() ? 'white' : 'black'};
         font-size: 12px;
         font-weight: 500;
         overflow: hidden;
@@ -8486,7 +10086,7 @@ li a.about-link:hover::after {
         const handleBestFriendsButtonClick = () => {
             showBestFriendsPopup();
             notifications('Once you pick your best friends, make sure to refresh the page for it to show best friends!', 'info', '', '6000');
-            notifications('This feature is still buggy and incomplete. Remove best friends if it causes any issues.', 'warning', '👤', '12000');
+            notifications('This feature is still buggy and incomplete. Remove best friends if it causes any issues.', 'warning', '', '12000');
         };
 
         // create person icon SVG
@@ -8637,10 +10237,9 @@ li a.about-link:hover::after {
         const applyFriendsContainerStyling = () => {
             const friendsContainerElement = document.querySelector('.friend-carousel-container');
             if (!friendsContainerElement) return false;
-
-            friendsContainerElement.style.backgroundColor = '#1a1c23';
+            friendsContainerElement.style.backgroundColor = `${isDarkMode() ? '#1a1c23' : '#E0D8CC'}`;
             friendsContainerElement.style.borderRadius = '12px';
-            friendsContainerElement.style.border = '1px solid #2a2a30';
+            friendsContainerElement.style.border = `1px solid ${isDarkMode() ? '#1a1c23' : '#C1B19A'}`;
             friendsContainerElement.style.padding = '12px';
             friendsContainerElement.style.boxSizing = 'border-box';
             friendsContainerElement.style.margin = '0 0 16px 0';
@@ -8744,7 +10343,7 @@ li a.about-link:hover::after {
             "h1", "h2", "h3", "li", "p"
         ];
 
-        function isElementInOverrideContainer(element) { // override
+        function isElementInOverrideContainer(element) { // stuff that the script did not catch
             return !!element.closest(`
                 .container-header.people-list-header,
                 .server-list-container-header,
@@ -8760,7 +10359,8 @@ li a.about-link:hover::after {
                 .catalog-header,
                 .chat-search-input,
                 .select-friends-input,
-                .content-action-utility
+                .content-action-utility,
+                #user-profile-header-AddFriend
             `.replace(/\s+/g, ''));
         }
 
@@ -8800,7 +10400,9 @@ li a.about-link:hover::after {
                             lowerClassName.includes("game-name") ||
                             lowerClassName.includes("settings-container") ||
                             lowerClassName.includes("text-overflow") ||
-                            lowerClassName.includes("profile-about-content-text")
+                            lowerClassName.includes("profile-about-content-text") ||
+                            lowerClassName.includes("toast-message") ||
+                            lowerClassName.includes("dummy-class-for-server-region-edit-so-restoreclassicterms-can-target-this") // yea im the best ikr
                         ) {
                             return true;
                         }
@@ -8925,6 +10527,2540 @@ li a.about-link:hover::after {
     }
 
     /*******************************************************
+    name of function: fetchServerDetails
+    description: Function to fetch server details so game id and job id. yea!
+    *******************************************************/
+    // WARNING: Do not republish this script. Licensed for personal use only.
+    // oneday I will change the variable names from ip to datacenters
+    async function fetchServerDetails(gameId, jobId) { //here!
+        const useBatching = localStorage.ROLOCATE_fastservers === "true";
+
+        if (!useBatching) {
+            return new Promise((resolve, reject) => {
+                GM_xmlhttpRequest({
+                    method: "POST",
+                    url: "https://gamejoin.roblox.com/v1/join-game-instance",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "User-Agent": "Roblox/WinInet",
+                    },
+                    data: JSON.stringify({
+                        placeId: gameId,
+                        gameId: jobId
+                    }),
+                    onload: function(response) {
+                        const json = JSON.parse(response.responseText);
+                        ConsoleLogEnabled("API Response:", json);
+
+                        if (json.status === 12 && json.message === 'You need to purchase access to this game before you can play.') {
+                            reject('purchase_required');
+                            return;
+                        }
+
+                        if (json.status === 12 && json.message === 'Cannot join this non-root place due to join restrictions') {
+                            reject('subplace_join_restriction');
+                            return;
+                        }
+
+                        if (json.status === 23 && json.message.includes('You have been banned from this experience by its creators.')) {
+                            reject('banned_by_creator');
+                            return;
+                        }
+
+                        const datacenterId = json?.joinScript?.DataCenterId;
+                        if (!datacenterId) {
+                            ConsoleLogEnabled("API Response (No DataCenterId) Which means Full Server!:", json);
+                            reject(`Unable to fetch server location: Status ${json.status}`);
+                            return;
+                        }
+
+                        // function to get location data for a datacenter ID
+                        function getLocationData(datacenterId) {
+                            const locationId = serverRegionsByIp[datacenterId];
+                            if (locationId && serverRegionsByIp._locations && serverRegionsByIp._locations[locationId]) {
+                                return serverRegionsByIp._locations[locationId];
+                            }
+                            return null;
+                        }
+
+                        const location = getLocationData(String(datacenterId));
+                        if (!location) {
+                            ConsoleLogEnabled("API Response (Unknown Location):", json);
+                            reject(`Unknown datacenter ID ${datacenterId}`);
+                            return;
+                        }
+
+                        location.placeVersion = json.joinScript.PlaceVersion; // not wrapping this in an object cause it breaks stuff. so this should do
+                        resolve(location);
+                    },
+                    onerror: function(error) {
+                        ConsoleLogEnabled("API Request Failed:", error);
+                        reject(`Failed to fetch server details: ${error}`);
+                    },
+                });
+            });
+        }
+
+        // Batching logic with rate limit handling
+        const queue = fetchServerDetails._queue || [];
+        const concurrencyLimit = 100; // this can be any value from 1 to 2000 (integer)
+
+        if (!fetchServerDetails._queue) {
+            fetchServerDetails._queue = queue;
+            fetchServerDetails._activeCount = 0;
+            fetchServerDetails._rateLimited = false;
+        }
+
+        return new Promise((resolve, reject) => {
+            const makeRequest = async (gameId, jobId) => {
+                return new Promise((innerResolve, innerReject) => {
+                    GM_xmlhttpRequest({
+                        method: "POST",
+                        url: "https://gamejoin.roblox.com/v1/join-game-instance",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "User-Agent": "Roblox/WinInet",
+                        },
+                        data: JSON.stringify({
+                            placeId: gameId,
+                            gameId: jobId
+                        }),
+                        onload: function(response) {
+                            const json = JSON.parse(response.responseText);
+                            ConsoleLogEnabled("API Response:", json);
+
+                            // Check if we got rate limited (status undefined)
+                            if (json.status === undefined) {
+                                ConsoleLogEnabled("Rate limited detected - status undefined");
+                                innerReject('rate_limited');
+                                return;
+                            }
+
+                            if (json.status === 12 && json.message === 'You need to purchase access to this game before you can play.') {
+                                innerReject('purchase_required');
+                                return;
+                            }
+
+                            if (json.status === 12 && json.message === 'Cannot join this non-root place due to join restrictions') {
+                                innerReject('subplace_join_restriction');
+                                return;
+                            }
+
+                            if (json.status === 23 && json.message.includes('You have been banned from this experience by its creators.')) {
+                                reject('banned_by_creator');
+                                return;
+                            }
+
+                            const datacenterId = json?.joinScript?.DataCenterId;
+                            if (!datacenterId) {
+                                ConsoleLogEnabled("API Response (No DataCenterId) Which means Full Server!:", json);
+                                innerReject(`Unable to fetch server location: Status ${json.status}`);
+                                return;
+                            }
+
+                            // function to get location data for a datacenter ID
+                            function getLocationData(datacenterId) {
+                                const locationId = serverRegionsByIp[datacenterId];
+                                if (locationId && serverRegionsByIp._locations && serverRegionsByIp._locations[locationId]) {
+                                    return serverRegionsByIp._locations[locationId];
+                                }
+                                return null;
+                            }
+
+                            const location = getLocationData(String(datacenterId));
+                            if (!location) {
+                                ConsoleLogEnabled("API Response (Unknown Location):", json);
+                                //// this is for finding server regions
+                                //// Store unknown datacenter ID in localStorage
+                                //let unknownDatacenters = JSON.parse(localStorage.getItem("unknownDatacenters") || "[]");
+                                //if (!unknownDatacenters.includes(datacenterId)) {
+                                //    unknownDatacenters.push(datacenterId);
+                                //    localStorage.setItem("unknownDatacenters", JSON.stringify(unknownDatacenters));
+                                //}
+                                innerReject(`Unknown datacenter ID ${datacenterId}`);
+                                return;
+                            }
+
+                            location.placeVersion = json.joinScript.PlaceVersion; // samething
+                            innerResolve(location);
+                        },
+                        onerror: function(error) {
+                            ConsoleLogEnabled("API Request Failed:", error);
+                            innerReject(`Failed to fetch server details: ${error}`);
+                        },
+                    });
+                });
+            };
+
+            const task = async () => {
+                try {
+                    fetchServerDetails._activeCount++;
+
+                    let result;
+                    let attempts = 0;
+                    const maxAttempts = 100; // prevent infinite loops
+
+                    while (attempts < maxAttempts) {
+                        try {
+                            result = await makeRequest(gameId, jobId);
+                            // if we get here, request was successful
+                            if (fetchServerDetails._rateLimited) {
+                                ConsoleLogEnabled("Rate limit cleared, resuming normal operation");
+                                fetchServerDetails._rateLimited = false;
+                            }
+                            break;
+                        } catch (err) {
+                            if (err === 'rate_limited') {
+                                if (!fetchServerDetails._rateLimited) {
+                                    ConsoleLogEnabled("Rate limited - retrying every second until cleared");
+                                    fetchServerDetails._rateLimited = true;
+                                }
+                                ConsoleLogEnabled(`Rate limit retry attempt ${attempts + 1}`);
+                                await delay(1000); // wait 1 second before retry
+                                attempts++;
+                            } else {
+                                // for other errors, don't retry
+                                throw err;
+                            }
+                        }
+                    }
+
+                    if (attempts >= maxAttempts) {
+                        throw new Error(`Rate limited for too long, exceeded ${maxAttempts} attempts`);
+                    }
+
+                    resolve(result);
+                } catch (err) {
+                    reject(err);
+                } finally {
+                    fetchServerDetails._activeCount--;
+                    if (queue.length > 0) {
+                        const next = queue.shift();
+                        next();
+                    }
+                }
+            };
+
+            if (fetchServerDetails._activeCount < concurrencyLimit) {
+                task();
+            } else {
+                queue.push(task);
+            }
+        });
+    }
+    /*******************************************************
+    name of function: HandleRecentServersAddGames
+    description: Adds recent servers to localstorage for safe
+    keeping
+    *******************************************************/
+    // WARNING: Do not republish this script. Licensed for personal use only.
+    async function HandleRecentServersAddGames(gameId, serverId) {
+        const storageKey = "ROLOCATE_recentservers_button"; // don't mind me spamming this around
+        const stored = JSON.parse(localStorage.getItem(storageKey) || "{}");
+        const key = `${gameId}_${serverId}`;
+
+        // check if we already have region data for this server
+        if (!stored[key] || !stored[key].region) {
+            try {
+                // fetch server region if not already stored
+                const region = await fetchServerDetails(gameId, serverId);
+                stored[key] = {
+                    timestamp: Date.now(),
+                    region: region
+                };
+            } catch (error) {
+                ConsoleLogEnabled("Failed to fetch server region:", error);
+                // store without region data if fetch fails
+                if (error?.toString().includes("Unable to fetch server location: Status 12")) {
+                    ConsoleLogEnabled("Private Server Detected. Not adding to recentservers");
+                    return; // exit the function early
+                }
+                stored[key] = {
+                    timestamp: Date.now(),
+                    region: null
+                };
+            }
+        } else {
+            // update timestamp but keep existing region data
+            stored[key].timestamp = Date.now();
+        }
+
+        localStorage.setItem(storageKey, JSON.stringify(stored));
+    }
+
+    /*******************************************************
+    name of function: fetchUserPresence
+    description: Fetches the current presence data for a user
+    from the Roblox presence API.
+    Returns: Promise that resolves to presence data or null
+    *******************************************************/
+    async function fetchUserPresence(userId) {
+        ConsoleLogEnabled(`Fetching presence for userId: ${userId}`);
+
+        if (!userId) {
+            ConsoleLogEnabled("No userId provided to fetchUserPresence");
+            return null;
+        }
+
+        return new Promise((resolve) => {
+            GM_xmlhttpRequest({
+                method: "POST",
+                url: "https://presence.roblox.com/v1/presence/users",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                data: JSON.stringify({
+                    userIds: [parseInt(userId)]
+                }),
+                onload: function(response) {
+                    ConsoleLogEnabled(`Presence API response status: ${response.status}`);
+
+                    if (response.status !== 200) {
+                        ConsoleLogEnabled(`Presence API error: ${response.status}`);
+                        resolve(null);
+                        return;
+                    }
+
+                    try {
+                        const data = JSON.parse(response.responseText);
+                        ConsoleLogEnabled(`Presence API response data: ${JSON.stringify(data)}`);
+
+                        if (data.userPresences && data.userPresences.length > 0) {
+                            const presence = data.userPresences[0];
+                            ConsoleLogEnabled(`Presence data - placeId: ${presence.placeId}, gameId: ${presence.gameId}, userPresenceType: ${presence.userPresenceType}`);
+                            resolve(presence);
+                        } else {
+                            ConsoleLogEnabled("No user presence data in response");
+                            resolve(null);
+                        }
+                    } catch (parseError) {
+                        ConsoleLogEnabled(`Error parsing presence API response: ${parseError.message}`);
+                        resolve(null);
+                    }
+                },
+                onerror: function(error) {
+                    ConsoleLogEnabled(`Presence API request error: ${error}`);
+                    resolve(null);
+                }
+            });
+        });
+    }
+    /*******************************************************
+    name of function: HandleRecentServersURLandTrackPresence
+    description: Detects recent servers from the url if
+    user joins server from invite url and cleans up the URL.
+    Also tracks user presence every 30 seconds.
+    *******************************************************/
+    // WARNING: Do not republish this script. Licensed for personal use only.
+    async function HandleRecentServersURLandTrackPresence() {
+        const currentPath = window.location.pathname;
+        const isGamesPage = /^\/(([a-z]{2}(-[a-z]{2})?)\/)?(games\/.+)/.test(currentPath);
+        ConsoleLogEnabled("HandleRecentServersURLandTrackPresence called");
+
+        // static like variable to remember if we've already found an invalid URL
+        if (HandleRecentServersURLandTrackPresence.alreadyInvalid) {
+            ConsoleLogEnabled("Already checked URL and found invalid, returning early");
+            return;
+        }
+        const url = window.location.href;
+        ConsoleLogEnabled(`Current URL: ${url}`);
+
+        // in url to match ROLOCATE_GAMEID and SERVERID from the hash
+        const match = url.match(/ROLOCATE_GAMEID=(\d+)_SERVERID=([a-f0-9-]+)/i);
+        if (match && match.length === 3) {
+            const gameId = match[1];
+            const serverId = match[2];
+            ConsoleLogEnabled(`Found gameId: ${gameId}, serverId: ${serverId} in URL`);
+
+            // clean up the URL from invite
+            const cleanURL = window.location.pathname + window.location.search;
+            history.replaceState(null, null, cleanURL);
+            ConsoleLogEnabled(`URL cleaned to: ${cleanURL}`);
+
+            // call handler stuff
+            await HandleRecentServersAddGames(gameId, serverId);
+            document.querySelector(".recent-servers-section")?.remove();
+            HandleRecentServers(); // update list visually
+
+        } else {
+            ConsoleLogEnabled("No gameId and serverId found in URL. (From invite link)");
+            HandleRecentServersURLandTrackPresence.alreadyInvalid = true; // Set internal flag
+        }
+
+        // start presence tracking if not already started
+        if (!HandleRecentServersURLandTrackPresence.presenceTracking) {
+            ConsoleLogEnabled("Starting presence tracking...");
+            HandleRecentServersURLandTrackPresence.presenceTracking = true;
+
+            const checkPresence = async () => {
+                ConsoleLogEnabled("--- Checking presence ---");
+                try {
+                    const userId = getCurrentUserId();
+                    ConsoleLogEnabled(`userId: ${userId}`);
+
+                    if (!userId) {
+                        ConsoleLogEnabled("Could not get userId for presence tracking");
+                        return;
+                    }
+
+                    // Use the new fetchUserPresence function
+                    const presence = await fetchUserPresence(userId);
+
+                    if (!presence) {
+                        ConsoleLogEnabled("No presence data returned");
+                        return;
+                    }
+
+                    const placeId = presence.placeId?.toString();
+                    const gameId = presence.gameId;
+
+                    if (!placeId || !gameId) {
+                        ConsoleLogEnabled("User not in game or presence data incomplete");
+                        return;
+                    }
+
+                    ConsoleLogEnabled(`User is in game - placeId: ${placeId}, gameId: ${gameId}`);
+
+                    // get recent servers from localStorage
+                    const recentServersData = localStorage.getItem("ROLOCATE_recentservers_button");
+                    ConsoleLogEnabled(`Recent servers data from localStorage: ${recentServersData}`);
+
+                    if (!recentServersData) {
+                        // no recent servers stored, add this one
+                        ConsoleLogEnabled("No recent servers found, adding current server");
+                        await HandleRecentServersAddGames(placeId, gameId);
+                        if (isGamesPage) {
+                            document.querySelector(".recent-servers-section")?.remove();
+                            HandleRecentServers(); // update visually
+                        }
+                        return;
+                    }
+
+                    const recentServers = JSON.parse(recentServersData);
+                    const serverKey = `${placeId}_${gameId}`;
+
+                    ConsoleLogEnabled(`Checking for serverKey: ${serverKey}`);
+                    ConsoleLogEnabled(`Recent servers keys: ${Object.keys(recentServers).join(", ")}`);
+
+                    // check if this server is already in recent servers
+                    if (!recentServers[serverKey]) {
+                        ConsoleLogEnabled(`New server detected: ${serverKey} - Adding to recent servers`);
+                        await HandleRecentServersAddGames(placeId, gameId);
+                        if (isGamesPage) {
+                            document.querySelector(".recent-servers-section")?.remove();
+                            HandleRecentServers(); // to update the list visually
+                        }
+                    } else {
+                        ConsoleLogEnabled(`User still in known server: ${serverKey}`);
+                    }
+
+                } catch (error) {
+                    ConsoleLogEnabled(`Presence tracking error: ${error.message}`);
+                }
+            };
+
+            // check immediately on start
+            ConsoleLogEnabled("initial presence check");
+            checkPresence();
+
+            // then check every 8 seconds
+            setInterval(() => {
+                ConsoleLogEnabled("every 8 seconds seeing if joined server");
+                checkPresence();
+            }, 8000);
+
+            ConsoleLogEnabled("Presence tracking started - will check every 8 seconds");
+        } else {
+            ConsoleLogEnabled("Presence tracking already running");
+        }
+    }
+
+
+    /*******************************************************
+    name of function: getFlagEmoji
+    description: Guves Flag Emoji
+    *******************************************************/
+    function getFlagEmoji(countryCode) {
+        // static variables to maintain state without globals
+        if (!getFlagEmoji.flagsData) {
+            ConsoleLogEnabled("[getFlagEmoji] Initializing static variables.");
+            getFlagEmoji.flagsData = null;
+            getFlagEmoji.isLoaded = false;
+        }
+
+        // if no countryCode provided, lazy load all data
+        if (!countryCode) {
+            ConsoleLogEnabled("[getFlagEmoji] No country code provided.");
+            if (!getFlagEmoji.isLoaded) {
+                ConsoleLogEnabled("[getFlagEmoji] Loading flag data (no countryCode).");
+                getFlagEmoji.flagsData = loadFlagsData(); // this function comes from @require
+                getFlagEmoji.isLoaded = true;
+                ConsoleLogEnabled("[getFlagEmoji] Flag data loaded successfully.");
+            } else {
+                ConsoleLogEnabled("[getFlagEmoji] Flag data already loaded.");
+            }
+            return;
+        }
+
+        // if data not loaded yet, load it now
+        if (!getFlagEmoji.isLoaded) {
+            ConsoleLogEnabled(`[getFlagEmoji] Lazy loading flag data for country: ${countryCode}`);
+            getFlagEmoji.flagsData = loadFlagsData();
+            getFlagEmoji.isLoaded = true;
+            ConsoleLogEnabled("[getFlagEmoji] Flag data loaded successfully.");
+        }
+
+        const src = getFlagEmoji.flagsData[countryCode];
+
+        ConsoleLogEnabled(`[getFlagEmoji] Creating flag image for country code: ${countryCode}`);
+
+        const img = document.createElement('img');
+        img.src = src;
+        img.alt = countryCode;
+        img.width = 24;
+        img.height = 18;
+        img.style.verticalAlign = 'middle';
+        img.style.marginRight = '4px';
+
+        return img;
+    }
+
+    /*******************************************************
+    name of function: HandleRecentServers
+    description: Detects if recent servers are in localstorage
+    and then adds them to the page with css styles
+    *******************************************************/
+    // WARNING: Do not republish this script. Licensed for personal use only.
+    function HandleRecentServers() {
+        const currentPath = window.location.pathname;
+        const isGamesPage = /^\/(([a-z]{2}(-[a-z]{2})?)\/)?(games\/.+)/.test(currentPath);
+        // 2nd saftey check only if on gamepage
+        if (!isGamesPage) {
+          ConsoleLogEnabled("If you see this, then somethings wrong");
+          return;
+        }
+        const serverList = document.querySelector('.server-list-options');
+        if (!serverList || document.querySelector('.recent-servers-section')) return;
+        const currentGameId = getCurrentGameId();
+
+        const allHeaders = document.querySelectorAll('.server-list-header');
+        let friendsSectionHeader = null;
+
+        allHeaders.forEach(header => { // fix so restore classic terms would not interfere
+            const text = header.textContent.trim();
+            const match = ['Servers My Connections Are In', 'Servers My Friends Are In'].some(
+                label => text === label
+            );
+            if (match) {
+                friendsSectionHeader = header.closest('.container-header');
+            }
+        });
+
+
+        function formatLastPlayedWithRelative(lastPlayed, mode) {
+            const lastPlayedDate = new Date(lastPlayed);
+            const now = new Date();
+
+            const diffMs = now - lastPlayedDate;
+            const diffSeconds = Math.floor(diffMs / 1000);
+            const diffMinutes = Math.floor(diffSeconds / 60);
+            const diffHours = Math.floor(diffMinutes / 60);
+            const diffDays = Math.floor(diffHours / 24);
+
+            let relativeTime = '';
+            if (diffDays > 0) {
+                relativeTime = diffDays === 1 ? '1 day ago' : `${diffDays} days ago`;
+            } else if (diffHours > 0) {
+                relativeTime = diffHours === 1 ? '1 hour ago' : `${diffHours} hours ago`;
+            } else if (diffMinutes > 0) {
+                relativeTime = diffMinutes === 1 ? '1 minute ago' : `${diffMinutes} minutes ago`;
+            } else {
+                relativeTime = diffSeconds <= 1 ? 'just now' : `${diffSeconds} seconds ago`;
+            }
+
+            if (mode === "relativeOnly") {
+                return relativeTime;
+            }
+
+            return `${lastPlayed} (${relativeTime})`;
+        }
+
+        if (!friendsSectionHeader) return;
+
+        const theme = {
+            bgGradient: 'linear-gradient(145deg, #1e2228, #18191e)',
+            bgGradientHover: 'linear-gradient(145deg, #23272f, #1c1f25)',
+            accentPrimary: '#4d85ee',
+            accentGradient: 'linear-gradient(to bottom, #4d85ee, #3464c9)',
+            accentGradientHover: 'linear-gradient(to bottom, #5990ff, #3b6fdd)',
+            textPrimary: '#e8ecf3',
+            textSecondary: '#a0a8b8',
+            borderLight: 'rgba(255, 255, 255, 0.06)',
+            borderLightHover: 'rgba(255, 255, 255, 0.12)',
+            shadow: '0 5px 15px rgba(0, 0, 0, 0.25)',
+            shadowHover: '0 8px 25px rgba(0, 0, 0, 0.3)',
+            dangerGradient: 'linear-gradient(to bottom, #ff5b5b, #e04444)',
+            dangerGradientHover: 'linear-gradient(to bottom, #ff7575, #f55)',
+            popupBg: 'rgba(20, 22, 26, 0.95)',
+            popupBorder: 'rgba(77, 133, 238, 0.2)'
+        };
+
+        // svgs to save space so no repeats in code
+        const emptyServerSVG = `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:.7;margin-right:10px"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="${theme.accentPrimary}"/><circle cx="6" cy="18" r="1" fill="${theme.accentPrimary}"/></svg>
+        `;
+
+        const serverstacklogo = `
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="m2 17 10 5 10-5M2 12l10 5 10-5M2 7l10 5 10-5-10-5z" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        `;
+
+        const checkmarksvggeneraluse = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="m8 12 3 3 5-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        `;
+
+        const checkmarkwithoutcircle = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right:6px"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        `;
+
+        const thelikecopysymbol = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="8" y="8" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 8V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v9c0 1.1.9 2 2 2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        `;
+
+        const recentSection = document.createElement('div');
+        recentSection.className = 'recent-servers-section premium-dark';
+        recentSection.style.marginBottom = '24px';
+
+        const headerContainer = document.createElement('div');
+        headerContainer.className = 'container-header';
+
+        const headerInner = document.createElement('div');
+        headerInner.className = 'server-list-container-header';
+        headerInner.style.padding = '0 4px';
+        headerInner.style.display = 'flex';
+        headerInner.style.justifyContent = 'space-between';
+        headerInner.style.alignItems = 'center';
+
+        const headerTitleContainer = document.createElement('div');
+        headerTitleContainer.style.display = 'flex';
+        headerTitleContainer.style.alignItems = 'center';
+
+        const headerTitle = document.createElement('h2');
+        headerTitle.className = 'server-list-header';
+        headerTitle.textContent = 'Recent Servers';
+        headerTitle.style.cssText = `
+            font-weight: 600;
+            color: ${theme.textPrimary};
+            letter-spacing: 0.5px;
+            position: relative;
+            display: inline-block;
+            padding-bottom: 4px;
+        `;
+
+        const headerAccent = document.createElement('span');
+        headerAccent.style.cssText = `
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 40px;
+            height: 2px;
+            background: ${theme.accentGradient};
+            border-radius: 2px;
+        `;
+        headerTitle.appendChild(headerAccent);
+        headerTitleContainer.appendChild(headerTitle);
+
+        const buttonGroupHeader = document.createElement('div');
+        buttonGroupHeader.style.cssText = `
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        `;
+
+        const checkStatusButton = document.createElement('button');
+        checkStatusButton.textContent = 'Check Status';
+        checkStatusButton.style.cssText = `
+            background: transparent;
+            color: ${theme.textSecondary};
+            border: 1px solid ${theme.borderLight};
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        `;
+
+        checkStatusButton.innerHTML = `
+            ${checkmarksvggeneraluse}
+            Check Status
+        `;
+
+        checkStatusButton.onmouseover = function() {
+            this.style.background = 'rgba(77, 133, 238, 0.15)';
+            this.style.color = theme.accentPrimary;
+            this.style.borderColor = theme.accentPrimary;
+            this.style.transform = 'scale(1.02)';
+        };
+
+        checkStatusButton.onmouseout = function() {
+            this.style.background = 'transparent';
+            this.style.color = theme.textSecondary;
+            this.style.borderColor = theme.borderLight;
+            this.style.transform = 'scale(1)';
+        };
+
+        checkStatusButton.addEventListener('click', async function() {
+            const storageKey = "ROLOCATE_recentservers_button"; // again lol
+            let stored = JSON.parse(localStorage.getItem(storageKey) || "{}");
+            const keys = Object.keys(stored).filter(key => key.startsWith(`${currentGameId}_`));
+
+            if (keys.length === 0) { // if 0 servers
+                notifications('No servers to check!', 'info', '', '2000');
+                return;
+            }
+
+            checkStatusButton.disabled = true;
+            const originalText = checkStatusButton.innerHTML;
+            checkStatusButton.innerHTML = `
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 4px; animation: spin 1s linear infinite;">
+                    <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Checking...
+            `;
+
+            let removedCount = 0;
+            const cardsWrapper = document.querySelector('.recent-servers-section .section-content-off');
+
+            for (const key of keys) {
+                const [gameId, serverId] = key.split("_");
+                try {
+                    await fetchServerDetails(gameId, serverId);
+                } catch (error) {
+                    if (!error.toString().includes("Status 22")) {
+                        delete stored[key];
+                        removedCount++;
+                        const card = document.querySelector(`[data-server-key="${key}"]`);
+                        if (card) {
+                            card.style.transition = 'all 0.3s ease-out';
+                            card.style.opacity = '0';
+                            card.style.height = '0';
+                            card.style.margin = '0';
+                            card.style.padding = '0';
+                            setTimeout(() => card.remove(), 300);
+                        }
+                    }
+                }
+            }
+
+            localStorage.setItem(storageKey, JSON.stringify(stored));
+
+            if (removedCount > 0) {
+                notifications(`Removed ${removedCount} inactive server${removedCount > 1 ? 's' : ''}`, 'success', '🗑️', '2000');
+
+                if (Object.keys(stored).filter(k => k.startsWith(`${currentGameId}_`)).length === 0) {
+                    const emptyMessage = document.createElement('div');
+                    emptyMessage.className = 'no-servers-message';
+                    emptyMessage.innerHTML = `${emptyServerSVG} No Recent Servers Found`;
+                    emptyMessage.style.cssText = `
+                        color: ${theme.textSecondary};
+                        text-align: center;
+                        padding: 28px 0;
+                        font-size: 14px;
+                        letter-spacing: 0.3px;
+                        font-weight: 500;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        background: rgba(20, 22, 26, 0.4);
+                        border-radius: 12px;
+                        border: 1px solid rgba(77, 133, 238, 0.15);
+                        box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.2);
+                    `;
+                    if (cardsWrapper) {
+                        cardsWrapper.innerHTML = '';
+                        cardsWrapper.appendChild(emptyMessage);
+                    }
+                }
+            } else {
+                notifications('All servers are active!', 'success', '😊', '2000');
+            }
+
+            checkStatusButton.innerHTML = originalText;
+            checkStatusButton.disabled = false;
+        });
+
+        const clearAllButton = document.createElement('button');
+        clearAllButton.textContent = 'Clear All';
+        clearAllButton.style.cssText = `
+            background: transparent;
+            color: ${theme.textSecondary};
+            border: 1px solid ${theme.borderLight};
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        `;
+
+        clearAllButton.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 4px;">
+                <path d="M3 6H5H21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6H19Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M10 11V17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M14 11V17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Clear All
+        `;
+
+        clearAllButton.onmouseover = function() {
+            this.style.background = 'rgba(100, 0, 0, 0.85)';
+            this.style.color = 'white';
+            this.style.borderColor = 'rgba(100, 0, 0, 0.85)';
+            this.style.transform = 'scale(1.02)';
+        };
+
+        clearAllButton.onmouseout = function() {
+            this.style.background = 'transparent';
+            this.style.color = theme.textSecondary;
+            this.style.borderColor = theme.borderLight;
+            this.style.transform = 'scale(1)';
+        };
+
+        clearAllButton.addEventListener('click', function() {
+            const popup = document.createElement('div');
+            popup.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 9999;
+                background: rgba(0, 0, 0, 0.3);
+                opacity: 0;
+                transition: opacity 0.3s ease;
+            `;
+
+            const popupContent = document.createElement('div');
+            popupContent.style.cssText = `
+                background: ${theme.popupBg};
+                border-radius: 12px;
+                padding: 20px;
+                width: 360px;
+                max-width: 90%;
+                box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+                border: 1px solid ${theme.popupBorder};
+                text-align: center;
+                transform: translateY(20px);
+                transition: transform 0.3s ease, opacity 0.3s ease;
+                opacity: 0;
+            `;
+
+            const popupTitle = document.createElement('h3');
+            popupTitle.textContent = 'Clear All Recent Servers';
+            popupTitle.style.cssText = `
+                color: ${theme.textPrimary};
+                margin: 0 0 16px 0;
+                font-size: 16px;
+                font-weight: 600;
+            `;
+
+            const popupMessage = document.createElement('p');
+            popupMessage.textContent = 'Are you sure you want to clear all recent servers? This action cannot be undone.';
+            popupMessage.style.cssText = `
+                color: ${theme.textSecondary};
+                margin: 0 0 24px 0;
+                font-size: 13px;
+                line-height: 1.5;
+            `;
+
+            const buttonContainer = document.createElement('div');
+            buttonContainer.style.cssText = `
+                display: flex;
+                justify-content: center;
+                gap: 12px;
+            `;
+
+            const cancelButton = document.createElement('button');
+            cancelButton.textContent = 'Cancel';
+            cancelButton.style.cssText = `
+                background: rgba(28, 31, 37, 0.6);
+                color: ${theme.textPrimary};
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                padding: 8px 20px;
+                border-radius: 6px;
+                font-size: 13px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s ease;
+            `;
+
+            cancelButton.onmouseover = function() {
+                this.style.background = 'rgba(35, 39, 46, 0.8)';
+                this.style.borderColor = 'rgba(255, 255, 255, 0.18)';
+                this.style.transform = 'scale(1.05)';
+            };
+
+            cancelButton.onmouseout = function() {
+                this.style.background = 'rgba(28, 31, 37, 0.6)';
+                this.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+                this.style.transform = 'scale(1)';
+            };
+
+            cancelButton.addEventListener('click', function() {
+                popup.style.opacity = '0';
+                setTimeout(() => {
+                    popup.remove();
+                }, 300);
+            });
+
+            const confirmButton = document.createElement('button');
+            confirmButton.textContent = 'Clear All';
+            confirmButton.style.cssText = `
+                background: rgba(100, 0, 0, 0.85);
+                color: white;
+                border: none;
+                padding: 8px 20px;
+                border-radius: 6px;
+                font-size: 13px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                box-shadow: 0 2px 8px rgba(100, 0, 0, 0.3);
+            `;
+
+            confirmButton.onmouseover = function() {
+                this.style.background = 'rgba(80, 0, 0, 0.95)';
+                this.style.boxShadow = '0 4px 10px rgba(80, 0, 0, 0.4)';
+                this.style.transform = 'scale(1.02)';
+            };
+
+            confirmButton.onmouseout = function() {
+                this.style.background = 'rgba(100, 0, 0, 0.85)';
+                this.style.boxShadow = '0 2px 8px rgba(100, 0, 0, 0.3)';
+                this.style.transform = 'scale(1)';
+            };
+
+            confirmButton.addEventListener('click', function() {
+                const cardsWrapper = document.querySelector('.recent-servers-section .section-content-off');
+                if (cardsWrapper) {
+                    cardsWrapper.querySelectorAll('.recent-server-card').forEach(card => {
+                        card.style.transition = 'all 0.3s ease-out';
+                        card.style.opacity = '0';
+                        card.style.height = '0';
+                        card.style.margin = '0';
+                        card.style.padding = '0';
+                        setTimeout(() => card.remove(), 300);
+                    });
+                }
+
+                const storageKey = "ROLOCATE_recentservers_button"; //yep again
+                localStorage.setItem(storageKey, JSON.stringify({}));
+
+                const emptyMessage = document.createElement('div');
+                emptyMessage.className = 'no-servers-message';
+                emptyMessage.innerHTML = `${emptyServerSVG} No Recent Servers Found`;
+                emptyMessage.style.cssText = `
+                    color: ${theme.textSecondary};
+                    text-align: center;
+                    padding: 28px 0;
+                    font-size: 14px;
+                    letter-spacing: 0.3px;
+                    font-weight: 500;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    background: rgba(20, 22, 26, 0.4);
+                    border-radius: 12px;
+                    border: 1px solid rgba(77, 133, 238, 0.15);
+                    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.2);
+                `;
+
+                if (cardsWrapper) {
+                    cardsWrapper.innerHTML = '';
+                    cardsWrapper.appendChild(emptyMessage);
+                }
+
+                popup.style.opacity = '0';
+                setTimeout(() => {
+                    popup.remove();
+                }, 300);
+            });
+
+            buttonContainer.appendChild(cancelButton);
+            buttonContainer.appendChild(confirmButton);
+            popupContent.appendChild(popupTitle);
+            popupContent.appendChild(popupMessage);
+            popupContent.appendChild(buttonContainer);
+            popup.appendChild(popupContent);
+            document.body.appendChild(popup);
+
+            setTimeout(() => {
+                popup.style.opacity = '1';
+                popupContent.style.transform = 'translateY(0)';
+                popupContent.style.opacity = '1';
+            }, 10);
+
+            popup.addEventListener('click', function(e) {
+                if (e.target === popup) {
+                    popup.style.opacity = '0';
+                    setTimeout(() => {
+                        popup.remove();
+                    }, 300);
+                }
+            });
+        });
+
+        buttonGroupHeader.appendChild(checkStatusButton);
+        buttonGroupHeader.appendChild(clearAllButton);
+        headerInner.appendChild(headerTitleContainer);
+        headerInner.appendChild(buttonGroupHeader);
+        headerContainer.appendChild(headerInner);
+
+        const contentContainer = document.createElement('div');
+        contentContainer.className = 'section-content-off empty-game-instances-container';
+        contentContainer.style.padding = '8px 4px';
+
+        const storageKey = "ROLOCATE_recentservers_button"; // again ik
+        let stored = JSON.parse(localStorage.getItem(storageKey) || "{}");
+
+        const currentTime = Date.now();
+        const threeDaysInMs = 3 * 24 * 60 * 60 * 1000;
+        let storageUpdated = false;
+
+        Object.keys(stored).forEach(key => {
+            const serverData = stored[key];
+            const serverTime = typeof serverData === 'object' ? serverData.timestamp : serverData;
+
+            if (currentTime - serverTime > threeDaysInMs) {
+                delete stored[key];
+                storageUpdated = true;
+            }
+        });
+
+        if (storageUpdated) {
+            localStorage.setItem(storageKey, JSON.stringify(stored));
+        }
+
+        const keys = Object.keys(stored).filter(key => key.startsWith(`${currentGameId}_`));
+        if (keys.length === 0) {
+            const emptyMessage = document.createElement('div');
+            emptyMessage.className = 'no-servers-message';
+            emptyMessage.innerHTML = `${emptyServerSVG} No Recent Servers Found`;
+            emptyMessage.style.cssText = `
+                color: ${theme.textSecondary};
+                text-align: center;
+                padding: 28px 0;
+                font-size: 14px;
+                letter-spacing: 0.3px;
+                font-weight: 500;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: rgba(20, 22, 26, 0.4);
+                border-radius: 12px;
+                border: 1px solid rgba(77, 133, 238, 0.15);
+                box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.2);
+            `;
+            contentContainer.appendChild(emptyMessage);
+        } else {
+            keys.sort((a, b) => {
+                const aData = stored[a];
+                const bData = stored[b];
+                const aTime = typeof aData === 'object' ? aData.timestamp : aData;
+                const bTime = typeof bData === 'object' ? bData.timestamp : bData;
+                return bTime - aTime;
+            });
+
+            const cardsWrapper = document.createElement('div');
+            cardsWrapper.style.cssText = `
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                margin: 2px 0;
+            `;
+
+            keys.forEach((key, index) => {
+                const [gameId, serverId] = key.split("_");
+                const serverData = stored[key];
+
+                const timeStored = typeof serverData === 'object' ? serverData.timestamp : serverData;
+                const regionData = typeof serverData === 'object' ? serverData.region : null;
+
+                const date = new Date(timeStored);
+                const formattedTime = date.toLocaleString(undefined, {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                });
+
+                let regionDisplay = '';
+                let flagElement = null;
+
+                if (regionData && regionData !== null) {
+                    const city = regionData.city || 'Unknown';
+                    const countryCode = (regionData.country && regionData.country.code) || '';
+                    flagElement = getFlagEmoji(countryCode);
+                } else {
+                    flagElement = getFlagEmoji('');
+                    regionDisplay = 'Unknown';
+                }
+
+                if (!flagElement) {
+                    flagElement = document.createTextNode('🌍');
+                    regionDisplay = regionDisplay || 'Unknown';
+                }
+
+                if (flagElement && flagElement.tagName === 'IMG') {
+                    flagElement.style.cssText = `
+                        width: 24px;
+                        height: 18px;
+                        vertical-align: middle;
+                        margin-right: 4px;
+                        display: inline-block;
+                    `;
+                }
+
+                if (!regionDisplay) {
+                    if (regionData && regionData !== null && regionData.city) {
+                        regionDisplay = regionData.city;
+                    } else {
+                        regionDisplay = 'Unknown';
+                    }
+                }
+
+                const serverCard = document.createElement('div');
+                serverCard.className = 'recent-server-card premium-dark';
+                serverCard.dataset.serverKey = key;
+                serverCard.dataset.gameId = gameId;
+                serverCard.dataset.serverId = serverId;
+                serverCard.dataset.region = regionDisplay;
+                serverCard.dataset.lastPlayed = formattedTime;
+                serverCard.style.cssText = `
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 16px 22px;
+                    height: 76px;
+                    border-radius: 14px;
+                    background: ${theme.bgGradient};
+                    box-shadow: ${theme.shadow};
+                    color: ${theme.textPrimary};
+                    font-family: 'Segoe UI', 'Helvetica Neue', sans-serif;
+                    font-size: 14px;
+                    box-sizing: border-box;
+                    width: 100%;
+                    position: relative;
+                    overflow: hidden;
+                    border: 1px solid ${theme.borderLight};
+                    transition: all 0.2s ease-out;
+                `;
+
+                serverCard.onmouseover = function() {
+                    this.style.boxShadow = theme.shadowHover;
+                    this.style.transform = 'translateY(-2px)';
+                    this.style.borderColor = theme.borderLightHover;
+                    this.style.background = theme.bgGradientHover;
+                };
+
+                serverCard.onmouseout = function() {
+                    this.style.boxShadow = theme.shadow;
+                    this.style.transform = 'translateY(0)';
+                    this.style.borderColor = theme.borderLight;
+                    this.style.background = theme.bgGradient;
+                };
+
+                const glassOverlay = document.createElement('div');
+                glassOverlay.style.cssText = `
+                    position: absolute;
+                    left: 0;
+                    top: 0;
+                    right: 0;
+                    height: 50%;
+                    background: linear-gradient(to bottom, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0));
+                    border-radius: 14px 14px 0 0;
+                    pointer-events: none;
+                `;
+                serverCard.appendChild(glassOverlay);
+
+                const serverIconWrapper = document.createElement('div');
+                serverIconWrapper.style.cssText = `
+                    position: absolute;
+                    left: 14px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 32px;
+                    height: 32px;
+                `;
+
+                const serverIcon = document.createElement('div');
+                serverIcon.innerHTML = `
+                  ${serverstacklogo}
+                `;
+                serverIconWrapper.appendChild(serverIcon);
+
+                const iconGlow = document.createElement('div');
+                iconGlow.style.cssText = `
+                    position: absolute;
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 50%;
+                    background: ${theme.accentPrimary};
+                    opacity: 0.15;
+                    z-index: -1;
+                `;
+                serverIconWrapper.appendChild(iconGlow);
+
+                const left = document.createElement('div');
+                left.style.cssText = `
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    margin-left: 12px;
+                    width: calc(100% - 180px);
+                `;
+
+                const lastPlayed = document.createElement('div');
+                lastPlayed.textContent = `Last Played: ${formatLastPlayedWithRelative(formattedTime, "relativeOnly")}`;
+                lastPlayed.style.cssText = `
+                    font-weight: 600;
+                    font-size: 14px;
+                    color: ${theme.textPrimary};
+                    line-height: 1.3;
+                    letter-spacing: 0.3px;
+                    margin-left: 40px;
+                    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                `;
+
+                const regionInfo = document.createElement('div');
+                regionInfo.style.cssText = `
+                    font-size: 12px;
+                    color: ${theme.textSecondary};
+                    margin-top: 2px;
+                    opacity: 0.9;
+                    margin-left: 40px;
+                    line-height: 18px;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                `;
+
+                regionInfo.innerHTML = `<span style="color: ${theme.accentPrimary};">Region:</span> `;
+                if (flagElement && (flagElement.nodeType === Node.ELEMENT_NODE || flagElement.nodeType === Node.TEXT_NODE)) {
+                    if (flagElement.nodeType === Node.ELEMENT_NODE) {
+                        flagElement.style.position = 'relative';
+                        flagElement.style.top = '-2px';
+                    }
+                    regionInfo.appendChild(flagElement);
+                } else {
+                    regionInfo.appendChild(document.createTextNode('🌍'));
+                }
+
+                const regionText = document.createElement('span');
+                regionText.textContent = ` ${regionDisplay}`;
+                regionText.style.position = 'relative';
+                regionText.style.left = '-4px';
+                regionInfo.appendChild(regionText);
+
+                left.appendChild(lastPlayed);
+                left.appendChild(regionInfo);
+
+                const buttonGroup = document.createElement('div');
+                buttonGroup.style.cssText = `
+                    display: flex;
+                    gap: 12px;
+                    align-items: center;
+                    z-index: 2;
+                `;
+
+                const removeButton = document.createElement('button');
+                removeButton.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 6 6 18M6 6l12 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                `;
+                removeButton.className = 'btn-control-xs remove-button';
+                removeButton.style.cssText = `
+                    background: ${theme.dangerGradient};
+                    color: white;
+                    border: none;
+                    padding: 6px;
+                    border-radius: 8px;
+                    font-size: 13px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.15s ease;
+                    letter-spacing: 0.4px;
+                    box-shadow: 0 2px 8px rgba(211, 47, 47, 0.3);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 30px;
+                    height: 30px;
+                `;
+
+                removeButton.onmouseover = function() {
+                    this.style.background = theme.dangerGradientHover;
+                    this.style.boxShadow = '0 4px 10px rgba(211, 47, 47, 0.4)';
+                    this.style.transform = 'translateY(-1px)';
+                };
+
+                removeButton.onmouseout = function() {
+                    this.style.background = theme.dangerGradient;
+                    this.style.boxShadow = '0 2px 8px rgba(211, 47, 47, 0.3)';
+                    this.style.transform = 'translateY(0)';
+                };
+
+                removeButton.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const serverKey = this.closest('.recent-server-card').dataset.serverKey;
+
+                    serverCard.style.transition = 'all 0.3s ease-out';
+                    serverCard.style.opacity = '0';
+                    serverCard.style.height = '0';
+                    serverCard.style.margin = '0';
+                    serverCard.style.padding = '0';
+
+                    setTimeout(() => {
+                        serverCard.remove();
+
+                        const storedData = JSON.parse(localStorage.getItem(storageKey) || "{}");
+                        delete storedData[serverKey];
+                        localStorage.setItem(storageKey, JSON.stringify(storedData));
+
+                        if (document.querySelectorAll('.recent-server-card').length === 0) {
+                            const emptyMessage = document.createElement('div');
+                            emptyMessage.className = 'no-servers-message';
+                            emptyMessage.innerHTML = `${emptyServerSVG} No Recent Servers Found`;
+                            emptyMessage.style.cssText = `
+                                color: ${theme.textSecondary};
+                                text-align: center;
+                                padding: 28px 0;
+                                font-size: 14px;
+                                letter-spacing: 0.3px;
+                                font-weight: 500;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                background: rgba(20, 22, 26, 0.4);
+                                border-radius: 12px;
+                                border: 1px solid rgba(77, 133, 238, 0.15);
+                                box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.2);
+                            `;
+                            cardsWrapper.appendChild(emptyMessage);
+                        }
+                    }, 300);
+                });
+
+                const separator = document.createElement('div');
+                separator.style.cssText = `
+                    height: 24px;
+                    width: 1px;
+                    background-color: rgba(255, 255, 255, 0.15);
+                    margin: 0 2px;
+                `;
+
+                const joinButton = document.createElement('button');
+                joinButton.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 6px;">
+                        <path d="M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M12 5L19 12L12 19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Join
+                `;
+                joinButton.className = 'btn-control-xs join-button';
+                joinButton.style.cssText = `
+                    background: ${theme.accentGradient};
+                    color: white;
+                    border: none;
+                    padding: 8px 18px;
+                    border-radius: 10px;
+                    font-size: 13px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.15s ease;
+                    letter-spacing: 0.4px;
+                    box-shadow: 0 2px 10px rgba(52, 100, 201, 0.3);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                `;
+
+                joinButton.addEventListener('click', function() {
+                    try {
+                        JoinServer(gameId, serverId);
+                    } catch (error) {
+                        ConsoleLogEnabled("Error joining game:", error);
+                    }
+                });
+
+                joinButton.onmouseover = function() {
+                    this.style.background = theme.accentGradientHover;
+                    this.style.boxShadow = '0 4px 12px rgba(77, 133, 238, 0.4)';
+                    this.style.transform = 'translateY(-1px)';
+                };
+
+                joinButton.onmouseout = function() {
+                    this.style.background = theme.accentGradient;
+                    this.style.boxShadow = '0 2px 10px rgba(52, 100, 201, 0.3)';
+                    this.style.transform = 'translateY(0)';
+                };
+
+                const inviteButton = document.createElement('button');
+                inviteButton.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="m3 7 9 6 9-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    &nbspInvite
+                `;
+                inviteButton.className = 'btn-control-xs invite-button';
+                inviteButton.style.cssText = `
+                    background: rgba(28, 31, 37, 0.6);
+                    color: ${theme.textPrimary};
+                    border: 1px solid rgba(255, 255, 255, 0.12);
+                    padding: 8px 18px;
+                    border-radius: 10px;
+                    font-size: 13px;
+                    font-weight: 500;
+                    cursor: pointer;
+                    transition: all 0.15s ease;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                `;
+
+                inviteButton.addEventListener('click', function() {
+                    const inviteUrl = `https://oqarshi.github.io/Invite/?placeid=${gameId}&serverid=${serverId}`;
+                    inviteButton.disabled = true;
+
+                    navigator.clipboard.writeText(inviteUrl).then(
+                        function() {
+                            const originalText = inviteButton.innerHTML;
+                            inviteButton.innerHTML = `
+                                ${checkmarkwithoutcircle}
+                                Copied!
+                            `;
+                            ConsoleLogEnabled(`Invite link copied to clipboard`);
+                            notifications('Success! Invite link copied to clipboard!', 'success', '🎉', '2000');
+                            setTimeout(() => {
+                                inviteButton.innerHTML = originalText;
+                                inviteButton.disabled = false;
+                            }, 1000);
+                        },
+                        function(err) {
+                            ConsoleLogEnabled('Could not copy text: ', err);
+                            inviteButton.disabled = false;
+                        }
+                    );
+                });
+
+                inviteButton.onmouseover = function() {
+                    this.style.background = 'rgba(35, 39, 46, 0.8)';
+                    this.style.borderColor = 'rgba(255, 255, 255, 0.18)';
+                    this.style.transform = 'translateY(-1px)';
+                };
+
+                inviteButton.onmouseout = function() {
+                    this.style.background = 'rgba(28, 31, 37, 0.6)';
+                    this.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+                    this.style.transform = 'translateY(0)';
+                };
+
+                const moreInfoButton = document.createElement('button');
+                moreInfoButton.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M12 8v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16" r=".5" fill="currentColor" stroke="currentColor"/></svg>
+                `;
+                moreInfoButton.className = 'btn-control-xs more-info-button';
+                moreInfoButton.style.cssText = `
+                    background: rgba(28, 31, 37, 0.6);
+                    color: ${theme.textPrimary};
+                    border: 1px solid rgba(255, 255, 255, 0.12);
+                    padding: 8px;
+                    border-radius: 10px;
+                    font-size: 13px;
+                    font-weight: 500;
+                    cursor: pointer;
+                    transition: all 0.15s ease;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 34px;
+                    height: 34px;
+                `;
+
+                moreInfoButton.onmouseover = function() {
+                    this.style.background = 'rgba(35, 39, 46, 0.8)';
+                    this.style.borderColor = 'rgba(255, 255, 255, 0.18)';
+                    this.style.transform = 'translateY(-1px)';
+                    this.style.color = theme.accentPrimary;
+                };
+
+                moreInfoButton.onmouseout = function() {
+                    this.style.background = 'rgba(28, 31, 37, 0.6)';
+                    this.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+                    this.style.transform = 'translateY(0)';
+                    this.style.color = theme.textPrimary;
+                };
+
+                moreInfoButton.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const card = this.closest('.recent-server-card');
+                    const gameId = card.dataset.gameId;
+                    const serverId = card.dataset.serverId;
+                    const region = card.dataset.region;
+                    const lastPlayed = card.dataset.lastPlayed;
+
+                    const existingPopup = document.querySelector('.server-info-popup');
+                    if (existingPopup) existingPopup.remove();
+
+                    const popup = document.createElement('div');
+                    popup.className = 'server-info-popup';
+                    popup.style.cssText = `
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        z-index: 9999;
+                        background: rgba(0, 0, 0, 0.3);
+                        opacity: 0;
+                        transition: opacity 0.2s ease-out;
+                    `;
+
+                    const popupContent = document.createElement('div');
+                    popupContent.style.cssText = `
+                        background: ${theme.popupBg};
+                        border-radius: 16px;
+                        width: 420px;
+                        max-width: 90%;
+                        padding: 24px;
+                        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+                        border: 1px solid ${theme.popupBorder};
+                        transform: translateY(20px);
+                        opacity: 0;
+                        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+                    `;
+
+                    const popupHeader = document.createElement('div');
+                    popupHeader.style.cssText = `
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        margin-bottom: 20px;
+                        padding-bottom: 12px;
+                        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                    `;
+
+                    const popupTitle = document.createElement('h3');
+                    popupTitle.textContent = 'Server Information';
+                    popupTitle.style.cssText = `
+                        color: ${theme.textPrimary};
+                        font-size: 18px;
+                        font-weight: 600;
+                        margin: 0;
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                    `;
+
+                    const serverIconPopup = document.createElement('div');
+                    serverIconPopup.innerHTML = `
+                      ${serverstacklogo}
+                    `;
+                    popupTitle.prepend(serverIconPopup);
+
+                    popupHeader.appendChild(popupTitle);
+
+                    const infoItems = document.createElement('div');
+                    infoItems.style.cssText = `
+                        display: flex;
+                        flex-direction: column;
+                        gap: 16px;
+                    `;
+
+                    function createInfoItem(label, value, icon) {
+                        const item = document.createElement('div');
+                        item.style.cssText = `
+                            display: flex;
+                            gap: 12px;
+                            align-items: flex-start;
+                        `;
+
+                        const iconContainer = document.createElement('div');
+                        iconContainer.style.cssText = `
+                            background: rgba(77, 133, 238, 0.15);
+                            border-radius: 8px;
+                            width: 36px;
+                            height: 36px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            flex-shrink: 0;
+                        `;
+                        iconContainer.innerHTML = icon || `
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 8V12V8ZM12 16H12.01H12Z" stroke="${theme.accentPrimary}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="${theme.accentPrimary}" stroke-width="1.5"/>
+                            </svg>
+                        `;
+
+                        const textContainer = document.createElement('div');
+                        const labelEl = document.createElement('div');
+                        labelEl.textContent = label;
+                        labelEl.style.cssText = `
+                            color: ${theme.textSecondary};
+                            font-size: 12px;
+                            font-weight: 500;
+                            margin-bottom: 4px;
+                        `;
+
+                        const valueEl = document.createElement('div');
+                        valueEl.textContent = value;
+                        valueEl.style.cssText = `
+                            color: ${theme.textPrimary};
+                            font-size: 14px;
+                            font-weight: 600;
+                            word-break: break-all;
+                        `;
+
+                        textContainer.appendChild(labelEl);
+                        textContainer.appendChild(valueEl);
+                        item.appendChild(iconContainer);
+                        item.appendChild(textContainer);
+                        return item;
+                    }
+
+                    infoItems.appendChild(createInfoItem('Game ID', gameId, `
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.27 6.96 12 12.01l8.73-5.05M12 22.08V12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    `)); // a cube cause n!nt*ndo gamecube came up in mind
+
+                    infoItems.appendChild(createInfoItem('Server ID', serverId, `
+                        ${checkmarksvggeneraluse}
+                    `)); // yea idk what represents this lmao
+
+                    infoItems.appendChild(createInfoItem('Region', region, `
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="9" r="2.5" stroke="currentColor" stroke-width="2"/></svg>
+                    `)); // pointy thing on google maps
+
+                    const formattedLastPlayed = formatLastPlayedWithRelative(lastPlayed);
+                    infoItems.appendChild(createInfoItem('Last Played', formattedLastPlayed, `
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    `)); // a clock
+
+                    const popupFooter = document.createElement('div');
+                    popupFooter.style.cssText = `
+                        display: flex;
+                        justify-content: flex-end;
+                        gap: 10px;
+                        margin-top: 24px;
+                        padding-top: 16px;
+                        border-top: 1px solid rgba(255, 255, 255, 0.08);
+                    `;
+
+                    const copyButton = document.createElement('button');
+                    copyButton.textContent = 'Copy Info';
+                    copyButton.style.cssText = `
+                        background: rgba(28, 31, 37, 0.6);
+                        color: ${theme.textPrimary};
+                        border: 1px solid rgba(255, 255, 255, 0.12);
+                        padding: 8px 16px;
+                        border-radius: 8px;
+                        font-size: 13px;
+                        font-weight: 500;
+                        cursor: pointer;
+                        transition: all 0.15s ease;
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                    `;
+                    copyButton.innerHTML = `
+                        ${thelikecopysymbol}
+                        Copy Info
+                    `;
+                    copyButton.addEventListener('click', function() {
+                        const infoText = `Game ID: ${gameId}\nServer ID: ${serverId}\nRegion: ${region}\nLast Played: ${lastPlayed}`;
+                        navigator.clipboard.writeText(infoText);
+                        copyButton.innerHTML = `
+                            ${checkmarkwithoutcircle}
+                            Copied!
+                        `;
+                        setTimeout(() => {
+                            copyButton.innerHTML = `
+                              ${thelikecopysymbol}
+                              Copy Info
+                          `;
+                        }, 1500);
+                    });
+
+                    const closeButton = document.createElement('button');
+                    closeButton.textContent = 'Close';
+                    closeButton.style.cssText = `
+                        background: rgba(77, 133, 238, 0.15);
+                        color: ${theme.accentPrimary};
+                        border: none;
+                        padding: 8px 24px;
+                        border-radius: 8px;
+                        font-size: 13px;
+                        font-weight: 600;
+                        cursor: pointer;
+                        transition: all 0.15s ease;
+                    `;
+                    closeButton.addEventListener('click', function() {
+                        popup.style.opacity = '0';
+                        setTimeout(() => {
+                            popup.remove();
+                        }, 200);
+                    });
+
+                    popupFooter.appendChild(copyButton);
+                    popupFooter.appendChild(closeButton);
+
+                    popupContent.appendChild(popupHeader);
+                    popupContent.appendChild(infoItems);
+                    popupContent.appendChild(popupFooter);
+                    popup.appendChild(popupContent);
+
+                    document.body.appendChild(popup);
+
+                    setTimeout(() => {
+                        popup.style.opacity = '1';
+                        popupContent.style.opacity = '1';
+                        popupContent.style.transform = 'translateY(0)';
+                    }, 10);
+
+                    popup.addEventListener('click', function(e) {
+                        if (e.target === popup) {
+                            popup.style.opacity = '0';
+                            setTimeout(() => {
+                                popup.remove();
+                            }, 200);
+                        }
+                    });
+                });
+
+                buttonGroup.appendChild(removeButton);
+                buttonGroup.appendChild(separator);
+                buttonGroup.appendChild(joinButton);
+                buttonGroup.appendChild(inviteButton);
+                buttonGroup.appendChild(moreInfoButton);
+
+                serverCard.appendChild(serverIconWrapper);
+                serverCard.appendChild(left);
+                serverCard.appendChild(buttonGroup);
+
+                const lineAccent = document.createElement('div');
+                lineAccent.style.cssText = `
+                    position: absolute;
+                    left: 0;
+                    top: 16px;
+                    bottom: 16px;
+                    width: 3px;
+                    background: ${theme.accentGradient};
+                    border-radius: 0 2px 2px 0;
+                `;
+                serverCard.appendChild(lineAccent);
+
+                if (index === 0) {
+                    const cornerAccent = document.createElement('div');
+                    cornerAccent.style.cssText = `
+                        position: absolute;
+                        right: 0;
+                        top: 0;
+                        width: 40px;
+                        height: 40px;
+                        overflow: hidden;
+                        pointer-events: none;
+                    `;
+
+                    const cornerInner = document.createElement('div');
+                    cornerInner.style.cssText = `
+                        position: absolute;
+                        right: -20px;
+                        top: -20px;
+                        width: 40px;
+                        height: 40px;
+                        background: ${theme.accentPrimary};
+                        transform: rotate(45deg);
+                        opacity: 0.15;
+                    `;
+
+                    cornerAccent.appendChild(cornerInner);
+                    serverCard.appendChild(cornerAccent);
+                }
+
+                cardsWrapper.appendChild(serverCard);
+            });
+
+            contentContainer.appendChild(cardsWrapper);
+        }
+
+        recentSection.appendChild(headerContainer);
+        recentSection.appendChild(contentContainer);
+        friendsSectionHeader.parentNode.insertBefore(recentSection, friendsSectionHeader);
+    }
+
+    /*******************************************************
+    name of function: showAlreadyInGamePopup
+    description: Shows a styled popup when user is already in a game
+    *******************************************************/
+    async function showAlreadyInGamePopup(currentGameData) {
+        return new Promise(async (resolve) => {
+            try {
+                // Create overlay
+                const overlay = document.createElement('div');
+                overlay.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0, 0, 0, 0.4);
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    z-index: 100000000;
+                    opacity: 0;
+                    transition: opacity 0.3s ease;
+                `;
+
+                // Create popup
+                const popup = document.createElement('div');
+                popup.style.cssText = `
+                    background: linear-gradient(135deg, #1a1c1e 0%, #232527 100%);
+                    border-radius: 16px;
+                    padding: 32px;
+                    max-width: 420px;
+                    width: 90%;
+                    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7), 0 0 1px rgba(255, 255, 255, 0.1) inset;
+                    color: white;
+                    font-family: 'HCo Gotham SSm', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                    transform: scale(0.9);
+                    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+                    border: 1px solid rgba(255, 255, 255, 0.05);
+                `;
+
+                popup.innerHTML = `
+                    <div style="text-align: center;">
+                        <div id="gameIconContainer" style="
+                            width: 150px;
+                            height: 150px;
+                            border-radius: 12px;
+                            margin: 0 auto 20px auto;
+                            background: rgba(255, 255, 255, 0.05);
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            position: relative;
+                            overflow: hidden;
+                            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+                        ">
+                            <div id="loadingSpinner" style="
+                                width: 40px;
+                                height: 40px;
+                                border: 3px solid rgba(255, 255, 255, 0.1);
+                                border-top-color: #00a2ff;
+                                border-radius: 50%;
+                                animation: spin 0.8s linear infinite;
+                            "></div>
+                            <img id="gameIcon" style="
+                                width: 100%;
+                                height: 100%;
+                                object-fit: cover;
+                                display: none;
+                            ">
+                        </div>
+                        <h2 style="
+                            margin: 0 0 12px 0;
+                            font-size: 24px;
+                            font-weight: 700;
+                            color: #fff;
+                            letter-spacing: -0.5px;
+                        ">Already in a Game</h2>
+                        <p style="
+                            margin: 0 0 28px 0;
+                            font-size: 15px;
+                            color: #a0a0a0;
+                            line-height: 1.6;
+                        ">You are currently playing <strong style="color: #fff; font-weight: 600;">${currentGameData.lastLocation}</strong>. Would you still like to join this server?</p>
+                        <div style="display: flex; gap: 12px; justify-content: center; margin-bottom: 20px;">
+                            <button id="cancelJoin" style="
+                                background: rgba(255, 255, 255, 0.08);
+                                color: white;
+                                border: 1px solid rgba(255, 255, 255, 0.1);
+                                padding: 13px 28px;
+                                border-radius: 8px;
+                                font-size: 14px;
+                                font-weight: 600;
+                                cursor: pointer;
+                                transition: all 0.2s ease;
+                                letter-spacing: 0.3px;
+                            ">Cancel</button>
+                            <button id="confirmJoin" style="
+                                background: linear-gradient(135deg, #00a2ff 0%, #0088dd 100%);
+                                color: white;
+                                border: none;
+                                padding: 13px 28px;
+                                border-radius: 8px;
+                                font-size: 14px;
+                                font-weight: 600;
+                                cursor: pointer;
+                                transition: all 0.2s ease;
+                                box-shadow: 0 4px 12px rgba(0, 162, 255, 0.3);
+                                letter-spacing: 0.3px;
+                            ">Continue</button>
+                        </div>
+                        <div style="
+                            font-size: 11px;
+                            color: rgba(255, 255, 255, 0.25);
+                            font-weight: 500;
+                            letter-spacing: 0.5px;
+                        ">RoLocate by Oqarshi</div>
+                    </div>
+                `;
+
+                // Add keyframe animation for spinner
+                const style = document.createElement('style');
+                style.textContent = `
+                    @keyframes spin {
+                        to { transform: rotate(360deg); }
+                    }
+                `;
+                document.head.appendChild(style);
+
+                overlay.appendChild(popup);
+                document.body.appendChild(overlay);
+
+                // Trigger fade in animation
+                setTimeout(() => {
+                    overlay.style.opacity = '1';
+                    popup.style.transform = 'scale(1)';
+                }, 10);
+
+                // Load game icon
+                const loadingSpinner = popup.querySelector('#loadingSpinner');
+                const gameIconImg = popup.querySelector('#gameIcon');
+
+                try {
+                    const universeId = await getUniverseIdFromPlaceId(currentGameData.rootPlaceId);
+                    const gameIcon = await getGameIconFromUniverseId(universeId);
+
+                    gameIconImg.src = gameIcon;
+                    gameIconImg.onload = () => {
+                        loadingSpinner.style.display = 'none';
+                        gameIconImg.style.display = 'block';
+                    };
+                } catch (error) {
+                    loadingSpinner.style.display = 'none';
+                    // Show placeholder on error
+                    popup.querySelector('#gameIconContainer').innerHTML = `
+                        <div style="font-size: 60px; opacity: 0.3;">🎮</div>
+                    `;
+                }
+
+                // Add hover effects
+                const cancelBtn = popup.querySelector('#cancelJoin');
+                const confirmBtn = popup.querySelector('#confirmJoin');
+
+                cancelBtn.onmouseover = () => {
+                    cancelBtn.style.background = 'rgba(255, 255, 255, 0.12)';
+                    cancelBtn.style.transform = 'translateY(-1px)';
+                };
+                cancelBtn.onmouseout = () => {
+                    cancelBtn.style.background = 'rgba(255, 255, 255, 0.08)';
+                    cancelBtn.style.transform = 'translateY(0)';
+                };
+
+                confirmBtn.onmouseover = () => {
+                    confirmBtn.style.background = 'linear-gradient(135deg, #0088dd 0%, #0077cc 100%)';
+                    confirmBtn.style.transform = 'translateY(-1px)';
+                    confirmBtn.style.boxShadow = '0 6px 16px rgba(0, 162, 255, 0.4)';
+                };
+                confirmBtn.onmouseout = () => {
+                    confirmBtn.style.background = 'linear-gradient(135deg, #00a2ff 0%, #0088dd 100%)';
+                    confirmBtn.style.transform = 'translateY(0)';
+                    confirmBtn.style.boxShadow = '0 4px 12px rgba(0, 162, 255, 0.3)';
+                };
+
+                // Fade out animation
+                const fadeOut = () => {
+                    overlay.style.opacity = '0';
+                    popup.style.transform = 'scale(0.9)';
+                    setTimeout(() => overlay.remove(), 300);
+                };
+
+                // Handle button clicks
+                cancelBtn.onclick = () => {
+                    fadeOut();
+                    setTimeout(() => resolve(false), 300);
+                };
+
+                confirmBtn.onclick = () => {
+                    fadeOut();
+                    setTimeout(() => resolve(true), 300);
+                };
+
+            } catch (error) {
+                ConsoleLogEnabled(`Error creating popup: ${error}`);
+                // Fallback to simple confirm
+                resolve(confirm("You are already in a game. Would you like to continue joining this server?"));
+            }
+        });
+    }
+
+    /*******************************************************
+    name of function: JoinServer
+    description: a function to join servers. has btroblox comptabaility. also join private servers
+    *******************************************************/
+    async function JoinServer(placeId, serverId, serverType) {
+        if (!/^https:\/\/www\.roblox\.com(\/[a-z]{2})?\/games\//.test(window.location.href)) return;
+
+        if (localStorage.getItem("ROLOCATE_joinconfirmation") === "true") {
+            // checkj if in game
+            try {
+                const userId = getCurrentUserId();
+                const presence = await fetchUserPresence(userId);
+
+                if (presence && presence.gameId) {
+                    // show custom pouppu
+                    const shouldContinue = await showAlreadyInGamePopup(presence);
+
+                    if (!shouldContinue) {
+                        return; // no jioin
+                    }
+                }
+            } catch (error) {
+                ConsoleLogEnabled(`Error checking user presence: ${error}`);
+                // continue if fails
+            }
+        }
+
+        // join private server
+        if (serverType === "private server") {
+            ConsoleLogEnabled(`Joining PRIVATE SERVER`);
+
+            // bypass roblox interceptier
+            window._skipRobloxJoinInterceptor = true;
+
+            // join
+            Roblox.GameLauncher.joinPrivateGame(placeId, serverId);
+            return;
+        }
+
+        // mobile mode exception
+        if (localStorage.getItem("ROLOCATE_mobilemode") === "true") {
+            window.open(
+                `https://oqarshi.github.io/Invite/?placeid=${placeId}&serverid=${serverId}&mobilemode=true`,
+                "_blank"
+            );
+            return;
+        }
+        if (localStorage.getItem("ROLOCATE_btrobloxfix") === "true") {
+            /* ---------- recent‑servers handling (always runs) ---------- */
+            if (localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true") {
+                await HandleRecentServersAddGames(placeId, serverId);
+                document.querySelector(".recent-servers-section")?.remove();
+                HandleRecentServers();
+            }
+            /* ---------- smartserver join---------- */
+            if (localStorage.getItem("ROLOCATE_smartjoinpopup") === "true") {
+                showLoadingOverlay(placeId, serverId);
+                await new Promise(res => setTimeout(res, 1500));
+            }
+            //join via deeplink
+            ConsoleLogEnabled(`Joining via deeplink: placeId=${placeId}, serverId=${serverId}`);
+            window.location.href = `roblox://experiences/start?placeId=${placeId}&gameInstanceId=${serverId}`;
+        } else {
+            // join via roblox launcher
+            ConsoleLogEnabled(`Joining via Roblox launcher: placeId=${placeId}, serverId=${serverId}`);
+            /* ---------- recent‑servers handling (always runs) ---------- */
+            if (localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true") {
+                await HandleRecentServersAddGames(placeId, serverId);
+                document.querySelector(".recent-servers-section")?.remove();
+                HandleRecentServers();
+            }
+            /* ---------- smartserver join---------- */
+            if (localStorage.getItem("ROLOCATE_smartjoinpopup") === "true") {
+                showLoadingOverlay(placeId, serverId);
+                await new Promise(res => setTimeout(res, 1500));
+            }
+            // set flag to bypass interceptor
+            window._skipRobloxJoinInterceptor = true;
+            Roblox.GameLauncher.joinGameInstance(placeId, serverId);
+        }
+    }
+
+    /*******************************************************
+    name of function: showLoadingOverlay
+    description: Loading box when joining a server + Shows server location
+    *******************************************************/
+    // WARNING: Do not republish this script. Licensed for personal use only.
+    async function showLoadingOverlay(gameId, serverId, mainMessage = "", statusMessage = "") {
+        // remove existing overlay if present
+        const existingOverlay = document.querySelector('[data-loading-overlay]');
+        if (existingOverlay) {
+            existingOverlay.style.opacity = '0';
+            setTimeout(() => existingOverlay.remove(), 200);
+        }
+
+        // remove existing styles
+        const existingStyle = document.querySelector('[data-loading-overlay-style]');
+        if (existingStyle) existingStyle.remove();
+
+        // function to create elements with styles
+        const createElement = (tag, styles, content = '') => {
+            const el = document.createElement(tag);
+            Object.assign(el.style, styles);
+            if (content) el.innerHTML = content;
+            return el;
+        };
+
+        const style = createElement('style', {}, `
+            @keyframes progress-slide {
+                0% { left: -30%; }
+                100% { left: 100%; }
+            }
+            @keyframes progress-glow {
+                0%, 100% { box-shadow: 0 0 10px rgba(59, 130, 246, 0.3); }
+                50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.6); }
+            }
+            @keyframes dots {
+                0%, 20% { content: ''; }
+                40% { content: '.'; }
+                60% { content: '..'; }
+                80%, 100% { content: '...'; }
+            }
+            @keyframes fade-in {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+            @keyframes slide-up {
+                from {
+                    opacity: 0;
+                    transform: translateY(10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            @keyframes scale-in {
+                from {
+                    opacity: 0;
+                    transform: translate(-50%, -50%) scale(0.92);
+                }
+                to {
+                    opacity: 1;
+                    transform: translate(-50%, -50%) scale(1);
+                }
+            }
+        `);
+        style.setAttribute('data-loading-overlay-style', '');
+        document.head.appendChild(style);
+
+        // main overlay - lighter and no blur
+        const overlay = createElement('div', {
+            position: 'fixed',
+            top: '0',
+            left: '0',
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(0, 0, 0, 0.3)',
+            zIndex: '999999',
+            opacity: '0',
+            transition: 'opacity 0.5s ease'
+        });
+        overlay.setAttribute('data-loading-overlay', '');
+
+        // main container - bigger and lighter
+        const container = createElement('div', {
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%) scale(0.92)',
+            width: '540px',
+            background: '#1a1a1a',
+            borderRadius: '18px',
+            boxShadow: '0 12px 48px rgba(0, 0, 0, 0.6)',
+            border: '1px solid #2a2a2a',
+            padding: '0',
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            zIndex: '1000000',
+            overflow: 'hidden',
+            opacity: '0',
+            animation: 'scale-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards'
+        });
+
+        // close button
+        const closeButton = createElement('button', {
+            position: 'absolute',
+            top: '16px',
+            right: '16px',
+            width: '36px',
+            height: '36px',
+            borderRadius: '8px',
+            border: 'none',
+            background: '#252525',
+            color: '#888',
+            fontSize: '20px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.2s ease',
+            outline: 'none',
+            zIndex: '10'
+        }, '×');
+
+        closeButton.addEventListener('mouseenter', () => {
+            closeButton.style.background = '#303030';
+            closeButton.style.color = '#fff';
+        });
+        closeButton.addEventListener('mouseleave', () => {
+            closeButton.style.background = '#252525';
+            closeButton.style.color = '#888';
+        });
+
+        // header section with game icon
+        const headerSection = createElement('div', {
+            display: 'flex',
+            alignItems: 'center',
+            padding: '32px 32px 24px 32px',
+            gap: '20px',
+            animation: 'fade-in 0.4s ease 0.2s backwards'
+        });
+
+        // game icon - much larger
+        const iconContainer = createElement('div', {
+            width: '96px',
+            height: '96px',
+            borderRadius: '16px',
+            background: '#252525',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '1px solid #333',
+            overflow: 'hidden',
+            flexShrink: '0'
+        });
+
+        const defaultLogo = createElement('div', {
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'opacity 0.2s ease'
+        }, `<img src="${window.Base64Images.logo}" alt="Logo" width="96" height="96">`);
+
+        const gameIcon = createElement('img', {
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            display: 'none',
+            opacity: '0',
+            transition: 'opacity 0.2s ease'
+        });
+
+        iconContainer.appendChild(defaultLogo);
+        iconContainer.appendChild(gameIcon);
+
+        // text section
+        const textSection = createElement('div', {
+            flex: '1',
+            minWidth: '0'
+        });
+
+        const isServerHopping = !gameId || !serverId;
+        const titleText = createElement('div', {
+            fontSize: '24px',
+            fontWeight: '600',
+            color: '#fff',
+            marginBottom: '6px',
+            letterSpacing: '-0.02em'
+        }, mainMessage || (isServerHopping ? 'Server Hopping' : 'Joining Game'));
+
+        const dotsSpan = createElement('span', {
+            animation: 'dots 1.4s steps(4, end) infinite'
+        });
+        titleText.appendChild(dotsSpan);
+
+        const subtitleText = createElement('div', {
+            fontSize: '14px',
+            color: '#aaa',
+            fontWeight: '500'
+        }, statusMessage || (isServerHopping ? 'Finding available server' : 'Connecting to server'));
+
+        textSection.appendChild(titleText);
+        textSection.appendChild(subtitleText);
+        headerSection.appendChild(iconContainer);
+        headerSection.appendChild(textSection);
+
+        // divider
+        const divider = createElement('div', {
+            height: '1px',
+            background: '#2a2a2a',
+            margin: '0 32px'
+        });
+
+        // location section
+        const locationSection = createElement('div', {
+            padding: '24px 32px',
+            textAlign: 'center',
+            animation: 'slide-up 0.4s ease 0.3s backwards',
+            minHeight: '80px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center'
+        });
+
+        const locationLabel = createElement('div', {
+            fontSize: '11px',
+            color: '#888',
+            fontWeight: '600',
+            textTransform: 'uppercase',
+            letterSpacing: '1px',
+            marginBottom: '10px'
+        }, 'Server Location');
+
+        const locationValue = createElement('div', {
+            fontSize: '20px',
+            color: '#fff',
+            fontWeight: '600',
+            minHeight: '28px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'opacity 0.3s ease'
+        }, '🌍 Detecting...');
+
+        locationSection.appendChild(locationLabel);
+        locationSection.appendChild(locationValue);
+
+        // server details section
+        const detailsSection = createElement('div', {
+            padding: '0 32px 24px 32px',
+            display: 'flex',
+            gap: '12px',
+            animation: 'slide-up 0.4s ease 0.4s backwards'
+        });
+
+        const createDetail = (label, value, color) => {
+            const detail = createElement('div', {
+                flex: '1',
+                background: '#222',
+                border: '1px solid #2a2a2a',
+                borderRadius: '10px',
+                padding: '14px 16px',
+                minWidth: '0'
+            });
+
+            const labelEl = createElement('div', {
+                fontSize: '11px',
+                color: '#888',
+                fontWeight: '600',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                marginBottom: '6px'
+            }, label);
+
+            const valueEl = createElement('div', {
+                fontSize: '13px',
+                color: color,
+                fontWeight: '600',
+                fontFamily: 'monospace',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+            }, value || 'N/A');
+
+            detail.appendChild(labelEl);
+            detail.appendChild(valueEl);
+            return detail;
+        };
+
+        detailsSection.appendChild(createDetail('Game ID', gameId, '#60a5fa'));
+        detailsSection.appendChild(createDetail('Server ID', serverId, '#34d399'));
+
+        // progress bar section
+        const progressSection = createElement('div', {
+            padding: '0 32px 24px 32px',
+            animation: 'slide-up 0.4s ease 0.5s backwards'
+        });
+
+        const progressBar = createElement('div', {
+            height: '4px',
+            background: '#252525',
+            borderRadius: '2px',
+            overflow: 'hidden',
+            position: 'relative',
+            boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.5)'
+        });
+
+        const progressFill = createElement('div', {
+            position: 'absolute',
+            top: '0',
+            left: '-30%',
+            height: '100%',
+            width: '30%',
+            background: 'linear-gradient(90deg, rgba(59, 130, 246, 0) 0%, rgba(59, 130, 246, 0.8) 40%, #3b82f6 50%, rgba(59, 130, 246, 0.8) 60%, rgba(59, 130, 246, 0) 100%)',
+            animation: 'progress-slide 2s ease-in-out infinite, progress-glow 2s ease-in-out infinite',
+            borderRadius: '2px'
+        });
+
+        progressBar.appendChild(progressFill);
+        progressSection.appendChild(progressBar);
+
+        // footer
+        const footer = createElement('div', {
+            padding: '20px 32px',
+            borderTop: '1px solid #2a2a2a',
+            textAlign: 'center',
+            animation: 'fade-in 0.4s ease 0.6s backwards'
+        });
+
+        const footerText = createElement('div', {
+            fontSize: '11px',
+            color: '#666',
+            fontWeight: '600',
+            letterSpacing: '0.5px',
+            textTransform: 'uppercase'
+        }, 'RoLocate by Oqarshi');
+
+        footer.appendChild(footerText);
+
+        // assemble everything
+        container.appendChild(closeButton);
+        container.appendChild(headerSection);
+        container.appendChild(divider);
+        container.appendChild(locationSection);
+        container.appendChild(detailsSection);
+        container.appendChild(progressSection);
+        container.appendChild(footer);
+        overlay.appendChild(container);
+        document.body.appendChild(overlay);
+
+        // animate in
+        requestAnimationFrame(() => {
+            overlay.style.opacity = '1';
+        });
+
+        // fetch game icon
+        if (gameId) {
+            getUniverseIdFromPlaceId(gameId)
+                .then(universeId => getGameIconFromUniverseId(universeId))
+                .then(iconUrl => {
+                    gameIcon.src = iconUrl;
+                    gameIcon.onload = () => {
+                        defaultLogo.style.opacity = '0';
+                        setTimeout(() => {
+                            defaultLogo.style.display = 'none';
+                            gameIcon.style.display = 'block';
+                            requestAnimationFrame(() => {
+                                gameIcon.style.opacity = '1';
+                            });
+                        }, 200);
+                    };
+                    gameIcon.onerror = () => ConsoleLogEnabled('Failed to load game icon');
+                })
+                .catch(error => ConsoleLogEnabled('Error fetching game icon:', error));
+        }
+
+        // fetch server location
+        (async () => {
+            subtitleText.textContent = statusMessage || (isServerHopping ? 'Finding server...' : 'Locating server...');
+
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            try {
+                if (isServerHopping) {
+                    locationValue.innerHTML = '🌍 Random Server';
+                    subtitleText.textContent = statusMessage || 'Connecting...';
+                } else {
+                    const locationData = await fetchServerDetails(gameId, serverId);
+                    const flagEmoji = getFlagEmoji(locationData.country.code);
+                    locationValue.innerHTML = '';
+                    locationValue.appendChild(flagEmoji);
+                    locationValue.append(` ${locationData.city}, ${locationData.country.name}`);
+                    subtitleText.innerHTML = statusMessage || `Connecting to <span style="color: #60a5fa; font-weight: 600;">${locationData.city}</span>`;
+                }
+            } catch (error) {
+                ConsoleLogEnabled('Error fetching location:', error);
+                locationValue.innerHTML = isServerHopping ? '🌍 Random Server' : '🌍 Unknown Location';
+                subtitleText.textContent = statusMessage || 'Connecting...';
+            }
+        })();
+
+        // cleanup function
+        const cleanup = () => {
+            overlay.style.opacity = '0';
+            setTimeout(() => {
+                overlay.remove();
+                style.remove();
+            }, 200);
+        };
+
+        // auto hide after 20 seconds for server hopping, 6 seconds for normal join
+        const fadeOutDuration = isServerHopping ? 20000 : 6000;
+        const fadeOutTimer = setTimeout(cleanup, fadeOutDuration);
+
+        // close button handler
+        closeButton.addEventListener('click', () => {
+            clearTimeout(fadeOutTimer);
+            cleanup();
+        });
+    }
+
+    function Responsivegamecards() {
+        if (localStorage.getItem("ROLOCATE_responsivegamecards") === "false") {
+          return;
+        }
+        // Add styles
+        const style = document.createElement('style');
+        style.id = 'game-card-hover-styles';
+        style.textContent = `
+            .game-card-container {
+                transition: all 0.25s ease-out !important;
+            }
+
+            .game-card-container:hover {
+                transform: translateY(-6px) !important;
+                box-shadow: 0 8px 20px rgba(0,0,0,0.2) !important;
+            }
+
+            .game-card-thumb-container {
+                overflow: hidden !important;
+            }
+
+            .game-card-thumb-container img {
+                transition: transform 0.3s ease !important;
+            }
+
+            .game-card-container:hover .game-card-thumb-container img {
+                transform: scale(1.08) !important;
+            }
+        `;
+        document.head.appendChild(style);
+
+        // when game cards show up
+        new MutationObserver(() => {}).observe(document.body, { childList: true, subtree: true });
+    }
+
+    /*******************************************************
     name of function: event listener
     description: Not a function but runs the initial setup for the script to actually
     start working. Very important
@@ -8936,23 +13072,32 @@ li a.about-link:hover::after {
             ConsoleLogEnabled("Loaded Base64Images. It is ready to use!");
         });
 
+        loadServerRegions(() => {
+            ConsoleLogEnabled("Loaded Server Regions!");
+        });
+
         AddSettingsButton(() => {
             ConsoleLogEnabled("Loaded Settings button!");
         });
 
-        betterfriends();
-        SmartSearch(); // love this function btw lmao
-        applycustombackgrounds();
-        restoreclassicterms();
-        quicklaunchgamesfunction();
-        manageRobloxChatBar();
-        loadmutualfriends();
-        Update_Popup();
-        initializeLocalStorage();
-        removeAds();
-        showOldRobloxGreeting();
-        validateManualMode();
-        qualityfilterRobloxGames();
+        if (localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true") {
+            HandleRecentServersURLandTrackPresence(); // starts presence tracking for recent servers
+        }
+
+        betterfriends(); // shows better friends
+        Responsivegamecards(); // uh the repsonsive game cards
+        SmartSearch(); // smartsearch bar ontop cool function :)
+        applycustombackgrounds(); // applies custom backgrounds
+        restoreclassicterms(); // restores classic terms
+        quicklaunchgamesfunction(); // shows quick launch games
+        manageRobloxChatBar(); // removes chatbar if enabled
+        loadmutualfriends(); // shows mutualfriends
+        Update_Popup(); // shows update message
+        initializeLocalStorage(); // sets up localstorage
+        removeAds(); // removes ads
+        showOldRobloxGreeting(); // shows old greeting
+        validateManualMode(); // checks for manual mode
+        qualityfilterRobloxGames(); // filters roblox game if it is on
 
         // start observing URL changes cuase its cool
         observeURLChanges();
@@ -8974,7 +13119,6 @@ li a.about-link:hover::after {
     *******************************************************/
 
     if (localStorage.ROLOCATE_mobilemode === "true" && !location.href.match(/^https:\/\/www\.roblox\.com(\/[a-z]{2})?\/games\//)) {
-        console.log("true");
         const observer = new MutationObserver(() => {
             document.querySelectorAll('a[href*="/games/"]').forEach(link => {
                 if (link.dataset.mobileModeAttached) return;
@@ -9010,6 +13154,115 @@ li a.about-link:hover::after {
         notifications('Tap "Continue in browser"', 'info', '❗', '30000');
     }
 
+    /*******************************************************
+    name of function: mobile stuff experimental #5
+    description: so like if on roblox.com where says go to app, tell user to not do that
+    *******************************************************/
+    // RoLocate Loading Screen - Run immediately, before page loads
+    if (localStorage.ROLOCATE_mobilemode === "true" && location.href.match(/^https:\/\/www\.roblox\.com(\/[a-z]{2})?\/home/)) {
+        // Inject styles immediately in head
+        const style = document.createElement('style');
+        style.textContent = `
+            #rolocate-loading-screen {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: #000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 999999;
+                opacity: 1;
+                transition: opacity 0.6s ease;
+            }
+            #rolocate-loading-screen.fade-out {
+                opacity: 0;
+            }
+            .rolocate-loading-content {
+                text-align: center;
+            }
+            .rolocate-logo-text-container {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 15px;
+                margin-bottom: 15px;
+            }
+            .rolocate-logo {
+                width: 50px;
+                height: 50px;
+                border-radius: 8px;
+                transform: translate(10px, -5px);
+                opacity: 0;
+                animation: rolocate-logo-fade 0.5s ease-in-out 0.3s forwards;
+            }
+            .rolocate-svg {
+                width: 250px;
+                height: auto;
+            }
+            .rolocate-text {
+                font-size: 48px;
+                font-weight: 700;
+                font-family: Arial, sans-serif;
+                fill: #ff4757;
+                opacity: 0;
+                animation: rolocate-text-fade 0.5s ease-in-out 0.5s forwards;
+            }
+            .rolocate-subtitle {
+                font-size: 20px;
+                font-weight: 400;
+                font-family: Arial, sans-serif;
+                color: #888;
+                opacity: 0;
+                margin: 0;
+                animation: rolocate-fade-in 0.8s ease-in-out 1.2s forwards;
+            }
+            @keyframes rolocate-logo-fade {
+                to {
+                    opacity: 1;
+                }
+            }
+            @keyframes rolocate-text-fade {
+                to {
+                    opacity: 1;
+                }
+            }
+            @keyframes rolocate-fade-in {
+                to {
+                    opacity: 0.6;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+        // Create loading screen HTML
+        const loadingScreen = document.createElement('div');
+        loadingScreen.id = 'rolocate-loading-screen';
+        loadingScreen.innerHTML = `
+            <div class="rolocate-loading-content">
+                <div class="rolocate-logo-text-container">
+                    <img src="${window.Base64Images.logo}" alt="RoLocate Logo" class="rolocate-logo">
+                    <svg viewBox="0 0 250 60" class="rolocate-svg">
+                        <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" class="rolocate-text">
+                            RoLocate
+                        </text>
+                    </svg>
+                </div>
+                <p class="rolocate-subtitle">For Mobile</p>
+            </div>
+        `;
+        // Add to body immediately
+        document.body.insertBefore(loadingScreen, document.body.firstChild);
+        // Fade out after 3 seconds
+        setTimeout(() => {
+            loadingScreen.classList.add('fade-out');
+            setTimeout(() => {
+                loadingScreen.remove();
+                style.remove();
+            }, 600);
+        }, 3000);
+    }
 
     /*******************************************************
     The code for the random hop button and the filter button on roblox.com/games/*
@@ -9020,80 +13273,59 @@ li a.about-link:hover::after {
                 localStorage.getItem("ROLOCATE_togglefilterserversbutton") === "true" ||
                 localStorage.getItem("ROLOCATE_toggleserverhopbutton") === "true" ||
                 localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true" ||
-                localStorage.getItem("ROLOCATE_compactprivateservers") == "true"
+                localStorage.getItem("ROLOCATE_betterprivateservers") == "true"
             )
         ) {
 
         let Isongamespage = true;
 
         if (window.location.href.includes("/games/")) { // saftey check and lazy load data to save the 2mb of ram lmao
-            loadServerRegions(); // lazy loads the server region data to save 1.4mb of ram
             InitRobloxLaunchHandler();
 
             if (window.serverRegionsByIp) {
-                ConsoleLogEnabled("Server regions data loaded successfully.");
+                ConsoleLogEnabled("enabled roblox launch handler");
             } else {
-                ConsoleLogEnabled("Failed to load server regions data.");
+                ConsoleLogEnabled("failed to enable roblox launch handler");
             }
             getFlagEmoji(); // lazy loads the flag emoji base64 to save some ram i guess
         }
 
-
         /*******************************************************
-        name of function: JoinServer
-        description: a function to join servers. has btroblox comptabaility
+        name of function:monitorPlayButton
+        description: for join confimation and like future updates note that it is called if the jopinconfimation in localstop4arghe is true so not check needed here
         *******************************************************/
-        async function JoinServer(placeId, serverId) {
-            if (!/^https:\/\/www\.roblox\.com(\/[a-z]{2})?\/games\//.test(window.location.href)) return;
+        function monitorPlayButton() {
+            const button = document.querySelector('[data-testid="play-button"]');
+            if (!button) return;
 
-            // mobile mode exception
-            if (localStorage.getItem("ROLOCATE_mobilemode") === "true") {
-                window.open(
-                    `https://oqarshi.github.io/Invite/?placeid=${placeId}&serverid=${serverId}&mobilemode=true`,
-                    "_blank"
-                );
-                return;
+            async function onPlayClick(event) {
+                //intercept real clicks
+                if (!event.isTrusted) {
+                    return; // let program clicks
+                }
+
+                event.preventDefault();
+                event.stopImmediatePropagation();
+
+                try {
+                    const userId = getCurrentUserId();
+                    const presence = await fetchUserPresence(userId);
+                    if (presence && presence.gameId) {
+                        const shouldContinue = await showAlreadyInGamePopup(presence);
+                        if (!shouldContinue) return;
+                    }
+                } catch (error) {
+                    ConsoleLogEnabled('Error checking user presence:', error);
+                }
+
+                // Uok so rel click
+                button.click();
             }
 
-            if (localStorage.getItem("ROLOCATE_btrobloxfix") === "true") {
-
-                /* ---------- recent‑servers handling (always runs) ---------- */
-                if (localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true") {
-                    await HandleRecentServersAddGames(placeId, serverId);
-                    document.querySelector(".recent-servers-section")?.remove();
-                    HandleRecentServers();
-                }
-
-                /* ---------- smartserver join---------- */
-                if (localStorage.getItem("ROLOCATE_smartjoinpopup") === "true") {
-                    showLoadingOverlay(placeId, serverId); // visual feedback
-                    await new Promise(res => setTimeout(res, 1500)); // 1.5s delay
-                }
-                //join via deeplink
-                ConsoleLogEnabled(`Joining via deeplink: placeId=${placeId}, serverId=${serverId}`);
-                window.location.href = `roblox://experiences/start?placeId=${placeId}&gameInstanceId=${serverId}`;
-            } else {
-                // join via roblox launcher
-                ConsoleLogEnabled(`Joining via Roblox launcher: placeId=${placeId}, serverId=${serverId}`);
-
-                /* ---------- recent‑servers handling (always runs) ---------- */
-                if (localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true") {
-                    await HandleRecentServersAddGames(placeId, serverId); // fixed: was gameId
-                    document.querySelector(".recent-servers-section")?.remove();
-                    HandleRecentServers();
-                }
-
-                /* ---------- smartserver join---------- */
-                if (localStorage.getItem("ROLOCATE_smartjoinpopup") === "true") {
-                    showLoadingOverlay(placeId, serverId); // fixed: was gameId
-                    await new Promise(res => setTimeout(res, 1500)); // 1.5s delay
-                }
-
-                // set flag to bypass interceptor
-                window._skipRobloxJoinInterceptor = true;
-                Roblox.GameLauncher.joinGameInstance(placeId, serverId);
-            }
+            button.addEventListener('click', onPlayClick, true);
         }
+
+
 
         /*******************************************************
         name of function: InitRobloxLaunchHandler
@@ -9105,1354 +13337,54 @@ li a.about-link:hover::after {
             if (localStorage.getItem("ROLOCATE_btrobloxfix") === "true" || localStorage.getItem("ROLOCATE_mobilemode") === "true") {
                 return;
             }
-
             if (!/^https:\/\/www\.roblox\.com(\/[a-z]{2})?\/games\//.test(window.location.href)) return;
-
             if (window._robloxJoinInterceptorInitialized) return;
             window._robloxJoinInterceptorInitialized = true;
-
             const originalJoin = Roblox.GameLauncher.joinGameInstance;
-
             Roblox.GameLauncher.joinGameInstance = async function(gameId, serverId) {
-
                 // check if we should skip interception (called from JoinServer)
                 if (window._skipRobloxJoinInterceptor) {
                     window._skipRobloxJoinInterceptor = false; // reset flag
                     return originalJoin.apply(this, arguments);
                 }
 
-                ConsoleLogEnabled(`Intercepted join: Game ID = ${gameId}, Server ID = ${serverId}`);
+                if (localStorage.getItem("ROLOCATE_joinconfirmation") === "true") {
+                    // check if in game
+                    try {
+                        const userId = getCurrentUserId();
+                        const presence = await fetchUserPresence(userId);
 
+                        if (presence && presence.gameId) {
+                            // show the popup
+                            const shouldContinue = await showAlreadyInGamePopup(presence);
+
+                            if (!shouldContinue) {
+                                return;
+                            }
+                        }
+                    } catch (error) {
+                        ConsoleLogEnabled(`Error checking user presence: ${error}`);
+                        // contineu if presense fails
+                    }
+                }
+
+                ConsoleLogEnabled(`Intercepted join: Game ID = ${gameId}, Server ID = ${serverId}`);
                 /* ---------- recent‑servers handling (always runs) ---------- */
                 if (localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true") {
                     await HandleRecentServersAddGames(gameId, serverId);
                     document.querySelector(".recent-servers-section")?.remove();
                     HandleRecentServers();
                 }
-
                 /* ---------- smartserver join---------- */
                 if (localStorage.getItem("ROLOCATE_smartjoinpopup") === "true") {
-                    showLoadingOverlay(gameId, serverId); // visual feedback
-                    await new Promise(res => setTimeout(res, 1500)); // 1.5s delay
+                    showLoadingOverlay(gameId, serverId);
+                    await new Promise(res => setTimeout(res, 1500));
                 }
                 /* ---------- finally join the game ---------- */
                 return originalJoin.apply(this, arguments);
             };
         }
-        /*******************************************************
-        name of function: HandleRecentServersAddGames
-        description: Adds recent servers to localstorage for safe
-        keeping
-        *******************************************************/
-        // WARNING: Do not republish this script. Licensed for personal use only.
-        async function HandleRecentServersAddGames(gameId, serverId) {
-            const storageKey = "ROLOCATE_recentservers_button";
-            const stored = JSON.parse(localStorage.getItem(storageKey) || "{}");
-            const key = `${gameId}_${serverId}`;
 
-            // check if we already have region data for this server
-            if (!stored[key] || !stored[key].region) {
-                try {
-                    // fetch server region if not already stored
-                    const region = await fetchServerDetails(gameId, serverId);
-                    stored[key] = {
-                        timestamp: Date.now(),
-                        region: region
-                    };
-                } catch (error) {
-                    ConsoleLogEnabled("Failed to fetch server region:", error);
-                    // store without region data if fetch fails
-                    stored[key] = {
-                        timestamp: Date.now(),
-                        region: null
-                    };
-                }
-            } else {
-                // update timestamp but keep existing region data
-                stored[key].timestamp = Date.now();
-            }
-
-            localStorage.setItem(storageKey, JSON.stringify(stored));
-        }
-
-
-        /*******************************************************
-        name of function: HandleRecentServersURL
-        description: Detects recent servers from the url if
-        user joins server from invite url and cleans up the URL
-        *******************************************************/
-        // WARNING: Do not republish this script. Licensed for personal use only.
-        function HandleRecentServersURL() {
-            // static like variable to remember if we've already found an invalid URL
-            if (HandleRecentServersURL.alreadyInvalid) {
-                return;
-            }
-
-            const url = window.location.href;
-
-            // in url to match ROLOCATE_GAMEID and SERVERID from the hash
-            const match = url.match(/ROLOCATE_GAMEID=(\d+)_SERVERID=([a-f0-9-]+)/i);
-
-            if (match && match.length === 3) {
-                const gameId = match[1];
-                const serverId = match[2];
-
-                // clean up the URL from invite
-                const cleanURL = window.location.pathname + window.location.search;
-                history.replaceState(null, null, cleanURL);
-
-                // call handler stuff
-                HandleRecentServersAddGames(gameId, serverId);
-            } else {
-                ConsoleLogEnabled("No gameId and serverId found in URL. (From invite link)");
-                HandleRecentServersURL.alreadyInvalid = true; // Set internal flag
-            }
-        }
-
-        /*******************************************************
-        name of function: getFlagEmoji
-        description: Guves Flag Emoji
-        *******************************************************/
-        function getFlagEmoji(countryCode) {
-            // static variables to maintain state without globals
-            if (!getFlagEmoji.flagsData) {
-                ConsoleLogEnabled("[getFlagEmoji] Initializing static variables.");
-                getFlagEmoji.flagsData = null;
-                getFlagEmoji.isLoaded = false;
-            }
-
-            // if no countryCode provided, lazy load all data
-            if (!countryCode) {
-                ConsoleLogEnabled("[getFlagEmoji] No country code provided.");
-                if (!getFlagEmoji.isLoaded) {
-                    ConsoleLogEnabled("[getFlagEmoji] Loading flag data (no countryCode).");
-                    getFlagEmoji.flagsData = loadFlagsData(); // this function comes from @require
-                    getFlagEmoji.isLoaded = true;
-                    ConsoleLogEnabled("[getFlagEmoji] Flag data loaded successfully.");
-                } else {
-                    ConsoleLogEnabled("[getFlagEmoji] Flag data already loaded.");
-                }
-                return;
-            }
-
-            // if data not loaded yet, load it now
-            if (!getFlagEmoji.isLoaded) {
-                ConsoleLogEnabled(`[getFlagEmoji] Lazy loading flag data for country: ${countryCode}`);
-                getFlagEmoji.flagsData = loadFlagsData();
-                getFlagEmoji.isLoaded = true;
-                ConsoleLogEnabled("[getFlagEmoji] Flag data loaded successfully.");
-            }
-
-            const src = getFlagEmoji.flagsData[countryCode];
-
-            ConsoleLogEnabled(`[getFlagEmoji] Creating flag image for country code: ${countryCode}`);
-
-            const img = document.createElement('img');
-            img.src = src;
-            img.alt = countryCode;
-            img.width = 24;
-            img.height = 18;
-            img.style.verticalAlign = 'middle';
-            img.style.marginRight = '4px';
-
-            return img;
-        }
-
-
-        /*******************************************************
-        name of function: HandleRecentServers
-        description: Detects if recent servers are in localstorage
-        and then adds them to the page with css styles
-        *******************************************************/
-        // WARNING: Do not republish this script. Licensed for personal use only.
-        function HandleRecentServers() {
-            const serverList = document.querySelector('.server-list-options');
-            if (!serverList || document.querySelector('.recent-servers-section')) return;
-
-            const match = window.location.href.match(/\/games\/(\d+)\//);
-            if (!match) return;
-            const currentGameId = match[1];
-
-            const allHeaders = document.querySelectorAll('.server-list-header');
-            let friendsSectionHeader = null;
-
-            allHeaders.forEach(header => { // fix so restore classic terms would not interfere
-                const text = header.textContent.trim();
-                const match = ['Servers My Connections Are In', 'Servers My Friends Are In'].some(
-                    label => text === label
-                );
-                if (match) {
-                    friendsSectionHeader = header.closest('.container-header');
-                }
-            });
-
-
-            function formatLastPlayedWithRelative(lastPlayed, mode) {
-                const lastPlayedDate = new Date(lastPlayed);
-                const now = new Date();
-
-                const diffMs = now - lastPlayedDate;
-                const diffSeconds = Math.floor(diffMs / 1000);
-                const diffMinutes = Math.floor(diffSeconds / 60);
-                const diffHours = Math.floor(diffMinutes / 60);
-                const diffDays = Math.floor(diffHours / 24);
-
-                let relativeTime = '';
-                if (diffDays > 0) {
-                    relativeTime = diffDays === 1 ? '1 day ago' : `${diffDays} days ago`;
-                } else if (diffHours > 0) {
-                    relativeTime = diffHours === 1 ? '1 hour ago' : `${diffHours} hours ago`;
-                } else if (diffMinutes > 0) {
-                    relativeTime = diffMinutes === 1 ? '1 minute ago' : `${diffMinutes} minutes ago`;
-                } else {
-                    relativeTime = diffSeconds <= 1 ? 'just now' : `${diffSeconds} seconds ago`;
-                }
-
-                if (mode === "relativeOnly") {
-                    return relativeTime;
-                }
-
-                return `${lastPlayed} (${relativeTime})`;
-            }
-
-            if (!friendsSectionHeader) return;
-
-            const theme = {
-                bgGradient: 'linear-gradient(145deg, #1e2228, #18191e)',
-                bgGradientHover: 'linear-gradient(145deg, #23272f, #1c1f25)',
-                accentPrimary: '#4d85ee',
-                accentGradient: 'linear-gradient(to bottom, #4d85ee, #3464c9)',
-                accentGradientHover: 'linear-gradient(to bottom, #5990ff, #3b6fdd)',
-                textPrimary: '#e8ecf3',
-                textSecondary: '#a0a8b8',
-                borderLight: 'rgba(255, 255, 255, 0.06)',
-                borderLightHover: 'rgba(255, 255, 255, 0.12)',
-                shadow: '0 5px 15px rgba(0, 0, 0, 0.25)',
-                shadowHover: '0 8px 25px rgba(0, 0, 0, 0.3)',
-                dangerGradient: 'linear-gradient(to bottom, #ff5b5b, #e04444)',
-                dangerGradientHover: 'linear-gradient(to bottom, #ff7575, #f55)',
-                popupBg: 'rgba(20, 22, 26, 0.95)',
-                popupBorder: 'rgba(77, 133, 238, 0.2)'
-            };
-
-            const recentSection = document.createElement('div');
-            recentSection.className = 'recent-servers-section premium-dark';
-            recentSection.style.marginBottom = '24px';
-
-            const headerContainer = document.createElement('div');
-            headerContainer.className = 'container-header';
-
-            const headerInner = document.createElement('div');
-            headerInner.className = 'server-list-container-header';
-            headerInner.style.padding = '0 4px';
-            headerInner.style.display = 'flex';
-            headerInner.style.justifyContent = 'space-between';
-            headerInner.style.alignItems = 'center';
-
-            const headerTitleContainer = document.createElement('div');
-            headerTitleContainer.style.display = 'flex';
-            headerTitleContainer.style.alignItems = 'center';
-
-            const headerTitle = document.createElement('h2');
-            headerTitle.className = 'server-list-header';
-            headerTitle.textContent = 'Recent Servers';
-            headerTitle.style.cssText = `
-                font-weight: 600;
-                color: ${theme.textPrimary};
-                letter-spacing: 0.5px;
-                position: relative;
-                display: inline-block;
-                padding-bottom: 4px;
-            `;
-
-            const headerAccent = document.createElement('span');
-            headerAccent.style.cssText = `
-                position: absolute;
-                bottom: 0;
-                left: 0;
-                width: 40px;
-                height: 2px;
-                background: ${theme.accentGradient};
-                border-radius: 2px;
-            `;
-            headerTitle.appendChild(headerAccent);
-            headerTitleContainer.appendChild(headerTitle);
-
-            const clearAllButton = document.createElement('button');
-            clearAllButton.textContent = 'Clear All'; // this button is in the popup in recent servers
-            clearAllButton.style.cssText = `
-                background: transparent;
-                color: ${theme.textSecondary};
-                border: 1px solid ${theme.borderLight};
-                padding: 4px 12px;
-                border-radius: 6px;
-                font-size: 12px;
-                font-weight: 500;
-                cursor: pointer;
-                transition: all 0.2s ease;
-                display: flex;
-                align-items: center;
-                gap: 4px;
-                margin-left: 12px;
-            `;
-
-            clearAllButton.innerHTML = `
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 4px;">
-                    <path d="M3 6H5H21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6H19Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M10 11V17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M14 11V17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                Clear All
-            `;
-
-            clearAllButton.onmouseover = function() {
-                this.style.background = 'rgba(100, 0, 0, 0.85)'; // dark red
-                this.style.color = 'white';
-                this.style.borderColor = 'rgba(100, 0, 0, 0.85)'; // boarder color
-                this.style.transform = 'scale(1.02)';
-            };
-
-
-            clearAllButton.onmouseout = function() {
-                this.style.background = 'transparent';
-                this.style.color = theme.textSecondary;
-                this.style.borderColor = theme.borderLight;
-                this.style.transform = 'scale(1)';
-            };
-
-            clearAllButton.addEventListener('click', function() {
-                const popup = document.createElement('div');
-                popup.style.cssText = `
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    z-index: 9999;
-                    background: rgba(0, 0, 0, 0.3);
-                    opacity: 0;
-                    transition: opacity 0.3s ease;
-                `;
-
-                const popupContent = document.createElement('div');
-                popupContent.style.cssText = `
-                    background: ${theme.popupBg};
-                    border-radius: 12px;
-                    padding: 20px;
-                    width: 360px;
-                    max-width: 90%;
-                    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-                    border: 1px solid ${theme.popupBorder};
-                    text-align: center;
-                    transform: translateY(20px);
-                    transition: transform 0.3s ease, opacity 0.3s ease;
-                    opacity: 0;
-                `;
-
-                const popupTitle = document.createElement('h3');
-                popupTitle.textContent = 'Clear All Recent Servers';
-                popupTitle.style.cssText = `
-                    color: ${theme.textPrimary};
-                    margin: 0 0 16px 0;
-                    font-size: 16px;
-                    font-weight: 600;
-                `;
-
-                const popupMessage = document.createElement('p');
-                popupMessage.textContent = 'Are you sure you want to clear all recent servers? This action cannot be undone.';
-                popupMessage.style.cssText = `
-                    color: ${theme.textSecondary};
-                    margin: 0 0 24px 0;
-                    font-size: 13px;
-                    line-height: 1.5;
-                `;
-
-                const buttonContainer = document.createElement('div');
-                buttonContainer.style.cssText = `
-                    display: flex;
-                    justify-content: center;
-                    gap: 12px;
-                `;
-
-                const cancelButton = document.createElement('button');
-                cancelButton.textContent = 'Cancel';
-                cancelButton.style.cssText = `
-                    background: rgba(28, 31, 37, 0.6);
-                    color: ${theme.textPrimary};
-                    border: 1px solid rgba(255, 255, 255, 0.12);
-                    padding: 8px 20px;
-                    border-radius: 6px;
-                    font-size: 13px;
-                    font-weight: 500;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                `;
-
-                cancelButton.onmouseover = function() {
-                    this.style.background = 'rgba(35, 39, 46, 0.8)';
-                    this.style.borderColor = 'rgba(255, 255, 255, 0.18)';
-                    this.style.transform = 'scale(1.05)';
-                };
-
-                cancelButton.onmouseout = function() {
-                    this.style.background = 'rgba(28, 31, 37, 0.6)';
-                    this.style.borderColor = 'rgba(255, 255, 255, 0.12)';
-                    this.style.transform = 'scale(1)';
-                };
-
-                cancelButton.addEventListener('click', function() {
-                    popup.style.opacity = '0';
-                    setTimeout(() => {
-                        popup.remove();
-                    }, 300);
-                });
-
-                const confirmButton = document.createElement('button');
-                confirmButton.textContent = 'Clear All'; // this one is in the popup
-                confirmButton.style.cssText = `
-                    background: rgba(100, 0, 0, 0.85); /* solid dark red */
-                    color: white;
-                    border: none;
-                    padding: 8px 20px;
-                    border-radius: 6px;
-                    font-size: 13px;
-                    font-weight: 600;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                    box-shadow: 0 2px 8px rgba(100, 0, 0, 0.3);
-                `;
-
-                confirmButton.onmouseover = function() {
-                    this.style.background = 'rgba(80, 0, 0, 0.95)'; /* slightly darker solid red on hover */
-                    this.style.boxShadow = '0 4px 10px rgba(80, 0, 0, 0.4)';
-                    this.style.transform = 'scale(1.02)';
-                };
-
-                confirmButton.onmouseout = function() {
-                    this.style.background = 'rgba(100, 0, 0, 0.85)'; /* revert to original */
-                    this.style.boxShadow = '0 2px 8px rgba(100, 0, 0, 0.3)';
-                    this.style.transform = 'scale(1)';
-                };
-
-
-                confirmButton.addEventListener('click', function() {
-                    const cardsWrapper = document.querySelector('.recent-servers-section .section-content-off');
-                    if (cardsWrapper) {
-                        cardsWrapper.querySelectorAll('.recent-server-card').forEach(card => {
-                            card.style.transition = 'all 0.3s ease-out';
-                            card.style.opacity = '0';
-                            card.style.height = '0';
-                            card.style.margin = '0';
-                            card.style.padding = '0';
-                            setTimeout(() => card.remove(), 300);
-                        });
-                    }
-
-                    const storageKey = "ROLOCATE_recentservers_button";
-                    localStorage.setItem(storageKey, JSON.stringify({}));
-
-                    const emptyMessage = document.createElement('div');
-                    emptyMessage.className = 'no-servers-message';
-                    emptyMessage.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="opacity: 0.7; margin-right: 10px;">
-                        <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M9.09 9C9.3251 8.33167 9.78915 7.76811 10.4 7.40913C11.0108 7.05016 11.7289 6.91894 12.4272 7.03871C13.1255 7.15849 13.7588 7.52152 14.2151 8.06353C14.6713 8.60553 14.9211 9.29152 14.92 10C14.92 12 11.92 13 11.92 13" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M12 17H12.01" stroke="${theme.accentPrimary}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>No Recent Servers Found`;
-                    emptyMessage.style.cssText = `
-                        color: ${theme.textSecondary};
-                        text-align: center;
-                        padding: 28px 0;
-                        font-size: 14px;
-                        letter-spacing: 0.3px;
-                        font-weight: 500;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        background: rgba(20, 22, 26, 0.4);
-                        border-radius: 12px;
-                        border: 1px solid rgba(77, 133, 238, 0.15);
-                        box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.2);
-                    `;
-
-                    if (cardsWrapper) {
-                        cardsWrapper.innerHTML = '';
-                        cardsWrapper.appendChild(emptyMessage);
-                    }
-
-                    popup.style.opacity = '0';
-                    setTimeout(() => {
-                        popup.remove();
-                    }, 300);
-                });
-
-                buttonContainer.appendChild(cancelButton);
-                buttonContainer.appendChild(confirmButton);
-                popupContent.appendChild(popupTitle);
-                popupContent.appendChild(popupMessage);
-                popupContent.appendChild(buttonContainer);
-                popup.appendChild(popupContent);
-                document.body.appendChild(popup);
-
-                setTimeout(() => {
-                    popup.style.opacity = '1';
-                    popupContent.style.transform = 'translateY(0)';
-                    popupContent.style.opacity = '1';
-                }, 10);
-
-                popup.addEventListener('click', function(e) {
-                    if (e.target === popup) {
-                        popup.style.opacity = '0';
-                        setTimeout(() => {
-                            popup.remove();
-                        }, 300);
-                    }
-                });
-            });
-
-            headerInner.appendChild(headerTitleContainer);
-            headerInner.appendChild(clearAllButton);
-            headerContainer.appendChild(headerInner);
-
-            const contentContainer = document.createElement('div');
-            contentContainer.className = 'section-content-off empty-game-instances-container';
-            contentContainer.style.padding = '8px 4px';
-
-            const storageKey = "ROLOCATE_recentservers_button";
-            let stored = JSON.parse(localStorage.getItem(storageKey) || "{}");
-
-            const currentTime = Date.now();
-            const threeDaysInMs = 3 * 24 * 60 * 60 * 1000;
-            let storageUpdated = false;
-
-            Object.keys(stored).forEach(key => {
-                const serverData = stored[key];
-                const serverTime = typeof serverData === 'object' ? serverData.timestamp : serverData;
-
-                if (currentTime - serverTime > threeDaysInMs) {
-                    delete stored[key];
-                    storageUpdated = true;
-                }
-            });
-
-            if (storageUpdated) {
-                localStorage.setItem(storageKey, JSON.stringify(stored));
-            }
-
-            const keys = Object.keys(stored).filter(key => key.startsWith(`${currentGameId}_`));
-            if (keys.length === 0) {
-                const emptyMessage = document.createElement('div');
-                emptyMessage.className = 'no-servers-message';
-                emptyMessage.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="opacity: 0.7; margin-right: 10px;">
-                    <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M9.09 9C9.3251 8.33167 9.78915 7.76811 10.4 7.40913C11.0108 7.05016 11.7289 6.91894 12.4272 7.03871C13.1255 7.15849 13.7588 7.52152 14.2151 8.06353C14.6713 8.60553 14.9211 9.29152 14.92 10C14.92 12 11.92 13 11.92 13" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M12 17H12.01" stroke="${theme.accentPrimary}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>No Recent Servers Found`;
-                emptyMessage.style.cssText = `
-                    color: ${theme.textSecondary};
-                    text-align: center;
-                    padding: 28px 0;
-                    font-size: 14px;
-                    letter-spacing: 0.3px;
-                    font-weight: 500;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    background: rgba(20, 22, 26, 0.4);
-                    border-radius: 12px;
-                    border: 1px solid rgba(77, 133, 238, 0.15);
-                    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.2);
-                `;
-                contentContainer.appendChild(emptyMessage);
-            } else {
-                keys.sort((a, b) => {
-                    const aData = stored[a];
-                    const bData = stored[b];
-                    const aTime = typeof aData === 'object' ? aData.timestamp : aData;
-                    const bTime = typeof bData === 'object' ? bData.timestamp : bData;
-                    return bTime - aTime;
-                });
-
-                const cardsWrapper = document.createElement('div');
-                cardsWrapper.style.cssText = `
-                    display: flex;
-                    flex-direction: column;
-                    gap: 12px;
-                    margin: 2px 0;
-                `;
-
-                keys.forEach((key, index) => {
-                    const [gameId, serverId] = key.split("_");
-                    const serverData = stored[key];
-
-                    const timeStored = typeof serverData === 'object' ? serverData.timestamp : serverData;
-                    const regionData = typeof serverData === 'object' ? serverData.region : null;
-
-                    const date = new Date(timeStored);
-                    const formattedTime = date.toLocaleString(undefined, {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
-                    });
-
-                    let regionDisplay = '';
-                    let flagElement = null;
-
-                    if (regionData && regionData !== null) {
-                        const city = regionData.city || 'Unknown';
-                        const countryCode = (regionData.country && regionData.country.code) || '';
-                        flagElement = getFlagEmoji(countryCode);
-                    } else {
-                        flagElement = getFlagEmoji('');
-                        regionDisplay = 'Unknown';
-                    }
-
-                    if (!flagElement) {
-                        flagElement = document.createTextNode('🌍');
-                        regionDisplay = regionDisplay || 'Unknown';
-                    }
-
-                    if (flagElement && flagElement.tagName === 'IMG') {
-                        flagElement.style.cssText = `
-                            width: 24px;
-                            height: 18px;
-                            vertical-align: middle;
-                            margin-right: 4px;
-                            display: inline-block;
-                        `;
-                    }
-
-                    if (!regionDisplay) {
-                        if (regionData && regionData !== null && regionData.city) {
-                            regionDisplay = regionData.city;
-                        } else {
-                            regionDisplay = 'Unknown';
-                        }
-                    }
-
-                    const serverCard = document.createElement('div');
-                    serverCard.className = 'recent-server-card premium-dark';
-                    serverCard.dataset.serverKey = key;
-                    serverCard.dataset.gameId = gameId;
-                    serverCard.dataset.serverId = serverId;
-                    serverCard.dataset.region = regionDisplay;
-                    serverCard.dataset.lastPlayed = formattedTime;
-                    serverCard.style.cssText = `
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                        padding: 16px 22px;
-                        height: 76px;
-                        border-radius: 14px;
-                        background: ${theme.bgGradient};
-                        box-shadow: ${theme.shadow};
-                        color: ${theme.textPrimary};
-                        font-family: 'Segoe UI', 'Helvetica Neue', sans-serif;
-                        font-size: 14px;
-                        box-sizing: border-box;
-                        width: 100%;
-                        position: relative;
-                        overflow: hidden;
-                        border: 1px solid ${theme.borderLight};
-                        transition: all 0.2s ease-out;
-                    `;
-
-                    serverCard.onmouseover = function() {
-                        this.style.boxShadow = theme.shadowHover;
-                        this.style.transform = 'translateY(-2px)';
-                        this.style.borderColor = theme.borderLightHover;
-                        this.style.background = theme.bgGradientHover;
-                    };
-
-                    serverCard.onmouseout = function() {
-                        this.style.boxShadow = theme.shadow;
-                        this.style.transform = 'translateY(0)';
-                        this.style.borderColor = theme.borderLight;
-                        this.style.background = theme.bgGradient;
-                    };
-
-                    const glassOverlay = document.createElement('div');
-                    glassOverlay.style.cssText = `
-                        position: absolute;
-                        left: 0;
-                        top: 0;
-                        right: 0;
-                        height: 50%;
-                        background: linear-gradient(to bottom, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0));
-                        border-radius: 14px 14px 0 0;
-                        pointer-events: none;
-                    `;
-                    serverCard.appendChild(glassOverlay);
-
-                    const serverIconWrapper = document.createElement('div');
-                    serverIconWrapper.style.cssText = `
-                        position: absolute;
-                        left: 14px;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        width: 32px;
-                        height: 32px;
-                    `;
-
-                    const serverIcon = document.createElement('div');
-                    serverIcon.innerHTML = `
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M2 17L12 22L22 17" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M2 12L12 17L22 12" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M2 7L12 12L22 7L12 2L2 7Z" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    `;
-                    serverIconWrapper.appendChild(serverIcon);
-
-                    const iconGlow = document.createElement('div');
-                    iconGlow.style.cssText = `
-                        position: absolute;
-                        width: 24px;
-                        height: 24px;
-                        border-radius: 50%;
-                        background: ${theme.accentPrimary};
-                        opacity: 0.15;
-                        z-index: -1;
-                    `;
-                    serverIconWrapper.appendChild(iconGlow);
-
-                    const left = document.createElement('div');
-                    left.style.cssText = `
-                        display: flex;
-                        flex-direction: column;
-                        justify-content: center;
-                        margin-left: 12px;
-                        width: calc(100% - 180px);
-                    `;
-
-                    const lastPlayed = document.createElement('div');
-                    lastPlayed.textContent = `Last Played: ${formatLastPlayedWithRelative(formattedTime, "relativeOnly")}`;
-                    lastPlayed.style.cssText = `
-                        font-weight: 600;
-                        font-size: 14px;
-                        color: ${theme.textPrimary};
-                        line-height: 1.3;
-                        letter-spacing: 0.3px;
-                        margin-left: 40px;
-                        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-                        white-space: nowrap;
-                        overflow: hidden;
-                        text-overflow: ellipsis;
-                    `;
-
-                    const regionInfo = document.createElement('div');
-                    regionInfo.style.cssText = `
-                        font-size: 12px;
-                        color: ${theme.textSecondary};
-                        margin-top: 2px;
-                        opacity: 0.9;
-                        margin-left: 40px;
-                        line-height: 18px;
-                        white-space: nowrap;
-                        overflow: hidden;
-                        text-overflow: ellipsis;
-                    `;
-
-                    regionInfo.innerHTML = `<span style="color: ${theme.accentPrimary};">Region:</span> `;
-                    if (flagElement && (flagElement.nodeType === Node.ELEMENT_NODE || flagElement.nodeType === Node.TEXT_NODE)) {
-                        if (flagElement.nodeType === Node.ELEMENT_NODE) {
-                            flagElement.style.position = 'relative';
-                            flagElement.style.top = '-2px';
-                        }
-                        regionInfo.appendChild(flagElement);
-                    } else {
-                        regionInfo.appendChild(document.createTextNode('🌍'));
-                    }
-
-                    const regionText = document.createElement('span');
-                    regionText.textContent = ` ${regionDisplay}`;
-                    regionText.style.position = 'relative';
-                    regionText.style.left = '-4px';
-                    regionInfo.appendChild(regionText);
-
-                    left.appendChild(lastPlayed);
-                    left.appendChild(regionInfo);
-
-                    const buttonGroup = document.createElement('div');
-                    buttonGroup.style.cssText = `
-                        display: flex;
-                        gap: 12px;
-                        align-items: center;
-                        z-index: 2;
-                    `;
-
-                    const removeButton = document.createElement('button');
-                    removeButton.innerHTML = `
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    `;
-                    removeButton.className = 'btn-control-xs remove-button';
-                    removeButton.style.cssText = `
-                        background: ${theme.dangerGradient};
-                        color: white;
-                        border: none;
-                        padding: 6px;
-                        border-radius: 8px;
-                        font-size: 13px;
-                        font-weight: 600;
-                        cursor: pointer;
-                        transition: all 0.15s ease;
-                        letter-spacing: 0.4px;
-                        box-shadow: 0 2px 8px rgba(211, 47, 47, 0.3);
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        width: 30px;
-                        height: 30px;
-                    `;
-
-                    removeButton.onmouseover = function() {
-                        this.style.background = theme.dangerGradientHover;
-                        this.style.boxShadow = '0 4px 10px rgba(211, 47, 47, 0.4)';
-                        this.style.transform = 'translateY(-1px)';
-                    };
-
-                    removeButton.onmouseout = function() {
-                        this.style.background = theme.dangerGradient;
-                        this.style.boxShadow = '0 2px 8px rgba(211, 47, 47, 0.3)';
-                        this.style.transform = 'translateY(0)';
-                    };
-
-                    removeButton.addEventListener('click', function(e) {
-                        e.stopPropagation();
-                        const serverKey = this.closest('.recent-server-card').dataset.serverKey;
-
-                        serverCard.style.transition = 'all 0.3s ease-out';
-                        serverCard.style.opacity = '0';
-                        serverCard.style.height = '0';
-                        serverCard.style.margin = '0';
-                        serverCard.style.padding = '0';
-
-                        setTimeout(() => {
-                            serverCard.remove();
-
-                            const storedData = JSON.parse(localStorage.getItem(storageKey) || "{}");
-                            delete storedData[serverKey];
-                            localStorage.setItem(storageKey, JSON.stringify(storedData));
-
-                            if (document.querySelectorAll('.recent-server-card').length === 0) {
-                                const emptyMessage = document.createElement('div');
-                                emptyMessage.className = 'no-servers-message';
-                                emptyMessage.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="opacity: 0.7; margin-right: 10px;">
-                                    <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                                    <path d="M9.09 9C9.3251 8.33167 9.78915 7.76811 10.4 7.40913C11.0108 7.05016 11.7289 6.91894 12.4272 7.03871C13.1255 7.15849 13.7588 7.52152 14.2151 8.06353C14.6713 8.60553 14.9211 9.29152 14.92 10C14.92 12 11.92 13 11.92 13" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                                    <path d="M12 17H12.01" stroke="${theme.accentPrimary}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                </svg>No Recent Servers Found`;
-                                emptyMessage.style.cssText = `
-                                    color: ${theme.textSecondary};
-                                    text-align: center;
-                                    padding: 28px 0;
-                                    font-size: 14px;
-                                    letter-spacing: 0.3px;
-                                    font-weight: 500;
-                                    display: flex;
-                                    align-items: center;
-                                    justify-content: center;
-                                    background: rgba(20, 22, 26, 0.4);
-                                    border-radius: 12px;
-                                    border: 1px solid rgba(77, 133, 238, 0.15);
-                                    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.2);
-                                `;
-                                cardsWrapper.appendChild(emptyMessage);
-                            }
-                        }, 300);
-                    });
-
-                    const separator = document.createElement('div');
-                    separator.style.cssText = `
-                        height: 24px;
-                        width: 1px;
-                        background-color: rgba(255, 255, 255, 0.15);
-                        margin: 0 2px;
-                    `;
-
-                    const joinButton = document.createElement('button');
-                    joinButton.innerHTML = `
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 6px;">
-                            <path d="M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M12 5L19 12L12 19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                        Join
-                    `;
-                    joinButton.className = 'btn-control-xs join-button';
-                    joinButton.style.cssText = `
-                        background: ${theme.accentGradient};
-                        color: white;
-                        border: none;
-                        padding: 8px 18px;
-                        border-radius: 10px;
-                        font-size: 13px;
-                        font-weight: 600;
-                        cursor: pointer;
-                        transition: all 0.15s ease;
-                        letter-spacing: 0.4px;
-                        box-shadow: 0 2px 10px rgba(52, 100, 201, 0.3);
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                    `;
-
-                    joinButton.addEventListener('click', function() {
-                        try {
-                            JoinServer(gameId, serverId);
-                        } catch (error) {
-                            ConsoleLogEnabled("Error joining game:", error);
-                        }
-                    });
-
-                    joinButton.onmouseover = function() {
-                        this.style.background = theme.accentGradientHover;
-                        this.style.boxShadow = '0 4px 12px rgba(77, 133, 238, 0.4)';
-                        this.style.transform = 'translateY(-1px)';
-                    };
-
-                    joinButton.onmouseout = function() {
-                        this.style.background = theme.accentGradient;
-                        this.style.boxShadow = '0 2px 10px rgba(52, 100, 201, 0.3)';
-                        this.style.transform = 'translateY(0)';
-                    };
-
-                    const inviteButton = document.createElement('button');
-                    inviteButton.innerHTML = `
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 6px;">
-                            <path d="M16 18L18 20L22 16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M20 12V13.4C20 13.4 19.5 13 19 13C18.5 13 18 13.5 18 14C18 14.5 18.5 15 19 15C19.5 15 20 14.6 20 14.6V16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M4 20C4 17 7 17 8 17C9 17 13 17 13 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                            <path d="M9.5 10C10.8807 10 12 8.88071 12 7.5C12 6.11929 10.8807 5 9.5 5C8.11929 5 7 6.11929 7 7.5C7 8.88071 8.11929 10 9.5 10Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                        Invite
-                    `;
-                    inviteButton.className = 'btn-control-xs invite-button';
-                    inviteButton.style.cssText = `
-                        background: rgba(28, 31, 37, 0.6);
-                        color: ${theme.textPrimary};
-                        border: 1px solid rgba(255, 255, 255, 0.12);
-                        padding: 8px 18px;
-                        border-radius: 10px;
-                        font-size: 13px;
-                        font-weight: 500;
-                        cursor: pointer;
-                        transition: all 0.15s ease;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                    `;
-
-                    inviteButton.addEventListener('click', function() {
-                        const inviteUrl = `https://oqarshi.github.io/Invite/?placeid=${gameId}&serverid=${serverId}`;
-                        inviteButton.disabled = true;
-
-                        navigator.clipboard.writeText(inviteUrl).then(
-                            function() {
-                                const originalText = inviteButton.innerHTML;
-                                inviteButton.innerHTML = `
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 6px;">
-                                        <path d="M20 6L9 17L4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                    </svg>
-                                    Copied!
-                                `;
-                                ConsoleLogEnabled(`Invite link copied to clipboard`);
-                                notifications('Success! Invite link copied to clipboard!', 'success', '🎉', '2000');
-                                setTimeout(() => {
-                                    inviteButton.innerHTML = originalText;
-                                    inviteButton.disabled = false;
-                                }, 1000);
-                            },
-                            function(err) {
-                                ConsoleLogEnabled('Could not copy text: ', err);
-                                inviteButton.disabled = false;
-                            }
-                        );
-                    });
-
-                    inviteButton.onmouseover = function() {
-                        this.style.background = 'rgba(35, 39, 46, 0.8)';
-                        this.style.borderColor = 'rgba(255, 255, 255, 0.18)';
-                        this.style.transform = 'translateY(-1px)';
-                    };
-
-                    inviteButton.onmouseout = function() {
-                        this.style.background = 'rgba(28, 31, 37, 0.6)';
-                        this.style.borderColor = 'rgba(255, 255, 255, 0.12)';
-                        this.style.transform = 'translateY(0)';
-                    };
-
-                    const moreInfoButton = document.createElement('button');
-                    moreInfoButton.innerHTML = `
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12 8V12V8ZM12 16H12.01H12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="1.5"/>
-                        </svg>
-                    `;
-                    moreInfoButton.className = 'btn-control-xs more-info-button';
-                    moreInfoButton.style.cssText = `
-                        background: rgba(28, 31, 37, 0.6);
-                        color: ${theme.textPrimary};
-                        border: 1px solid rgba(255, 255, 255, 0.12);
-                        padding: 8px;
-                        border-radius: 10px;
-                        font-size: 13px;
-                        font-weight: 500;
-                        cursor: pointer;
-                        transition: all 0.15s ease;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        width: 34px;
-                        height: 34px;
-                    `;
-
-                    moreInfoButton.onmouseover = function() {
-                        this.style.background = 'rgba(35, 39, 46, 0.8)';
-                        this.style.borderColor = 'rgba(255, 255, 255, 0.18)';
-                        this.style.transform = 'translateY(-1px)';
-                        this.style.color = theme.accentPrimary;
-                    };
-
-                    moreInfoButton.onmouseout = function() {
-                        this.style.background = 'rgba(28, 31, 37, 0.6)';
-                        this.style.borderColor = 'rgba(255, 255, 255, 0.12)';
-                        this.style.transform = 'translateY(0)';
-                        this.style.color = theme.textPrimary;
-                    };
-
-                    moreInfoButton.addEventListener('click', function(e) {
-                        e.stopPropagation();
-                        const card = this.closest('.recent-server-card');
-                        const gameId = card.dataset.gameId;
-                        const serverId = card.dataset.serverId;
-                        const region = card.dataset.region;
-                        const lastPlayed = card.dataset.lastPlayed;
-
-                        const existingPopup = document.querySelector('.server-info-popup');
-                        if (existingPopup) existingPopup.remove();
-
-                        const popup = document.createElement('div');
-                        popup.className = 'server-info-popup';
-                        popup.style.cssText = `
-                            position: fixed;
-                            top: 0;
-                            left: 0;
-                            width: 100%;
-                            height: 100%;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            z-index: 9999;
-                            background: rgba(0, 0, 0, 0.3);
-                            opacity: 0;
-                            transition: opacity 0.2s ease-out;
-                        `;
-
-                        const popupContent = document.createElement('div');
-                        popupContent.style.cssText = `
-                            background: ${theme.popupBg};
-                            border-radius: 16px;
-                            width: 420px;
-                            max-width: 90%;
-                            padding: 24px;
-                            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
-                            border: 1px solid ${theme.popupBorder};
-                            transform: translateY(20px);
-                            opacity: 0;
-                            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-                        `;
-
-                        const popupHeader = document.createElement('div');
-                        popupHeader.style.cssText = `
-                            display: flex;
-                            justify-content: space-between;
-                            align-items: center;
-                            margin-bottom: 20px;
-                            padding-bottom: 12px;
-                            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-                        `;
-
-                        const popupTitle = document.createElement('h3');
-                        popupTitle.textContent = 'Server Information';
-                        popupTitle.style.cssText = `
-                            color: ${theme.textPrimary};
-                            font-size: 18px;
-                            font-weight: 600;
-                            margin: 0;
-                            display: flex;
-                            align-items: center;
-                            gap: 10px;
-                        `;
-
-                        const serverIconPopup = document.createElement('div');
-                        serverIconPopup.innerHTML = `
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M2 17L12 22L22 17" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                                <path d="M2 12L12 17L22 12" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                                <path d="M2 7L12 12L22 7L12 2L2 7Z" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                        `;
-                        popupTitle.prepend(serverIconPopup);
-
-                        popupHeader.appendChild(popupTitle);
-
-                        const infoItems = document.createElement('div');
-                        infoItems.style.cssText = `
-                            display: flex;
-                            flex-direction: column;
-                            gap: 16px;
-                        `;
-
-                        function createInfoItem(label, value, icon) {
-                            const item = document.createElement('div');
-                            item.style.cssText = `
-                                display: flex;
-                                gap: 12px;
-                                align-items: flex-start;
-                            `;
-
-                            const iconContainer = document.createElement('div');
-                            iconContainer.style.cssText = `
-                                background: rgba(77, 133, 238, 0.15);
-                                border-radius: 8px;
-                                width: 36px;
-                                height: 36px;
-                                display: flex;
-                                align-items: center;
-                                justify-content: center;
-                                flex-shrink: 0;
-                            `;
-                            iconContainer.innerHTML = icon || `
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M12 8V12V8ZM12 16H12.01H12Z" stroke="${theme.accentPrimary}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                    <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="${theme.accentPrimary}" stroke-width="1.5"/>
-                                </svg>
-                            `;
-
-                            const textContainer = document.createElement('div');
-                            const labelEl = document.createElement('div');
-                            labelEl.textContent = label;
-                            labelEl.style.cssText = `
-                                color: ${theme.textSecondary};
-                                font-size: 12px;
-                                font-weight: 500;
-                                margin-bottom: 4px;
-                            `;
-
-                            const valueEl = document.createElement('div');
-                            valueEl.textContent = value;
-                            valueEl.style.cssText = `
-                                color: ${theme.textPrimary};
-                                font-size: 14px;
-                                font-weight: 600;
-                                word-break: break-all;
-                            `;
-
-                            textContainer.appendChild(labelEl);
-                            textContainer.appendChild(valueEl);
-                            item.appendChild(iconContainer);
-                            item.appendChild(textContainer);
-                            return item;
-                        }
-
-                        infoItems.appendChild(createInfoItem('Game ID', gameId, `
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                                <path d="M3.27 6.96L12 12.01L20.73 6.96" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                                <path d="M12 22.08V12" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                        `));
-
-                        infoItems.appendChild(createInfoItem('Server ID', serverId, `
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M5 12.55L11 17.75L19 6.95" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                                <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="${theme.accentPrimary}" stroke-width="1.5"/>
-                            </svg>
-                        `));
-
-                        infoItems.appendChild(createInfoItem('Region', region, `
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2Z" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                                <path d="M12 11.5C13.3807 11.5 14.5 10.3807 14.5 9C14.5 7.61929 13.3807 6.5 12 6.5C10.6193 6.5 9.5 7.61929 9.5 9C9.5 10.3807 10.6193 11.5 12 11.5Z" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                        `));
-
-                        const formattedLastPlayed = formatLastPlayedWithRelative(lastPlayed);
-                        infoItems.appendChild(createInfoItem('Last Played', formattedLastPlayed, `
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M12 8V12L15 15" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                                <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="${theme.accentPrimary}" stroke-width="1.5"/>
-                            </svg>
-                        `));
-
-                        const popupFooter = document.createElement('div');
-                        popupFooter.style.cssText = `
-                            display: flex;
-                            justify-content: flex-end;
-                            gap: 10px;
-                            margin-top: 24px;
-                            padding-top: 16px;
-                            border-top: 1px solid rgba(255, 255, 255, 0.08);
-                        `;
-
-                        const copyButton = document.createElement('button');
-                        copyButton.textContent = 'Copy Info';
-                        copyButton.style.cssText = `
-                            background: rgba(28, 31, 37, 0.6);
-                            color: ${theme.textPrimary};
-                            border: 1px solid rgba(255, 255, 255, 0.12);
-                            padding: 8px 16px;
-                            border-radius: 8px;
-                            font-size: 13px;
-                            font-weight: 500;
-                            cursor: pointer;
-                            transition: all 0.15s ease;
-                            display: flex;
-                            align-items: center;
-                            gap: 6px;
-                        `;
-                        copyButton.innerHTML = `
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                            Copy Info
-                        `;
-                        copyButton.addEventListener('click', function() {
-                            const infoText = `Game ID: ${gameId}\nServer ID: ${serverId}\nRegion: ${region}\nLast Played: ${lastPlayed}`;
-                            navigator.clipboard.writeText(infoText);
-                            copyButton.innerHTML = `
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M20 6L9 17L4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                </svg>
-                                Copied!
-                            `;
-                            setTimeout(() => {
-                                copyButton.innerHTML = `
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                  </svg>
-                                  Copy Info
-                              `;
-                            }, 2000);
-                        });
-
-                        const closeButton = document.createElement('button');
-                        closeButton.textContent = 'Close';
-                        closeButton.style.cssText = `
-                            background: rgba(77, 133, 238, 0.15);
-                            color: ${theme.accentPrimary};
-                            border: none;
-                            padding: 8px 24px;
-                            border-radius: 8px;
-                            font-size: 13px;
-                            font-weight: 600;
-                            cursor: pointer;
-                            transition: all 0.15s ease;
-                        `;
-                        closeButton.addEventListener('click', function() {
-                            popup.style.opacity = '0';
-                            setTimeout(() => {
-                                popup.remove();
-                            }, 200);
-                        });
-
-                        popupFooter.appendChild(copyButton);
-                        popupFooter.appendChild(closeButton);
-
-                        popupContent.appendChild(popupHeader);
-                        popupContent.appendChild(infoItems);
-                        popupContent.appendChild(popupFooter);
-                        popup.appendChild(popupContent);
-
-                        document.body.appendChild(popup);
-
-                        setTimeout(() => {
-                            popup.style.opacity = '1';
-                            popupContent.style.opacity = '1';
-                            popupContent.style.transform = 'translateY(0)';
-                        }, 10);
-
-                        popup.addEventListener('click', function(e) {
-                            if (e.target === popup) {
-                                popup.style.opacity = '0';
-                                setTimeout(() => {
-                                    popup.remove();
-                                }, 200);
-                            }
-                        });
-                    });
-
-                    buttonGroup.appendChild(removeButton);
-                    buttonGroup.appendChild(separator);
-                    buttonGroup.appendChild(joinButton);
-                    buttonGroup.appendChild(inviteButton);
-                    buttonGroup.appendChild(moreInfoButton);
-
-                    serverCard.appendChild(serverIconWrapper);
-                    serverCard.appendChild(left);
-                    serverCard.appendChild(buttonGroup);
-
-                    const lineAccent = document.createElement('div');
-                    lineAccent.style.cssText = `
-                        position: absolute;
-                        left: 0;
-                        top: 16px;
-                        bottom: 16px;
-                        width: 3px;
-                        background: ${theme.accentGradient};
-                        border-radius: 0 2px 2px 0;
-                    `;
-                    serverCard.appendChild(lineAccent);
-
-                    if (index === 0) { // makes it feel premium. trust me its not a waste of space hehe
-                        const cornerAccent = document.createElement('div');
-                        cornerAccent.style.cssText = `
-                            position: absolute;
-                            right: 0;
-                            top: 0;
-                            width: 40px;
-                            height: 40px;
-                            overflow: hidden;
-                            pointer-events: none;
-                        `;
-
-                        const cornerInner = document.createElement('div');
-                        cornerInner.style.cssText = `
-                            position: absolute;
-                            right: -20px;
-                            top: -20px;
-                            width: 40px;
-                            height: 40px;
-                            background: ${theme.accentPrimary};
-                            transform: rotate(45deg);
-                            opacity: 0.15;
-                        `;
-
-                        cornerAccent.appendChild(cornerInner);
-                        serverCard.appendChild(cornerAccent);
-                    }
-
-                    cardsWrapper.appendChild(serverCard);
-                });
-
-                contentContainer.appendChild(cardsWrapper);
-            }
-
-            recentSection.appendChild(headerContainer);
-            recentSection.appendChild(contentContainer);
-            friendsSectionHeader.parentNode.insertBefore(recentSection, friendsSectionHeader);
-        }
         /*******************************************************
         name of function: disableYouTubeAutoplayInIframes
         Description:
@@ -10474,9 +13406,9 @@ li a.about-link:hover::after {
                     const newSrc = url.toString();
                     if (src !== newSrc) iframe.src = newSrc;
                     iframe.setAttribute(processedFlag, 'true');
-                } catch (e) {
+                } catch (error) {
                     // url parsing failed, just skip it
-                    ConsoleLogEnabled('Failed to parse iframe src URL', e);
+                    ConsoleLogEnabled('Failed to parse iframe src URL', error);
                 }
             }
 
@@ -10514,12 +13446,262 @@ li a.about-link:hover::after {
         compacts private servers so they don't take up so much space
         *******************************************************/
         function cleanupPrivateServerCards() {
-          if (localStorage.ROLOCATE_compactprivateservers !== "true") return;
+          if (localStorage.ROLOCATE_betterprivateservers !== "true") return;
           // prevent multiple observers or other runs
           if (cleanupPrivateServerCards._initialized) return;
           cleanupPrivateServerCards._initialized = true;
 
           let isRunning = false;
+          let searchBar = null;
+          let currentSearchQuery = '';
+
+          // load settings
+          const getSettings = () => {
+            const defaultSettings = {
+              compactPrivateServers: true,
+              onlyYourPrivateServers: false,
+              privateServerSearch: false
+            };
+            const saved = JSON.parse(
+              localStorage.getItem('ROLOCATE_editprivateserversettings') || '{}'
+            );
+            return { ...defaultSettings, ...saved };
+          };
+
+          // apply search filter
+          const applySearchFilter = (query) => {
+            currentSearchQuery = query;
+            const cards = document.querySelectorAll('.card-item-private-server');
+
+            cards.forEach(card => {
+              const parentLi = card.closest('li');
+
+              const serverNameEl = card.querySelector('.section-header .font-bold');
+              const serverName = serverNameEl ? serverNameEl.textContent.toLowerCase() : '';
+
+              const ownerNameEl = card.querySelector('.rbx-private-owner .text-name');
+              const ownerName = ownerNameEl ? ownerNameEl.textContent.toLowerCase() : '';
+
+              const matches = serverName.includes(query) || ownerName.includes(query);
+
+              if (query === '' || matches) {
+                if (parentLi) parentLi.style.display = '';
+                else card.style.display = '';
+              } else {
+                if (parentLi) parentLi.style.display = 'none';
+                else card.style.display = 'none';
+              }
+            });
+
+            updateFilterBadge();
+          };
+
+          // update filter badge
+          const updateFilterBadge = () => {
+            const container = document.getElementById('rolocate-ps-search-container');
+            if (!container) return;
+
+            let badge = document.getElementById('rolocate-ps-filter-badge');
+
+            if (currentSearchQuery) {
+              if (!badge) {
+                badge = document.createElement('div');
+                badge.id = 'rolocate-ps-filter-badge';
+                badge.style.cssText = `
+                  display: inline-flex;
+                  align-items: center;
+                  gap: 6px;
+                  padding: 8px 12px;
+                  background: rgba(77, 133, 238, 0.15);
+                  border: 1px solid rgba(77, 133, 238, 0.3);
+                  border-radius: 8px;
+                  color: #4d85ee;
+                  font-size: 13px;
+                  font-weight: 600;
+                  margin-left: 8px;
+                `;
+
+                const text = document.createElement('span');
+                text.id = 'rolocate-ps-filter-text';
+                text.textContent = `Filter: "${currentSearchQuery}"`;
+
+                const closeBtn = document.createElement('span');
+                closeBtn.textContent = '×';
+                closeBtn.style.cssText = `
+                  cursor: pointer;
+                  font-size: 18px;
+                  font-weight: 700;
+                  line-height: 1;
+                  opacity: 0.7;
+                  transition: opacity 0.2s;
+                `;
+                closeBtn.onmouseenter = () => closeBtn.style.opacity = '1';
+                closeBtn.onmouseleave = () => closeBtn.style.opacity = '0.7';
+                closeBtn.onclick = () => {
+                  currentSearchQuery = '';
+                  applySearchFilter('');
+                };
+
+                badge.appendChild(text);
+                badge.appendChild(closeBtn);
+                container.appendChild(badge);
+              } else {
+                const text = document.getElementById('rolocate-ps-filter-text');
+                if (text) text.textContent = `Filter: "${currentSearchQuery}"`;
+              }
+            } else {
+              if (badge) badge.remove();
+            }
+          };
+
+          // create search button
+          const createSearchButton = () => {
+            if (searchBar) return searchBar;
+
+            const container = document.createElement('div');
+            container.id = 'rolocate-ps-search-container';
+            container.style.cssText = `
+              display: inline-flex;
+              align-items: center;
+              margin-bottom: 15px;
+              margin-left: 9px;
+            `;
+
+            const button = document.createElement('button');
+            button.id = 'rolocate-ps-search-button';
+            button.innerHTML = '🔍 Search Private Servers';
+            button.className = 'btn-secondary-md';
+            button.style.cssText = `
+              padding: 10px 18px;
+              background: transparent;
+              border: 1px solid rgba(150, 150, 150, 0.3);
+              border-radius: 8px;
+              color: #a0a8b8;
+              font-size: 14px;
+              font-weight: 600;
+              cursor: pointer;
+              transition: all 0.2s;
+              display: inline-flex;
+              align-items: center;
+              gap: 6px;
+            `;
+
+            button.onmouseenter = () => {
+              button.style.background = 'rgba(77, 133, 238, 0.15)';
+              button.style.borderColor = 'rgba(77, 133, 238, 0.3)';
+              button.style.color = '#4d85ee';
+            };
+            button.onmouseleave = () => {
+              button.style.background = 'transparent';
+              button.style.borderColor = 'rgba(150, 150, 150, 0.3)';
+              button.style.color = '#a0a8b8';
+            };
+
+            button.onclick = () => showSearchPopup();
+
+            container.appendChild(button);
+            searchBar = container;
+            return container;
+          };
+
+          // show search popup
+          const showSearchPopup = () => {
+            const overlay = document.createElement('div');
+            overlay.className = 'search-popup-overlay';
+
+            const box = document.createElement('div');
+            box.className = 'search-popup-content';
+
+            const title = document.createElement('h3');
+            title.textContent = 'Search Private Servers';
+            title.style.cssText = `
+              margin: 0 0 20px 0;
+              color: #e8ecf3;
+              font-size: 20px;
+              font-weight: 700;
+              text-align: center;
+            `;
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.placeholder = 'Search by server name or owner...';
+            input.id = 'rolocate-ps-search-input-popup';
+            input.value = currentSearchQuery;
+            input.style.cssText = `
+              width: 100%;
+              padding: 14px 16px;
+              background: rgba(28, 31, 37, 0.6);
+              border: 1px solid rgba(77, 133, 238, 0.3);
+              border-radius: 8px;
+              color: #e8ecf3;
+              font-size: 15px;
+              font-weight: 600;
+              outline: none;
+              transition: border-color 0.2s;
+              box-sizing: border-box;
+            `;
+
+            input.onfocus = () => {
+              input.style.borderColor = 'rgba(77, 133, 238, 0.6)';
+            };
+            input.onblur = () => {
+              input.style.borderColor = 'rgba(77, 133, 238, 0.3)';
+            };
+
+            // search functionality
+            input.oninput = (e) => {
+              const query = e.target.value.toLowerCase().trim();
+              applySearchFilter(query);
+            };
+
+            const close = document.createElement('button');
+            close.className = 'search-popup-close btn-secondary-md';
+            close.textContent = 'Close';
+
+            const closeOverlay = () => {
+              overlay.classList.add('fade-out');
+              overlay.addEventListener('animationend', () => overlay.remove(), { once: true });
+            };
+
+            close.onclick = closeOverlay;
+            overlay.onclick = e => e.target === overlay && closeOverlay();
+
+            box.addEventListener('click', (e) => {
+              e.stopPropagation();
+            });
+
+            box.appendChild(title);
+            box.appendChild(input);
+            box.appendChild(close);
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
+
+            // auto-focus the input
+            setTimeout(() => input.focus(), 100);
+          };
+
+          // insert search button into DOM
+          const insertSearchBar = () => {
+            const settings = getSettings();
+            if (!settings.privateServerSearch) {
+              // remove search button if it exists
+              const existing = document.getElementById('rolocate-ps-search-container');
+              if (existing) existing.remove();
+              searchBar = null;
+              return;
+            }
+
+            // find the container
+            const serverList = document.querySelector('#rbx-private-running-games');
+            if (!serverList) return;
+
+            const existing = document.getElementById('rolocate-ps-search-container');
+            if (!existing) {
+              const container = createSearchButton();
+              serverList.insertBefore(container, serverList.firstChild);
+              updateFilterBadge();
+            }
+          };
 
           // popup stuff
           const showPlayersPopup = (thumbs, card) => {
@@ -10551,7 +13733,7 @@ li a.about-link:hover::after {
               box.appendChild(thumbs);
             } else {
               const noP = document.createElement('p');
-              noP.innerHTML = '<b style="font-size: 1.2em;">No players currently in this server.</b><br><span style="color: gray; font-size: 1.0em;">RoLocate: To disable: Settings -> Appearance -> Compact Private Servers.</span>';
+              noP.innerHTML = '<b style="font-size: 1.2em;">No players currently in this server.</b><br><span style="color: gray; font-size: 1.0em;">RoLocate: To disable: Settings -> Appearance -> Better Private Servers.</span>';
               box.appendChild(noP);
             }
 
@@ -10581,32 +13763,81 @@ li a.about-link:hover::after {
             if (isRunning) return;
             isRunning = true;
 
+            const settings = getSettings();
+            const currentUserId = getCurrentUserId();
+
+            // insert or remove search bar based on settings
+            insertSearchBar();
+
             const cards = document.querySelectorAll('.card-item-private-server');
             for (const card of cards) {
-              const thumbs = card.querySelector('.player-thumbnails-container');
-              if (thumbs) thumbs.remove();
+              const parentLi = card.closest('li');
 
-              const details = card.querySelector('.rbx-private-game-server-details');
-              details?.classList.remove('game-server-details', 'border-right');
+              // Only Your Private Servers feature
+              if (settings.onlyYourPrivateServers) {
+                const ownerLink = card.querySelector('.rbx-private-owner a[href*="/users/"]');
+                if (ownerLink) {
+                  const href = ownerLink.getAttribute('href');
+                  const match = href.match(/\/users\/(\d+)\//);
+                  if (match) {
+                    const ownerId = match[1];
+                    if (ownerId !== currentUserId.toString()) {
+                      // Hide this server since it's not yours
+                      if (parentLi) {
+                        parentLi.style.display = 'none';
+                      } else {
+                        card.style.display = 'none';
+                      }
+                      continue; // Skip processing this card further
+                    }
+                  }
+                }
+              } else {
+                // Make sure cards are visible if setting is off (unless search is hiding them)
+                if (!currentSearchQuery) {
+                  if (parentLi) {
+                    parentLi.style.display = '';
+                  } else {
+                    card.style.display = '';
+                  }
+                }
+              }
 
-              const joinBtn = card.querySelector('.rbx-private-game-server-join');
-              if (joinBtn && !card.querySelector('.view-players-btn')) {
-                const btn = document.createElement('button');
-                btn.textContent = 'View Players';
-                btn.className = 'btn-full-width btn-control-xs view-players-btn btn-secondary-md btn-min-width';
-                btn.style.marginTop = '6px';
-                joinBtn.after(btn);
+              // Compact Private Servers feature
+              if (settings.compactPrivateServers) {
+                const thumbs = card.querySelector('.player-thumbnails-container');
+                if (thumbs) thumbs.remove();
 
-                // no "once" here allows multiple uses without leaking memory
-                btn.addEventListener('click', () => {
-                  const clonedThumbs = thumbs ? thumbs.cloneNode(true) : null;
-                  showPlayersPopup(clonedThumbs, card);
-                });
+                const details = card.querySelector('.rbx-private-game-server-details');
+                details?.classList.remove('game-server-details', 'border-right');
+
+                const joinBtn = card.querySelector('.rbx-private-game-server-join');
+                if (joinBtn && !card.querySelector('.rolocate-view-players-btn')) {
+                  const btn = document.createElement('button');
+                  btn.textContent = 'View Players';
+                  btn.className = 'btn-full-width btn-control-xs rolocate-view-players-btn btn-secondary-md btn-min-width';
+                  btn.style.marginTop = '6px';
+                  joinBtn.after(btn);
+
+                  // no "once" here allows multiple uses without leaking memory
+                  btn.addEventListener('click', () => {
+                    const clonedThumbs = thumbs ? thumbs.cloneNode(true) : null;
+                    showPlayersPopup(clonedThumbs, card);
+                  });
+                }
               }
             }
 
-            document.querySelectorAll('.rbx-private-game-server-item')
-              .forEach(i => i.classList.remove('rbx-private-game-server-item'));
+            // Reapply search filter if one exists
+            if (currentSearchQuery) {
+              applySearchFilter(currentSearchQuery);
+            }
+
+            // Only apply compact styles if compact mode is enabled
+            if (settings.compactPrivateServers) {
+              document.querySelectorAll('.rbx-private-game-server-item')
+                .forEach(i => i.classList.remove('rbx-private-game-server-item'));
+            }
 
             if (!document.getElementById('private-server-cleanup-styles')) {
               const s = document.createElement('style');
@@ -10621,6 +13852,10 @@ li a.about-link:hover::after {
                 .players-popup-content p{color:#a0a8b8;font-size:13px;line-height:1.5;margin-bottom:24px}
                 .players-popup-content .player-thumbnails-container{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:10px}
                 .players-popup-close{margin-top:15px;padding:8px 20px;cursor:pointer;background:rgba(28, 31, 37, 0.6);color:#e8ecf3;border:1px solid rgba(255, 255, 255, 0.12);border-radius:6px;font-size:13px;font-weight:500;transition:0.2s}
+                .search-popup-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:9999;animation:fadeIn .2s ease-out;opacity:1}
+                .search-popup-content{background:rgba(20, 22, 26, 0.95);color:#e8ecf3;border-radius:12px;padding:30px;max-width:400px;width:20%;box-shadow:0 10px 25px rgba(0,0,0,.3);border:1px solid rgba(77, 133, 238, 0.2);transform:scale(.95);animation:popIn .2s ease-out forwards}
+                .search-popup-close{margin-top:20px;width:100%;padding:10px 20px;cursor:pointer;background:rgba(28, 31, 37, 0.6);color:#e8ecf3;border:1px solid rgba(255, 255, 255, 0.12);border-radius:8px;font-size:14px;font-weight:600;transition:0.2s}
+                .search-popup-close:hover{background:rgba(28, 31, 37, 0.8);border-color:rgba(255, 255, 255, 0.2)}
                 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
                 @keyframes popIn{to{transform:scale(1)}}
                 @keyframes fadeOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.95)}}
@@ -11016,8 +14251,6 @@ li a.about-link:hover::after {
             return popup;
         }
 
-
-
         /*******************************************************
         name of function: ServerHop
         description: Handles server hopping by fetching and joining a random server, excluding recently joined servers.
@@ -11028,7 +14261,7 @@ li a.about-link:hover::after {
             showLoadingOverlay();
             // extract the game ID from the URL
             const url = window.location.href;
-            const gameId = (url.split("/").indexOf("games") !== -1) ? url.split("/")[url.split("/").indexOf("games") + 1] : null;
+            const gameId = getCurrentGameId();
 
             ConsoleLogEnabled(`Game ID: ${gameId}`);
 
@@ -11042,17 +14275,24 @@ li a.about-link:hover::after {
                 .filter(key => key.startsWith("ROLOCATE_recentServers_")) // server go after!
                 .map(key => JSON.parse(localStorage.getItem(key)));
 
-            // remove any expired servers for all games (older than 15 minutes)
-            const currentTime = new Date().getTime();
-            allStoredServers.forEach(storedServers => {
-                const validServers = storedServers.filter(server => {
-                    const lastJoinedTime = new Date(server.timestamp).getTime();
-                    return (currentTime - lastJoinedTime) <= 15 * 60 * 1000; // 15 minutes
-                });
+                // remove any expired servers for all games (older than 15 minutes)
+                const currentTime = new Date().getTime();
+                allStoredServers.forEach((storedServers, index) => {
+                    const key = Object.keys(localStorage).filter(k => k.startsWith("ROLOCATE_recentServers_"))[index];
 
-                // update localStorage with the valid servers
-                localStorage.setItem(`ROLOCATE_recentServers_${gameId}`, JSON.stringify(validServers));
-            });
+                    const validServers = storedServers.filter(server => {
+                        const lastJoinedTime = new Date(server.timestamp).getTime();
+                        return (currentTime - lastJoinedTime) <= 15 * 60 * 1000; // 15 minutes
+                    });
+
+                    // update localStorage with the valid servers delete iof empytu
+                    if (validServers.length > 0) {
+                        localStorage.setItem(key, JSON.stringify(validServers));
+                    } else {
+                        localStorage.removeItem(key);
+                        ConsoleLogEnabled(`Deleted empty key: ${key}`);
+                    }
+                });
 
             // get the list of recently joined servers for the current game
             const storedServers = JSON.parse(localStorage.getItem(`ROLOCATE_recentServers_${gameId}`)) || [];
@@ -11145,26 +14385,53 @@ li a.about-link:hover::after {
             name of function: pickRandomServer
             description: Function to pick a random server and join it
             *******************************************************/
-            function pickRandomServer() {
+            async function pickRandomServer() {
                 if (serverIds.length > 0) {
-                    const randomServerId = serverIds[Math.floor(Math.random() * serverIds.length)];
-                    ConsoleLogEnabled(`Joining server: ${randomServerId}`);
+                    const serverRegionsPrefs = JSON.parse(localStorage.getItem('ROLOCATE_serverRegions') || '{}');
+                    let attempts = 0;
+                    while (attempts < 100 && serverIds.length > 0) { // 100 genrous attempts
+                        const idx = Math.floor(Math.random() * serverIds.length);
+                        const randomServerId = serverIds[idx];
+                        ConsoleLogEnabled(`Considering server: ${randomServerId}`);
+                        try {
+                            const location = await fetchServerDetails(gameId, randomServerId);
+                            const regionKey = `${location.city}_${location.country?.code}`;
+                            if (serverRegionsPrefs[regionKey] === 'banned') {
+                                ConsoleLogEnabled(`Skipping server ${randomServerId} due to banned region ${regionKey}.`);
+                                notifications(`Skipping server ${randomServerId} due to banned region ${regionKey}.`, "info", "", "1000");
+                                // remove this one so we don't pick it again
+                                serverIds.splice(idx, 1);
+                                attempts++;
+                                continue;
+                            }
+                        } catch (e) {
+                            ConsoleLogEnabled(`Error fetching details for server ${randomServerId} during ServerHop:`, e);
+                            // remove and continue
+                            serverIds.splice(idx, 1);
+                            attempts++;
+                            continue;
+                        }
 
-                    // join the game instance with the selected server ID
-                    JoinServer(gameId, randomServerId);
+                        // join the game instance with the selected server ID
+                        JoinServer(gameId, randomServerId);
 
-                    // store the selected server ID with the time and date in localStorage
-                    const timestamp = new Date().toISOString();
-                    const newServer = {
-                        serverId: randomServerId,
-                        timestamp
-                    };
-                    validServers.push(newServer);
+                        // store the selected server ID with the time and date in localStorage
+                        const timestamp = new Date().toISOString();
+                        const newServer = {
+                            serverId: randomServerId,
+                            timestamp
+                        };
+                        validServers.push(newServer);
 
-                    // save the updated list of recently joined servers to localStorage
-                    localStorage.setItem(`ROLOCATE_recentServers_${gameId}`, JSON.stringify(validServers));
+                        // save the updated list of recently joined servers to localStorage
+                        localStorage.setItem(`ROLOCATE_recentServers_${gameId}`, JSON.stringify(validServers));
 
-                    ConsoleLogEnabled(`Server ${randomServerId} stored with timestamp ${timestamp}`);
+                        ConsoleLogEnabled(`Server ${randomServerId} stored with timestamp ${timestamp}`);
+                        return;
+                    }
+
+                    ConsoleLogEnabled("No unbanned servers found to join. Try to enable more regions in settings!");
+                    notifications("No unbanned servers found to join. Try to enable more regions in settings!", "error", "⚠️", "10000");
                 } else {
                     ConsoleLogEnabled("No servers found to join.");
                     notifications("You have joined all the servers recently. No servers found to join.", "error", "⚠️", "5000");
@@ -11318,7 +14585,7 @@ li a.about-link:hover::after {
                             ConsoleLogEnabled("[Auto] Notifications already disabled; leaving flag untouched.");
                         }
 
-                        const gameId = /^https:\/\/www\.roblox\.com(\/[a-z]{2})?\/games\//.test(window.location.href) ? (window.location.href.match(/\/games\/(\d+)/) || [])[1] || null : null;
+                        const gameId = getCurrentGameId();
                         if (!gameId) {
                             ConsoleLogEnabled("[Auto] Game ID not found, aborting runServerRegions.");
                             // restore original state before early return
@@ -11388,10 +14655,11 @@ li a.about-link:hover::after {
             /*******************************************************
             name of function: An observer
             description: Not a function, but an observer which adds the
-            filter button, server hop button, recent servers, and disables
-            trailer autoplay if settings are true
+            filter button, server hop button, recent servers, disables
+            trailer autoplay, and adds monitor server button if settings are true
             *******************************************************/
             const observer = new MutationObserver((mutations, obs) => {
+                let trailerDisableInitialized = false; // for the dumb trailer thing
                 const serverListOptions = document.querySelector('.server-list-options');
                 const playButton = document.querySelector('.btn-common-play-game-lg.btn-primary-md');
                 if (serverListOptions && !document.querySelector('.RL-filter-button') && localStorage.getItem("ROLOCATE_togglefilterserversbutton") === "true") {
@@ -11400,18 +14668,18 @@ li a.about-link:hover::after {
                     const filterButton = document.createElement('a'); // yes lmao
                     filterButton.className = 'RL-filter-button';
                     filterButton.style.cssText = `
-                color: white;
-                font-weight: bold;
-                text-decoration: none;
-                cursor: pointer;
-                margin-left: 10px;
-                padding: 5px 10px;
-                display: flex;
-                align-items: center;
-                gap: 5px;
-                position: relative;
-                margin-top: 4px;
-            `;
+                    color: ${isDarkMode(true) ? 'white' : 'black'};
+                    font-weight: bold;
+                    text-decoration: none;
+                    cursor: pointer;
+                    margin-left: 10px;
+                    padding: 5px 10px;
+                    display: flex;
+                    align-items: center;
+                    gap: 5px;
+                    position: relative;
+                    margin-top: 4px;
+                    `;
 
                     filterButton.addEventListener('mouseover', () => {
                         filterButton.style.textDecoration = 'underline';
@@ -11455,21 +14723,21 @@ li a.about-link:hover::after {
                     });
                 }
                 // new condition to trigger recent server logic
-                if (localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true") {
+                if (localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true" && !document.querySelector('.recent-servers-section')) {
                     HandleRecentServers();
-                    HandleRecentServersURL();
                 }
                 // new condition to trigger disable trailer logic
-                if (localStorage.getItem("ROLOCATE_disabletrailer") === "true") {
+                if (localStorage.getItem("ROLOCATE_disabletrailer") === "true" && !trailerDisableInitialized) {
                     disableYouTubeAutoplayInIframes();
+                    trailerDisableInitialized = true;
                 }
 
                 // new condition to trigger compact private server logic
-                if (localStorage.getItem("ROLOCATE_compactprivateservers") === "true") {
+                if (localStorage.getItem("ROLOCATE_betterprivateservers") === "true" && !document.querySelector('.rolocate-view-players-btn')) {
                     cleanupPrivateServerCards();
                 }
 
-                if (playButton && !document.querySelector('.custom-play-button') && localStorage.getItem("ROLOCATE_toggleserverhopbutton") === "true") {
+                if (playButton && !document.querySelector('.rolocate-serverhop-custom-play-button') && localStorage.getItem("ROLOCATE_toggleserverhopbutton") === "true") {
                     ConsoleLogEnabled("Added Server Hop Button");
                     const buttonContainer = document.createElement('div');
                     buttonContainer.style.cssText = `
@@ -11486,7 +14754,7 @@ li a.about-link:hover::after {
             `;
 
                     const serverHopButton = document.createElement('button');
-                    serverHopButton.className = 'custom-play-button';
+                    serverHopButton.className = 'rolocate-serverhop-custom-play-button';
                     serverHopButton.style.cssText = `
                 background-color: #335fff;
                 color: white;
@@ -11572,12 +14840,17 @@ li a.about-link:hover::after {
                     });
                 }
 
+                // for the like join confimatrion
+                if (playButton && localStorage.getItem("ROLOCATE_joinconfirmation") === "true") {
+                  monitorPlayButton();
+                }
+
                 const filterEnabled = localStorage.getItem("ROLOCATE_togglefilterserversbutton") === "true";
                 const hopEnabled = localStorage.getItem("ROLOCATE_toggleserverhopbutton") === "true";
                 const recentEnabled = localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true";
 
                 const filterPresent = !filterEnabled || document.querySelector('.RL-filter-button');
-                const hopPresent = !hopEnabled || document.querySelector('.custom-play-button');
+                const hopPresent = !hopEnabled || document.querySelector('.rolocate-serverhop-custom-play-button');
                 const recentPresent = !recentEnabled || document.querySelector('.recent-servers-section');
 
                 if (filterPresent && hopPresent && recentPresent) {
@@ -11604,16 +14877,16 @@ li a.about-link:hover::after {
         if (window.location.hash === '#?ROLOCATE_QUICKJOIN') {
             if (localStorage.ROLOCATE_smartsearch === 'true' || localStorage.ROLOCATE_quicklaunchgames === 'true') { // fixed this
 
-                // get gameid from url
-                const gameIdMatch = window.location.pathname.match(/\/games\/(\d+)/);
+                const gameId = getCurrentGameId();
 
-                if (gameIdMatch && gameIdMatch[1]) {
-                    const gameId = gameIdMatch[1];
-                    rebuildServerList(gameId, 50, false, true); // quick join mode
-                } else {
-                    ConsoleLogEnabled('[RoLocate] Could not extract gameId from URL');
-                    notifications('Error: Failed to extract gameid. Please try again later.', 'error', '⚠️', '5000');
+                if (!gameId) {
+                    ConsoleLogEnabled('Could not extract gameId from URL');
+                    notifications('Error: Failed to extract gameid. Please try again later.', 'error', '⚠️', 5000);
+                    return;
                 }
+
+                rebuildServerList(gameId, 50, false, true);
+
 
                 // clean up the URL
                 history.replaceState(null, null, window.location.pathname + window.location.search);
@@ -11642,10 +14915,7 @@ li a.about-link:hover::after {
             notifications("Finding small servers...", "success", "🧐");
 
             // get the game ID from the URL
-            const gameId = ((p => {
-                const i = p.indexOf('games');
-                return i !== -1 && p.length > i + 1 ? p[i + 1] : null;
-            })(window.location.pathname.split('/')));
+            const gameId = getCurrentGameId();
 
             // retry thing
             let retries = 3;
@@ -11731,10 +15001,7 @@ li a.about-link:hover::after {
             notifications("Finding servers with space...", "success", "🧐");
 
             // get the game ID from the URL
-            const gameId = ((p => {
-                const i = p.indexOf('games');
-                return i !== -1 && p.length > i + 1 ? p[i + 1] : null;
-            })(window.location.pathname.split('/')));
+            const gameId = getCurrentGameId();
 
             // retry thing
             let retries = 3;
@@ -11825,9 +15092,8 @@ li a.about-link:hover::after {
                     }
                 } else {
                     // if the element is not found, extract the gameId from the URL
-                    const gameIdMatch = window.location.href.match(/\/(?:[a-z]{2}\/)?games\/(\d+)/);
-                    if (gameIdMatch && gameIdMatch[1]) {
-                        const gameId = gameIdMatch[1];
+                    const gameId = getCurrentGameId();
+                    if (/^\d{1,10}$/.test(gameId)) { // check if numeric
                         // send a request to the Roblox API to get server information
                         GM_xmlhttpRequest({
                             method: 'GET',
@@ -12209,10 +15475,7 @@ li a.about-link:hover::after {
             disableFilterButton(true);
             document.querySelector('#rbx-public-game-server-item-container').innerHTML = '';
 
-            const gameId = ((p = window.location.pathname.split('/')) => {
-                const i = p.indexOf('games');
-                return i !== -1 && p.length > i + 1 ? p[i + 1] : null;
-            })();
+            const gameId = getCurrentGameId();
 
             let cursor = null,
                 serversFound = 0,
@@ -12340,10 +15603,7 @@ li a.about-link:hover::after {
             disableLoadMoreButton();
 
             // get the game ID from the URL ik reduent function
-            const gameId = ((p = window.location.pathname.split('/')) => {
-                const i = p.indexOf('games');
-                return i !== -1 && p.length > i + 1 ? p[i + 1] : null;
-            })();
+            const gameId = getCurrentGameId();
 
             try {
                 // fetch servers from the first URL with retry logic
@@ -12661,8 +15921,8 @@ li a.about-link:hover::after {
     margin: 0;
     font-size: 14px;
     color: #cccccc;
-    line-height: 1.6; /* Improved line height for readability */
-    opacity: 0.9; /* Slightly transparent for a softer look */
+    line-height: 1.6;
+    opacity: 0.9;
 }
 
 /* Popup Footer */
@@ -12828,305 +16088,6 @@ select:hover, select:focus {
             return container;
         }
 
-
-
-        /*******************************************************
-        name of function: fetchServerDetails
-        description: Function to fetch server details so game id and job id. yea!
-        *******************************************************/
-        // WARNING: Do not republish this script. Licensed for personal use only.
-        async function fetchServerDetails(gameId, jobId) { //here!
-            const useBatching = localStorage.ROLOCATE_fastservers === "true";
-
-            if (!useBatching) {
-                return new Promise((resolve, reject) => {
-                    GM_xmlhttpRequest({
-                        method: "POST",
-                        url: "https://gamejoin.roblox.com/v1/join-game-instance",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "User-Agent": "Roblox/WinInet",
-                        },
-                        data: JSON.stringify({
-                            placeId: gameId,
-                            gameId: jobId
-                        }),
-                        onload: function(response) {
-                            const json = JSON.parse(response.responseText);
-                            ConsoleLogEnabled("API Response:", json);
-
-                            if (json.status === 12 && json.message === 'You need to purchase access to this game before you can play.') {
-                                reject('purchase_required');
-                                return;
-                            }
-
-                            if (json.status === 12 && json.message === 'Cannot join this non-root place due to join restrictions') {
-                                reject('subplace_join_restriction');
-                                return;
-                            }
-
-                            if (json.status === 23 && json.message.includes('You have been banned from this experience by its creators.')) {
-                                reject('banned_by_creator');
-                                return;
-                            }
-
-                            const address = json?.joinScript?.UdmuxEndpoints?.[0]?.Address ?? json?.joinScript?.MachineAddress;
-                            if (!address) {
-                                ConsoleLogEnabled("API Response (Unknown Location) Which means Full Server!:", json);
-                                reject(`Unable to fetch server location: Status ${json.status}`);
-                                return;
-                            }
-
-                            function findBestMatchingIp(address) { // we are not using O[1] searches here but it should be fine cause its fast enough
-                                // function to get all IP keys (excluding the _locations key)
-                                function getIpKeys() {
-                                    return Object.keys(serverRegionsByIp).filter(key => key !== '_locations');
-                                }
-
-                                // Special case: If IP starts with 128.116.*, replace last octet with 0
-                                if (/^128\.116\.\d+\.\d+$/.test(address)) {
-                                    ConsoleLogEnabled("using 128.116 rule");
-                                    return address.replace(/^(128\.116\.\d+)\.\d+$/, "$1.0");
-                                }
-
-                                // Priority 1: Match first 3 octets
-                                const threeOctets = address.match(/^(\d+\.\d+\.\d+)\./)?.[1];
-                                if (threeOctets) {
-                                    const match = getIpKeys().find(ip => ip.startsWith(threeOctets + "."));
-                                    if (match) {
-                                        ConsoleLogEnabled("using three octet rule");
-                                        return match;
-                                    }
-                                }
-
-                                // Priority 2: Match first 2 octets
-                                const twoOctets = address.match(/^(\d+\.\d+)\./)?.[1];
-                                if (twoOctets) {
-                                    const match = getIpKeys().find(ip => ip.startsWith(twoOctets + "."));
-                                    if (match) {
-                                        ConsoleLogEnabled("using two octet rule (fallback)");
-                                        return match;
-                                    }
-                                }
-
-                                // Priority 3: Fallback to original
-                                ConsoleLogEnabled("no match found, returning original");
-                                return address;
-                            }
-
-                            // function to get location data for an IP
-                            function getLocationData(ip) {
-                                const locationId = serverRegionsByIp[ip];
-                                if (locationId && serverRegionsByIp._locations && serverRegionsByIp._locations[locationId]) {
-                                    return serverRegionsByIp._locations[locationId];
-                                }
-                                return null;
-                            }
-
-                            const lookupIp = findBestMatchingIp(address);
-                            const location = getLocationData(lookupIp);
-                            if (!location) {
-                                ConsoleLogEnabled("API Response (Unknown Location):", json);
-                                reject(`Unknown server address ${address}`);
-                                return;
-                            }
-
-                            location.placeVersion = json.joinScript.PlaceVersion; // not wrapping this in an object cause it breaks stuff. so this should do
-                            resolve(location);
-                        },
-                        onerror: function(error) {
-                            ConsoleLogEnabled("API Request Failed:", error);
-                            reject(`Failed to fetch server details: ${error}`);
-                        },
-                    });
-                });
-            }
-
-            // Batching logic with rate limit handling
-            const queue = fetchServerDetails._queue || [];
-            const concurrencyLimit = 100; // this can be any value from 1 to 2000 (integer)
-
-            if (!fetchServerDetails._queue) {
-                fetchServerDetails._queue = queue;
-                fetchServerDetails._activeCount = 0;
-                fetchServerDetails._rateLimited = false;
-            }
-
-            return new Promise((resolve, reject) => {
-                const makeRequest = async (gameId, jobId) => {
-                    return new Promise((innerResolve, innerReject) => {
-                        GM_xmlhttpRequest({
-                            method: "POST",
-                            url: "https://gamejoin.roblox.com/v1/join-game-instance",
-                            headers: {
-                                "Content-Type": "application/json",
-                                "User-Agent": "Roblox/WinInet",
-                            },
-                            data: JSON.stringify({
-                                placeId: gameId,
-                                gameId: jobId
-                            }),
-                            onload: function(response) {
-                                const json = JSON.parse(response.responseText);
-                                ConsoleLogEnabled("API Response:", json);
-
-                                // Check if we got rate limited (status undefined)
-                                if (json.status === undefined) {
-                                    ConsoleLogEnabled("Rate limited detected - status undefined");
-                                    innerReject('rate_limited');
-                                    return;
-                                }
-
-                                if (json.status === 12 && json.message === 'You need to purchase access to this game before you can play.') {
-                                    innerReject('purchase_required');
-                                    return;
-                                }
-
-                                if (json.status === 12 && json.message === 'Cannot join this non-root place due to join restrictions') {
-                                    innerReject('subplace_join_restriction');
-                                    return;
-                                }
-
-                                if (json.status === 23 && json.message.includes('You have been banned from this experience by its creators.')) {
-                                    reject('banned_by_creator');
-                                    return;
-                                }
-
-                                const address = json?.joinScript?.UdmuxEndpoints?.[0]?.Address ?? json?.joinScript?.MachineAddress;
-                                if (!address) {
-                                    ConsoleLogEnabled("API Response (Unknown Location) Which means Full Server!:", json);
-                                    innerReject(`Unable to fetch server location: Status ${json.status}`);
-                                    return;
-                                }
-
-                                function findBestMatchingIp(address) { // we are not using O[1] searches here but it should be fine cause its fast enough
-                                    // function to get all IP keys (excluding the _locations key)
-                                    function getIpKeys() {
-                                        return Object.keys(serverRegionsByIp).filter(key => key !== '_locations');
-                                    }
-
-                                    // Special case: If IP starts with 128.116.*, replace last octet with 0
-                                    if (/^128\.116\.\d+\.\d+$/.test(address)) {
-                                        ConsoleLogEnabled("using 128.116 rule");
-                                        return address.replace(/^(128\.116\.\d+)\.\d+$/, "$1.0");
-                                    }
-
-                                    // Priority 1: Match first 3 octets
-                                    const threeOctets = address.match(/^(\d+\.\d+\.\d+)\./)?.[1];
-                                    if (threeOctets) {
-                                        const match = getIpKeys().find(ip => ip.startsWith(threeOctets + "."));
-                                        if (match) {
-                                            ConsoleLogEnabled("using three octet rule");
-                                            return match;
-                                        }
-                                    }
-
-                                    // Priority 2: Match first 2 octets
-                                    const twoOctets = address.match(/^(\d+\.\d+)\./)?.[1];
-                                    if (twoOctets) {
-                                        const match = getIpKeys().find(ip => ip.startsWith(twoOctets + "."));
-                                        if (match) {
-                                            ConsoleLogEnabled("using two octet rule (fallback)");
-                                            return match;
-                                        }
-                                    }
-
-                                    // Priority 3: Fallback to original
-                                    ConsoleLogEnabled("no match found, returning original");
-                                    return address;
-                                }
-
-                                // function to get location data for an IP
-                                function getLocationData(ip) {
-                                    const locationId = serverRegionsByIp[ip];
-                                    if (locationId && serverRegionsByIp._locations && serverRegionsByIp._locations[locationId]) {
-                                        return serverRegionsByIp._locations[locationId];
-                                    }
-                                    return null;
-                                }
-
-                                const lookupIp = findBestMatchingIp(address);
-                                const location = getLocationData(lookupIp);
-                                if (!location) {
-                                    ConsoleLogEnabled("API Response (Unknown Location):", json);
-                                    //// this is for finding server regions
-                                    //// Store unknown IP in localStorage
-                                    //let unknownIPs = JSON.parse(localStorage.getItem("unknownIPs") || "[]");
-                                    //if (!unknownIPs.includes(address)) {
-                                    //    unknownIPs.push(address);
-                                    //    localStorage.setItem("unknownIPs", JSON.stringify(unknownIPs));
-                                    //}
-                                    innerReject(`Unknown server address ${address}`);
-                                    return;
-                                }
-
-                                location.placeVersion = json.joinScript.PlaceVersion; // samething
-                                innerResolve(location);
-                            },
-                            onerror: function(error) {
-                                ConsoleLogEnabled("API Request Failed:", error);
-                                innerReject(`Failed to fetch server details: ${error}`);
-                            },
-                        });
-                    });
-                };
-
-                const task = async () => {
-                    try {
-                        fetchServerDetails._activeCount++;
-
-                        let result;
-                        let attempts = 0;
-                        const maxAttempts = 100; // prevent infinite loops
-
-                        while (attempts < maxAttempts) {
-                            try {
-                                result = await makeRequest(gameId, jobId);
-                                // if we get here, request was successful
-                                if (fetchServerDetails._rateLimited) {
-                                    ConsoleLogEnabled("Rate limit cleared, resuming normal operation");
-                                    fetchServerDetails._rateLimited = false;
-                                }
-                                break;
-                            } catch (err) {
-                                if (err === 'rate_limited') {
-                                    if (!fetchServerDetails._rateLimited) {
-                                        ConsoleLogEnabled("Rate limited - retrying every second until cleared");
-                                        fetchServerDetails._rateLimited = true;
-                                    }
-                                    ConsoleLogEnabled(`Rate limit retry attempt ${attempts + 1}`);
-                                    await delay(1000); // wait 1 second before retry
-                                    attempts++;
-                                } else {
-                                    // for other errors, don't retry
-                                    throw err;
-                                }
-                            }
-                        }
-
-                        if (attempts >= maxAttempts) {
-                            throw new Error(`Rate limited for too long, exceeded ${maxAttempts} attempts`);
-                        }
-
-                        resolve(result);
-                    } catch (err) {
-                        reject(err);
-                    } finally {
-                        fetchServerDetails._activeCount--;
-                        if (queue.length > 0) {
-                            const next = queue.shift();
-                            next();
-                        }
-                    }
-                };
-
-                if (fetchServerDetails._activeCount < concurrencyLimit) {
-                    task();
-                } else {
-                    queue.push(task);
-                }
-            });
-        }
 
         /*******************************************************
         name of function: delay
@@ -13482,6 +16443,7 @@ select:hover, select:focus {
         function createFilterDropdowns(servers) {
             // get flag data
             getFlagEmoji(); // load flag data without country code
+            const serverRegionsPrefs = JSON.parse(localStorage.getItem('ROLOCATE_serverRegions') || '{}');
 
             // create the main filter container with premium styling
             const filterContainer = document.createElement('div');
@@ -13504,7 +16466,7 @@ select:hover, select:focus {
                 overflow: 'hidden'
             });
 
-            // Premium animated border with subtle red glow
+            // premium animated border with subtle red glow
             const borderGlow = document.createElement('div');
             Object.assign(borderGlow.style, {
                 position: 'absolute',
@@ -13519,7 +16481,7 @@ select:hover, select:focus {
             });
             filterContainer.appendChild(borderGlow);
 
-            // Add premium CSS animations and styling
+            // add premium CSS animations and styling
             const style = document.createElement('style');
             style.textContent = `
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -13593,6 +16555,11 @@ select:hover, select:focus {
             animation: iconFloat 3s ease-in-out infinite;
         }
 
+        /* for the confetti easter egg */
+        @keyframes fall {
+            to { transform: translateY(100vh) rotate(360deg); opacity: 0; }
+        }
+
         .flag-image {
             width: 26px !important; /* Slightly larger */
             height: 20px !important; /* Slightly larger */
@@ -13619,7 +16586,20 @@ select:hover, select:focus {
     `;
             document.head.appendChild(style);
 
-            // Enhanced premium logo with sophisticated hover effects
+            // easter egg :)
+            const createConfetti = () => {
+                const c = document.createElement('div');
+                Object.assign(c.style, {position: 'fixed', top: '0', left: '0', width: '100%', height: '100%', pointerEvents: 'none', zIndex: '9999'});
+                document.body.appendChild(c);
+                for (let i = 0; i < 20; i++) {
+                    const p = document.createElement('div');
+                    Object.assign(p.style, {position: 'absolute', width: '8px', height: '8px', backgroundColor: ['#c81e1e','#ff3333','#fff'][i%3], top: '-20px', left: Math.random()*100+'%', animation: `fall ${2+Math.random()*2}s linear ${Math.random()*0.3}s forwards`});
+                    c.appendChild(p);
+                }
+                setTimeout(() => document.body.removeChild(c), 4500);
+            };
+
+            // colors
             const logoWrapper = document.createElement('div');
             Object.assign(logoWrapper.style, {
                 position: 'relative',
@@ -13681,6 +16661,9 @@ select:hover, select:focus {
                 logoContainer.style.border = '1px solid rgba(200,30,30,0.2)';
                 logoGlow.style.opacity = '0';
                 logo.classList.remove('logo-premium-pulse');
+                logoContainer.addEventListener('click', () => {
+                    createConfetti();
+                });
             });
 
             logoContainer.appendChild(logoGlow);
@@ -13951,6 +16934,21 @@ select:hover, select:focus {
                         option.setAttribute('data-flag-src', flagImg.src);
                         option.setAttribute('data-country-code', countryCode);
                         option.textContent = `${country} (${countryCounts[country]})`;
+                        // mark country if all or some regions inside are banned
+                        try {
+                            const serversForCountry = servers.filter(s => s.location.country.name === country);
+                            const allBanned = serversForCountry.length > 0 && serversForCountry.every(s => serverRegionsPrefs[`${s.location.city}_${s.location.country?.code}`] === 'banned');
+                            const someBanned = serversForCountry.some(s => serverRegionsPrefs[`${s.location.city}_${s.location.country?.code}`] === 'banned');
+                            if (allBanned) {
+                                option.textContent += ' — BANNED';
+                                option.style.color = '#ff6b6b';
+                            } else if (someBanned) {
+                                option.textContent += ' — PARTIAL BANS';
+                                option.style.color = '#f59e0b';
+                            }
+                        } catch (e) {
+                            ConsoleLogEnabled('Error checking banned status for country dropdown:', e);
+                        }
                     }
                 } catch (error) {
                     ConsoleLogEnabled(`Could not load flag for ${country} (${countryCode}):`, error);
@@ -14055,8 +17053,9 @@ select:hover, select:focus {
                 const citySelect = cityDropdown.querySelector('select');
                 citySelect.innerHTML = '<option value="">All Cities</option>';
 
-                if (selectedCountry) {
+                    if (selectedCountry) {
                     const cityCounts = {};
+                    const cityCountryMap = {};
                     servers
                         .filter(server => server.location.country.name === selectedCountry)
                         .forEach(server => {
@@ -14064,13 +17063,21 @@ select:hover, select:focus {
                             const region = server.location.region?.name;
                             const cityKey = region ? `${city}, ${region}` : city;
                             cityCounts[cityKey] = (cityCounts[cityKey] || 0) + 1;
+                            cityCountryMap[cityKey] = server.location.country.code;
                         });
 
                     const sortedCities = Object.keys(cityCounts).sort();
                     sortedCities.forEach(city => {
                         const option = document.createElement('option');
                         option.value = city;
-                        option.textContent = `${city} (${cityCounts[city]})`;
+                        // annotate banned cities
+                        const countryCodeForCity = cityCountryMap[city];
+                        const cityNameOnly = city.split(',')[0].trim();
+                        const regionKey = `${cityNameOnly}_${countryCodeForCity}`;
+                        option.textContent = `${city} (${cityCounts[city]})` + (serverRegionsPrefs[regionKey] === 'banned' ? ' — BANNED' : '');
+                        if (serverRegionsPrefs[regionKey] === 'banned') {
+                            option.style.color = '#ff6b6b';
+                        }
                         Object.assign(option.style, {
                             background: 'rgba(15,15,15,0.98)',
                             color: 'rgba(200,30,30,0.9)',
@@ -14555,27 +17562,27 @@ select:hover, select:focus {
 
             // If in any join mode (best connection or quick join)
             if (isJoinMode) {
-                const originalInvert = localStorage.getItem('ROLOCATE_invertplayercount') === 'true';
+                const originalInvert = localStorage.getItem('ROLOCATE_invertplayercount');
                 let foundServer = false;
 
                 try {
-                    // Only disable filter button for best_connection, not for quick_join
+                    // only disable filter button for best_connection, not for quick_join
                     if (best_connection) {
                         disableFilterButton(true);
                     }
-
                     notifications("Retrieving Location...", "success", "🌎", '5000');
                     const userLocation = await getUserLocation(true);
+                    const serverRegionsPrefs = JSON.parse(localStorage.getItem('ROLOCATE_serverRegions') || '{}');
                     if (!userLocation) {
                         notifications('Error: Unable to fetch your location. Please enable location access or set it to manual in settings.', 'error', '⚠️', '5000');
                         return;
                     }
 
-                    // Attempt to find server (up to 2 attempts)
                     for (let attempt = 0; attempt < 2 && !foundServer; attempt++) {
-                        // Set the appropriate invert setting for this attempt
                         if (attempt === 0) {
-                            localStorage.setItem('ROLOCATE_invertplayercount', originalInvert.toString());
+                            if (originalInvert === 'true') {
+                                localStorage.setItem('ROLOCATE_invertplayercount', 'false');
+                            } // the fix
                         } else {
                             localStorage.setItem('ROLOCATE_invertplayercount', 'true');
                             notifications('No available servers found. Trying smallest servers...', 'info', '🔄', '3000');
@@ -14604,6 +17611,12 @@ select:hover, select:focus {
 
                                     try {
                                         const location = await fetchServerDetails(gameId, serverId);
+                                        // respect banned server regions
+                                        const regionKey = `${location.city}_${location.country?.code}`;
+                                        if (serverRegionsPrefs[regionKey] === 'banned') {
+                                            ConsoleLogEnabled(`Skipping server ${serverId} due to banned region ${regionKey}.`);
+                                            return null;
+                                        }
                                         const distance = calculateDistance(
                                             userLocation.latitude,
                                             userLocation.longitude,
@@ -14645,24 +17658,30 @@ select:hover, select:focus {
                                 } = server;
                                 if (playing >= maxPlayers) continue;
 
-                                try {
-                                    const location = await fetchServerDetails(gameId, serverId);
-                                    const distance = calculateDistance(
-                                        userLocation.latitude,
-                                        userLocation.longitude,
-                                        location.latitude,
-                                        location.longitude
-                                    );
+                                    try {
+                                        const location = await fetchServerDetails(gameId, serverId);
+                                        // respect banned regions
+                                        const regionKey = `${location.city}_${location.country?.code}`;
+                                        if (serverRegionsPrefs[regionKey] === 'banned') {
+                                            ConsoleLogEnabled(`Skipping server ${serverId} due to banned region ${regionKey}.`);
+                                            continue;
+                                        }
+                                        const distance = calculateDistance(
+                                            userLocation.latitude,
+                                            userLocation.longitude,
+                                            location.latitude,
+                                            location.longitude
+                                        );
 
-                                    if (distance < minDistance) {
-                                        minDistance = distance;
-                                        closestServer = server;
-                                        closestServerLocation = location; // used for best connection
+                                        if (distance < minDistance) {
+                                            minDistance = distance;
+                                            closestServer = server;
+                                            closestServerLocation = location; // used for best connection
+                                        }
+                                    } catch (error) {
+                                        ConsoleLogEnabled(`Error fetching details for server ${serverId}:`, error);
+                                        continue;
                                     }
-                                } catch (error) {
-                                    ConsoleLogEnabled(`Error fetching details for server ${serverId}:`, error);
-                                    continue;
-                                }
                             }
                         }
 
@@ -14675,12 +17694,17 @@ select:hover, select:focus {
 
                     if (!foundServer) {
                         notifications('No valid servers found. This game might be popular right now. Try using \'Server Region\' or refresh the page and try again later.', 'error', '⚠️', '8000');
+                        notifications('Or no unbanned servers found. Try to enable more regions in settings!', 'error', '⚠️', '8000');
                     }
                 } catch (error) {
                     ConsoleLogEnabled("Error in join mode:", error);
                     notifications('Error during server search: ' + error.message, 'error', '⚠️', '5000');
                 } finally {
-                    localStorage.setItem('ROLOCATE_invertplayercount', originalInvert.toString());
+                    if (originalInvert !== null) {
+                        localStorage.setItem('ROLOCATE_invertplayercount', originalInvert);
+                    } else {
+                        localStorage.setItem('ROLOCATE_invertplayercount', 'false');
+                    }
                     if (best_connection) {
                         disableFilterButton(false);
                     }
@@ -14714,9 +17738,38 @@ select:hover, select:focus {
                     premium_message.textContent = "Location detected! Discovering servers...";
                 }
 
-                const servers = await fetchPublicServers(gameId, totalLimit);
+                // thx Waivy
+                let servers = await fetchPublicServers(gameId, totalLimit);
+
+                if (servers.length === 0) {
+                    ConsoleLogEnabled("No servers returned on first attempt, Retrying after delay");
+                    if (premium_message) {
+                        premium_message.textContent = "Waiting for server data to load";
+                    }
+
+                    const retrycap = 3;
+                    for (let retry = 1; retry <= retrycap && servers.length === 0; retry++) {
+                        await new Promise(resolve => setTimeout(resolve, 1500));
+                        if (premium_message) {
+                            premium_message.textContent = `Retrying server fetch (attempt ${retry}/${retrycap})`;
+                        }
+                        ConsoleLogEnabled(`Retry attempt ${retry}/${retrycap}...`);
+                        servers = await fetchPublicServers(gameId, totalLimit);
+                    }
+                }
+
                 const totalServers = servers.length;
                 let skippedServers = 0;
+
+                if (totalServers === 0) {
+                    if (premium_message) {
+                        premium_message.textContent = "No servers found. The game may not have active public servers right now or is a solo game. Try refreshing the page.";
+                    }
+                    notifications('No servers found. The game may not have active public servers right now or is a solo game. Try refreshing the page.', 'error', '⚠️', '5000');
+                    Loadingbar(false);
+                    disableFilterButton(false);
+                    return;
+                }
 
                 if (premium_message) {
                     premium_message.textContent = `Filtering servers... Please stay on this page to ensure a faster and more accurate search. ${totalServers} servers found, 0 loaded so far.`;
@@ -14724,11 +17777,11 @@ select:hover, select:focus {
 
                 notifications(`Please do not leave this page as it slows down the search. \nFound a total of ${totalServers} servers.`, 'success', '👍', '3000');
 
-                const serverDetails = [];
-                const thumbnailCache = new Map(); // Cache for thumbnails
+                let serverDetails = [];
+                const thumbnailCache = new Map(); // cache for thumbnails
                 const useBatching = localStorage.ROLOCATE_fastservers === "true";
 
-                // Process servers to get location data (WITHOUT waiting for thumbnails)
+                // process servers to get location data (WITHOUT waiting for thumbnails)
                 if (useBatching) {
                     const batchSize = 100;
                     let processedCount = 0;
@@ -14864,19 +17917,37 @@ select:hover, select:focus {
                     }
                 }
 
+                // filter out servers from banned regions
+                try {
+                    const serverRegionsPrefs = JSON.parse(localStorage.getItem('ROLOCATE_serverRegions') || '{}');
+                    const beforeFilterCount = serverDetails.length;
+                    const allowed = serverDetails.filter(d => {
+                        const key = `${d.location.city}_${d.location.country?.code}`;
+                        return serverRegionsPrefs[key] !== 'banned';
+                    });
+                    const bannedExcluded = beforeFilterCount - allowed.length;
+                    if (bannedExcluded > 0) {
+                        skippedServers += bannedExcluded;
+                        notifications(`${bannedExcluded} servers excluded due to banned regions.`, 'info', '🌍', '3000');
+                    }
+                    serverDetails = allowed;
+                } catch (e) {
+                    ConsoleLogEnabled('Error parsing server region preferences:', e);
+                }
+
                 if (serverDetails.length === 0) {
                     showMessage("END");
                     if (servers.every(s => s.maxPlayers === 1)) {
                         notifications('All servers have a max player count of 1. These are likely solo servers and cannot be joined normally.', 'error', '⚠️', '8000');
                     } else {
-                        notifications('Error: No servers found. Try increasing the search limit or try searching with server with low player count.', 'error', '⚠️', '8000');
+                    notifications('No servers were found. Possible reasons include: full servers, no servers in your enabled regions, or a temporary glitch. Try adjusting your settings or searching again with lowest player count.', 'error', '⚠️', '25000');
                     }
                     Loadingbar(false);
                     return;
                 }
 
                 const loadedServers = totalServers - skippedServers;
-                notifications(`Filtering complete!\n${totalServers} servers found, ${loadedServers} servers loaded, ${skippedServers} servers skipped (full).`, 'success', '👍', '2000');
+                notifications(`Filtering complete!\n${totalServers} servers found, ${loadedServers} servers loaded, ${skippedServers} servers skipped (full) or were banned by user.`, 'success', '👍', '5000');
 
                 // Check script handler notifications
                 if (typeof GM_info !== 'undefined') {
@@ -15188,8 +18259,8 @@ select:hover, select:focus {
             }
         }
 
-        // game id remains the same
-        const gameId = /^https:\/\/www\.roblox\.com(\/[a-z]{2})?\/games\//.test(window.location.href) ? (window.location.href.match(/\/games\/(\d+)/) || [])[1] || null : null;
+        // script breaks if i remove this so its staying
+        const gameId = getCurrentGameId();
         /*******************************************************
         name of function: createInviteButton
         description: Creates the invite button (server region)
@@ -15497,10 +18568,7 @@ select:hover, select:focus {
             disableLoadMoreButton();
 
             // get the game ID from the URL
-            const gameId = ((p = window.location.pathname.split('/')) => {
-                const i = p.indexOf('games');
-                return i !== -1 && p.length > i + 1 ? p[i + 1] : null;
-            })();
+            const gameId = getCurrentGameId();
 
             // retry mechanism for 429 errors
             let retries = 3; // number of retries
@@ -15700,7 +18768,8 @@ select:hover, select:focus {
                     const errorMessages = [
                         "Error: Cannot access server regions because you have not purchased the game.",
                         "Error: This game requires users to teleport to a subplace. As a result, server regions cannot be retrieved.",
-                        "Error: Cannot access server regions because the creator has banned you from the game."
+                        "Error: Cannot access server regions because the creator has banned you from the game.",
+                        "No servers found. The game may not have active public servers right now or is a solo game. Try refreshing the page."
                     ];
 
                     if (errorMessages.includes(messageText)) {
@@ -15953,8 +19022,8 @@ select:hover, select:focus {
                         inviteButton.textContent = originalText;
                         inviteButton.disabled = false;
                     }, 1000);
-                } catch (err) {
-                    ConsoleLogEnabled('Failed to copy invite link:', err);
+                } catch (error) {
+                    ConsoleLogEnabled('Failed to copy invite link:', error);
                     notifications('Failed! Invite link copied to clipboard!', 'error', '⚠️', '2000');
                 }
             };
@@ -15968,490 +19037,6 @@ select:hover, select:focus {
             cardItem.appendChild(cardContainer);
 
             document.querySelector('#rbx-public-game-server-item-container').appendChild(cardItem);
-        }
-
-        /*******************************************************
-        name of function: showLoadingOverlay
-        description: Loading box when joining a server + Shows server location
-        *******************************************************/
-        // WARNING: Do not republish this script. Licensed for personal use only.
-        async function showLoadingOverlay(gameId, serverId, mainMessage = "", statusMessage = "") {
-            // remove existing overlay if present
-            const existingOverlay = document.querySelector('[data-loading-overlay]');
-            if (existingOverlay) {
-                existingOverlay.style.opacity = '0';
-                existingOverlay.querySelector('div').style.transform = 'translate(-50%, -55%) scale(0.9)';
-                setTimeout(() => existingOverlay.remove(), 400);
-            }
-
-            // remove existing styles
-            const existingStyle = document.querySelector('[data-loading-overlay-style]');
-            if (existingStyle) existingStyle.remove();
-
-            // function to create elements with styles
-            const createElement = (tag, styles, content = '') => {
-                const el = document.createElement(tag);
-                Object.assign(el.style, styles);
-                if (content) el.innerHTML = content;
-                return el;
-            };
-
-            // function for common gradient background
-            const gradientBg = (color1, color2) => `linear-gradient(145deg, ${color1}, ${color2})`;
-
-            const style = createElement('style', {}, `
-                @keyframes loading-slide {
-                    0% { transform: translateX(-100%); background-position: 0% 50%; }
-                    100% { transform: translateX(250%); background-position: 100% 50%; }
-                }
-                @keyframes pulse-glow {
-                    0%, 100% { opacity: 0.7; transform: scale(1); }
-                    50% { opacity: 1; transform: scale(1.05); }
-                }
-                @keyframes dots {
-                    0%, 20% { content: ''; }
-                    40% { content: '.'; }
-                    60% { content: '..'; }
-                    80%, 100% { content: '...'; }
-                }
-            `);
-            style.setAttribute('data-loading-overlay-style', '');
-            document.head.appendChild(style);
-
-            // the main stuff
-            const overlay = createElement('div', {
-                position: 'fixed',
-                top: '0',
-                left: '0',
-                width: '100%',
-                height: '100%',
-                backgroundColor: 'rgba(0, 0, 0, 0.12)',
-                zIndex: '999999',
-                opacity: '0',
-                transition: 'opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
-            });
-            overlay.setAttribute('data-loading-overlay', '');
-
-            // other main stuff
-            const container = createElement('div', {
-                position: 'fixed',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -55%) scale(0.9)',
-                width: '534px',
-                height: '380px',
-                background: gradientBg('#1e1e1e', '#161616'),
-                borderRadius: '22px',
-                boxShadow: '0 18px 55px rgba(0, 0, 0, 0.5), 0 7px 23px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
-                display: 'flex',
-                flexDirection: 'column',
-                padding: '33px',
-                fontFamily: 'system-ui, -apple-system, sans-serif',
-                zIndex: '1000000',
-                opacity: '0',
-                transition: 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)'
-            });
-
-            // exit button
-            const exitButton = createElement('button', {
-                position: 'absolute',
-                top: '15px',
-                right: '15px',
-                width: '33px',
-                height: '33px',
-                borderRadius: '11px',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                background: gradientBg('#2a2a2a', '#1f1f1f'),
-                color: '#a0a0a0',
-                fontSize: '15px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                boxShadow: '0 2px 7px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
-                outline: 'none'
-            }, '✕');
-
-            // exit button handelrs
-            const exitButtonHover = (enter) => {
-                exitButton.style.background = enter ? gradientBg('#333333', '#262626') : gradientBg('#2a2a2a', '#1f1f1f');
-                exitButton.style.color = enter ? '#ffffff' : '#a0a0a0';
-                exitButton.style.transform = enter ? 'scale(1.05)' : 'scale(1)';
-                exitButton.style.boxShadow = enter ?
-                    '0 4px 11px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15)' :
-                    '0 2px 7px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)';
-            };
-
-            exitButton.addEventListener('mouseenter', () => exitButtonHover(true));
-            exitButton.addEventListener('mouseleave', () => exitButtonHover(false));
-            exitButton.addEventListener('mousedown', () => exitButton.style.transform = 'scale(0.95)');
-            exitButton.addEventListener('mouseup', () => exitButton.style.transform = 'scale(1.05)');
-
-            // top section
-            const topSection = createElement('div', {
-                display: 'flex',
-                alignItems: 'center',
-                marginBottom: '26px'
-            });
-
-            // icon
-            const iconContainer = createElement('div', {
-                width: '77px',
-                height: '77px',
-                borderRadius: '18px',
-                background: gradientBg('#2a2a2a', '#1f1f1f'),
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginRight: '22px',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                overflow: 'hidden',
-                flexShrink: '0',
-                boxShadow: '0 4px 15px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
-                transition: 'transform 0.3s ease, box-shadow 0.3s ease'
-            });
-
-            // the logo
-            const defaultLogo = createElement('div', {
-                width: '40px',
-                height: '40px',
-                borderRadius: '11px',
-                background: gradientBg('#404040', '#333333'),
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '18px',
-                animation: 'pulse-glow 2s ease-in-out infinite'
-            }, `<img src="${window.Base64Images.logo}" alt="Logo" width="80" height="80">`);
-
-            // the game icon
-            const gameIcon = createElement('img', {
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                borderRadius: '18px',
-                display: 'none',
-                transition: 'opacity 0.3s ease'
-            });
-
-            iconContainer.appendChild(defaultLogo);
-            iconContainer.appendChild(gameIcon);
-
-            // other stuff
-            const textContainer = createElement('div', {
-                flex: '1',
-                display: 'flex',
-                flexDirection: 'column'
-            });
-
-            // main loading text
-            const isServerHopping = !gameId || !serverId;
-            const loadingText = createElement('div', {
-                fontSize: '24px',
-                fontWeight: '700',
-                background: 'linear-gradient(135deg, #ffffff, #e5e5e5)',
-                webkitBackgroundClip: 'text',
-                webkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-                marginBottom: '6px',
-                letterSpacing: '-0.03em',
-                lineHeight: '1.2'
-            }, mainMessage || (isServerHopping ? 'Server Hopping' : 'Joining Roblox Game'));
-
-            // animated dots
-            const dotsSpan = createElement('span', {
-                animation: 'dots 1.5s steps(4, end) infinite'
-            });
-            loadingText.appendChild(dotsSpan);
-
-            // status
-            const statusText = createElement('div', {
-                fontSize: '14px',
-                color: '#a0a0a0',
-                lineHeight: '1.4',
-                fontWeight: '500',
-                marginBottom: '12px'
-            }, statusMessage || (isServerHopping ? 'Picking a random server...' : 'Please wait while we connect you'));
-
-            textContainer.appendChild(loadingText);
-            textContainer.appendChild(statusText);
-            topSection.appendChild(iconContainer);
-            topSection.appendChild(textContainer);
-
-            // location
-            const locationSection = createElement('div', {
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: '16px',
-                padding: '18px',
-                background: gradientBg('#282828', '#202020'),
-                borderRadius: '15px',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                minHeight: '60px',
-                boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.2)',
-                position: 'relative',
-                overflow: 'hidden'
-            });
-
-            // background stuff
-            const pattern = createElement('div', {
-                position: 'absolute',
-                top: '0',
-                left: '0',
-                right: '0',
-                bottom: '0',
-                opacity: '0.03',
-                backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)',
-                backgroundSize: '18px 18px'
-            });
-            locationSection.appendChild(pattern);
-
-            // location
-            const locationContent = createElement('div', {
-                textAlign: 'center',
-                opacity: '0',
-                transition: 'opacity 0.4s ease, transform 0.4s ease',
-                transform: 'translateY(10px)',
-                zIndex: '1',
-                position: 'relative'
-            });
-
-            const locationDisplay = createElement('div', {
-                fontSize: '17px',
-                color: '#ffffff',
-                fontWeight: '600',
-                marginBottom: '4px',
-                letterSpacing: '-0.01em'
-            });
-
-            const locationSubtext = createElement('div', {
-                fontSize: '12px',
-                color: '#999999',
-                fontWeight: '500',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
-            });
-
-            locationContent.appendChild(locationDisplay);
-            locationContent.appendChild(locationSubtext);
-            locationSection.appendChild(locationContent);
-
-            // server details
-            const serverDetailsContainer = createElement('div', {
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: '12px',
-                marginBottom: '12px',
-                padding: '12px 16px',
-                background: gradientBg('#262626', '#1e1e1e'),
-                borderRadius: '12px',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                opacity: '0',
-                transition: 'opacity 0.4s ease 0.2s',
-                boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.2)'
-            });
-
-            // function to create ID displays
-            const createIdDisplay = (label, value, color) => {
-                const container = createElement('div', {
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '6px 10px',
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    borderRadius: '8px',
-                    border: '1px solid rgba(255, 255, 255, 0.06)',
-                    flex: '1',
-                    minWidth: '0'
-                });
-
-                const labelSpan = createElement('span', {
-                    fontSize: '9px',
-                    color: '#888888',
-                    fontWeight: '600',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    flexShrink: '0'
-                }, label);
-
-                const valueSpan = createElement('span', {
-                    fontSize: '11px',
-                    color: color,
-                    fontWeight: '600',
-                    fontFamily: 'Monaco, Consolas, monospace',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    minWidth: '0',
-                    flex: '1'
-                }, value || 'N/A');
-
-                container.appendChild(labelSpan);
-                container.appendChild(valueSpan);
-                return container;
-            };
-
-            serverDetailsContainer.appendChild(createIdDisplay('Game', gameId, '#60a5fa'));
-            serverDetailsContainer.appendChild(createIdDisplay('Server', serverId, '#34d399'));
-
-            // loading
-            const loadingBarContainer = createElement('div', {
-                width: '100%',
-                height: '7px',
-                backgroundColor: '#2a2a2a',
-                borderRadius: '4px',
-                overflow: 'hidden',
-                marginBottom: '12px',
-                boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.3)',
-                border: '1px solid rgba(255, 255, 255, 0.05)'
-            });
-
-            // loading bar
-            const loadingBar = createElement('div', {
-                height: '100%',
-                background: 'linear-gradient(90deg, #3b82f6, #60a5fa, #93c5fd, #60a5fa, #3b82f6)',
-                backgroundSize: '300% 100%',
-                borderRadius: '4px',
-                animation: 'loading-slide 2s ease-in-out infinite',
-                width: '60%',
-                boxShadow: '0 0 11px rgba(96, 165, 250, 0.4)'
-            });
-
-            loadingBarContainer.appendChild(loadingBar);
-
-            // the rolocate stuff
-            const brandingSection = createElement('div', {
-                textAlign: 'center',
-                marginTop: 'auto',
-                paddingTop: '8px',
-                borderTop: '1px solid rgba(255, 255, 255, 0.06)'
-            });
-
-            const brandingText = createElement('div', {
-                fontSize: '11px',
-                color: '#666666',
-                fontWeight: '600',
-                letterSpacing: '0.8px',
-                textTransform: 'uppercase',
-                opacity: '0.7',
-                transition: 'opacity 0.2s ease, color 0.2s ease'
-            }, 'RoLocate by Oqarshi');
-
-            brandingText.addEventListener('mouseenter', () => {
-                brandingText.style.opacity = '1';
-                brandingText.style.color = '#888888';
-            });
-
-            brandingText.addEventListener('mouseleave', () => {
-                brandingText.style.opacity = '0.7';
-                brandingText.style.color = '#666666';
-            });
-
-            brandingSection.appendChild(brandingText);
-
-            container.appendChild(exitButton);
-            container.appendChild(topSection);
-            container.appendChild(locationSection);
-            container.appendChild(serverDetailsContainer);
-            container.appendChild(loadingBarContainer);
-            container.appendChild(brandingSection);
-            overlay.appendChild(container);
-            document.body.appendChild(overlay);
-
-            // aniamtion
-            setTimeout(() => {
-                overlay.style.opacity = '1';
-                container.style.opacity = '1';
-                container.style.transform = 'translate(-50%, -50%) scale(1)';
-            }, 50);
-
-            setTimeout(() => serverDetailsContainer.style.opacity = '1', 300);
-
-            // hover effects
-            const iconHover = (enter) => {
-                iconContainer.style.transform = enter ? 'scale(1.05)' : 'scale(1)';
-                iconContainer.style.boxShadow = enter ?
-                    '0 7px 23px rgba(0, 0, 0, 0.4), 0 0 18px rgba(96, 165, 250, 0.2)' :
-                    '0 4px 15px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)';
-            };
-
-            iconContainer.addEventListener('mouseenter', () => iconHover(true));
-            iconContainer.addEventListener('mouseleave', () => iconHover(false));
-
-            // fetch game icons
-            if (gameId) {
-                getUniverseIdFromPlaceId(gameId)
-                    .then(universeId => getGameIconFromUniverseId(universeId))
-                    .then(iconUrl => {
-                        gameIcon.src = iconUrl;
-                        gameIcon.onload = () => {
-                            defaultLogo.style.opacity = '0';
-                            setTimeout(() => {
-                                defaultLogo.style.display = 'none';
-                                gameIcon.style.display = 'block';
-                                gameIcon.style.opacity = '1';
-                            }, 200);
-                        };
-                        gameIcon.onerror = () => ConsoleLogEnabled('Failed to load game icon, using default');
-                    })
-                    .catch(error => ConsoleLogEnabled('Error fetching game icon:', error));
-            }
-
-            // server location detector thing
-            (async () => {
-                statusText.textContent = statusMessage || (isServerHopping ? 'Finding available server...' : 'Locating server location...');
-
-                await new Promise(resolve => setTimeout(resolve, 1000));
-
-                try {
-                    if (isServerHopping) {
-                        locationDisplay.innerHTML = '🌍 Joining Roblox Game';
-                        locationSubtext.textContent = 'Joining Game';
-                        statusText.textContent = statusMessage || 'Connecting to random server...';
-                    } else {
-                        const locationData = await fetchServerDetails(gameId, serverId);
-                        const flagEmoji = getFlagEmoji(locationData.country.code);
-                        locationDisplay.innerHTML = '';
-                        locationDisplay.appendChild(flagEmoji);
-                        locationDisplay.append(` ${locationData.city}, ${locationData.country.name}`);
-                        locationSubtext.textContent = 'Server Located';
-                        statusText.innerHTML = statusMessage || `Connecting to <strong style="color: #60a5fa; font-weight: 600;">${locationData.city}</strong> server`;
-                    }
-                } catch (error) {
-                    ConsoleLogEnabled('Error fetching server location:', error);
-                    locationDisplay.innerHTML = isServerHopping ? '🌍 Random Server' : '🌍 Unknown Server Location';
-                    locationSubtext.textContent = isServerHopping ? 'SERVER HOPPING' : 'JOINING FULL/RESTRICTED SERVER';
-                    statusText.textContent = statusMessage || (isServerHopping ? 'Connecting to random server...' : 'Joining Server...');
-                }
-
-                locationContent.style.opacity = '1';
-                locationContent.style.transform = 'translateY(0)';
-            })();
-
-            // clean everytihng up
-            const cleanup = () => {
-                overlay.style.opacity = '0';
-                container.style.transform = 'translate(-50%, -55%) scale(0.9)';
-                setTimeout(() => {
-                    overlay.remove();
-                    style.remove();
-                }, 400);
-            };
-
-            // hide after 6 seconds
-            const fadeOutTimer = setTimeout(cleanup, 6000);
-
-            // exit button stuff
-            exitButton.addEventListener('click', () => {
-                clearTimeout(fadeOutTimer);
-                cleanup();
-            });
         }
     }
 })();

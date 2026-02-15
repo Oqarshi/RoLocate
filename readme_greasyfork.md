@@ -1,7 +1,7 @@
 <div>
 
   <center>
-    <img src="https://oqarshi.github.io/Invite/rolocate/assets/logo.svg" width="128" alt="RoLocate Logo">
+    <img src="https://raw.githubusercontent.com/Oqarshi/Invite/refs/heads/main/rolocate/assets/logo.svg" width="128" alt="RoLocate Logo">
 
     <h3>🌍 RoLocate</h3>
 
@@ -29,7 +29,7 @@
     </p>
 
     <p>
-      <strong>Version 44.5</strong> · Created &amp; maintained by <strong>Oqarshi</strong>
+      <strong>Version 45.5</strong> · Created &amp; maintained by <strong>Oqarshi</strong>
     </p>
 
     <p>
