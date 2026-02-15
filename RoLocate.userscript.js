@@ -345,37 +345,67 @@
         const PREV_VERSION = "V44.5";
 
         const CHANGELOG = {
-            Mobilemode: {
-                title: "Mobile Mode",
-                icon: "📱",
-                description: "Mobile users can now use RoLocate on Android! Join server regions using your phone.",
-                badge: "New",
-                link: "https://www.youtube.com/watch?v=gz5SHAro08Q"
-            },
-            Serverversions: {
-                title: "Server Regions",
-                icon: "🌐",
-                description: "Fixed some servers being confused between the UK and Poland.",
-                badge: "Updated"
-            },
-            mutualfriends: {
-                title: "Mutual Friends",
-                icon: "😎",
-                description: "Mutual Friends has been optimized and now loads faster.",
-                badge: "Updated"
-            },
-            securityupdate: {
-                title: "Security Update",
-                icon: "🛡️",
-                description: "Improved XSS attack vector protection.",
-                badge: "Updated"
-            },
-            autoserverregions: {
-                title: "Auto Server Regions",
-                icon: "🛜",
-                description: "Select how many servers to search. Customizable in settings.",
-                badge: "Updated"
-            }
+        EasterEggs: {
+            title: "Easter Eggs",
+            icon: "🥚",
+            description: "Hidden Easter Eggs have been added across the script. Have fun finding them!",
+            badge: "New"
+        },
+        SettingsUpgrade: {
+            title: "Settings Overhaul",
+            icon: "⚙️",
+            description: "Added a Technical tab with storage info, live console, reset button, searchable settings, contributor list, and more preset options.",
+            badge: "Updated"
+        },
+        UIUpdates: {
+            title: "UI & Appearance Updates",
+            icon: "🎨",
+            description: "Light Mode support added, responsive game cards introduced, SVG icons applied, and Smart Join popup UI slightly improved.",
+            badge: "Updated"
+        },
+        PerformanceBoost: {
+            title: "Performance Improvements",
+            icon: "🚀",
+            description: "Script size reduced by ~59%, faster Smart Join, and Fast Server Search is now the default.",
+            badge: "Improved"
+        },
+        ServerRegions: {
+            title: "Server Region Accuracy",
+            icon: "🌐",
+            description: "Moved from IP detection to datacenters for better accuracy and smaller script size. Fixed incorrect Dallas region flags.",
+            badge: "Fixed"
+        },
+        SmartSearch: {
+            title: "Smart Search Enhancements",
+            icon: "🔍",
+            description: "Smart Search now shows friend & follower counts, verified badges, and supports adding games directly to Quick Launch.",
+            badge: "Updated"
+        },
+        QuickLaunch: {
+            title: "Quick Launch Improvements",
+            icon: "📌",
+            description: "Games can now be reordered via drag & drop instead of arrow buttons.",
+            badge: "Updated"
+        },
+        PrivateServers: {
+            title: "Better Private Servers",
+            icon: "🔒",
+            description: "Compact Private Servers renamed to Better Private Servers. Now shows only your private servers with more improvements planned.",
+            badge: "Updated"
+        },
+        SecurityAndFixes: {
+            title: "Bug Fixes & Stability",
+            icon: "🛠️",
+            description: "Fixed Recent Servers issues, SmartSearch UI bugs, and added join confirmation when already in a game.",
+            badge: "Fixed"
+        },
+        AndMore: {
+            title: "And More!",
+            icon: "✨",
+            description: "This update includes many more improvements, fixes, and changes. Visit the full changelog to see everything.",
+            badge: "Info",
+            link: "https://oqarshi.github.io/Invite/rolocate/changelog/"
+        }
         };
 
         const currentVersion = localStorage.getItem('version') || "V0.0";
@@ -548,7 +578,7 @@
                     <span class="rup-feature-badge">${feat.badge}</span>
                 </div>
                 <p class="rup-feature-description">${feat.description}</p>
-                ${feat.link ? `<a href="${feat.link}" target="_blank" class="rup-feature-link">Watch Tutorial →</a>` : ''}
+                ${feat.link ? `<a href="${feat.link}" target="_blank" class="rup-feature-link">https://oqarshi.github.io/Invite/rolocate/changelog/</a>` : ''}
             </div>
         `).join('');
 
