@@ -27,6 +27,8 @@
 // @connect      groups.roblox.com
 // @connect      users.roblox.com
 // @connect      catalog.roblox.com
+// @downloadURL https://update.greasyfork.org/scripts/523727/RoLocate.user.js
+// @updateURL https://update.greasyfork.org/scripts/523727/RoLocate.meta.js
 // ==/UserScript==
 
 /**
@@ -4331,17 +4333,22 @@ li a.about-link:hover::after {
         document.querySelectorAll('video[custom-bg], img[custom-bg], #custom-ui-style').forEach(e => e.remove());
 
         let hasBG = false;
-        const el = document.createElement(useVid ? 'video' : 'img');
+
+        const fileKey = useVid ? 'video' : 'image';
+        const file = getFile(fileKey);
+        const isUrlGif = useVid && vidURL && \/\.gif(\?.*)?$/i.test(vidURL);
+        const useGif = useVid && ((file && file.type === 'image/gif') || isUrlGif);
+
+        const el = document.createElement(useGif ? 'img' : (useVid ? 'video' : 'img'));
         el.setAttribute('custom-bg', '');
         el.style.cssText = `position:fixed;top:0;left:0;width:100vw;height:100vh;object-fit:cover;z-index:-9999;pointer-events:none;`;
-        if (useVid) Object.assign(el, { muted: true, loop: true, playsInline: true });
+        if (useVid && el.tagName.toLowerCase() === 'video') Object.assign(el, { muted: true, loop: true, playsInline: true });
 
-        const file = getFile(useVid ? 'video' : 'image');
         if (file?.data) { el.src = file.data; hasBG = true; }
         else if (useVid && vidURL) { el.src = vidURL; hasBG = true; }
 
         if (hasBG) {
-            if (useVid) el.play().catch(() => {});
+            if (useVid && el.tagName.toLowerCase() === 'video') el.play().catch(() => {});
             document.documentElement.appendChild(el);
         }
 
@@ -4423,8 +4430,10 @@ li a.about-link:hover::after {
             const validVideoTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'];
             const isImage = validImageTypes.includes(file.type);
             const isVideo = validVideoTypes.includes(file.type);
-            if ((key === 'image' && !isImage) || (key === 'video' && !isVideo)) {
-                notifications(`Invalid file type: ${file.type}. Please upload a valid ${key === 'image' ? 'image (JPG, PNG, GIF, WebP)' : 'video (MP4, WebM, OGG)'} file.`, 'error', '⚠️', 8000);
+            const isGif = file.type === 'image/gif';
+
+            if ((key === 'image' && !isImage) || (key === 'video' && !(isVideo || isGif))) {
+                notifications(`Invalid file type: ${file.type}. Please upload a valid ${key === 'image' ? 'image (JPG, PNG, GIF, WebP)' : 'video (MP4, WebM, OGG, GIF)'} file.`, 'error', '⚠️', 8000);
                 return;
             }
 
@@ -4561,10 +4570,10 @@ li a.about-link:hover::after {
                 <label style="display:block;color:#c0c0c0;font-size:12px;margin-bottom:8px;font-weight:500">Video Source</label>
                 <input type="text" id="video-url" class="r-input" value="${sanitizeAttribute(localstoragegetternator('video_url'))}" placeholder="https://example.com/video.mp4">
                 <p class="r-helper">Enter a direct URL to an MP4 video file, or upload your own below</p>
-                <input type="file" id="video-file-input" accept="video/*" style="display:none">
+                <input type="file" id="video-file-input" accept="video/*,image/gif" style="display:none">
                 <div class="r-upload-zone" id="video-upload-zone"><div style="font-size:28px;margin-bottom:6px">📤</div>
                 <div style="color:#b5b5b5;font-size:13px;font-weight:500;margin-bottom:4px">Upload Video File</div>
-                <div style="color:#808080;font-size:11px">Click to browse • Max 5MB • MP4, WebM</div></div>
+                <div style="color:#808080;font-size:11px">Click to browse • Max 5MB • MP4, WebM, GIF</div></div>
                 <div id="video-file-preview" style="display:none"></div></div>
                 <div class="r-card" id="image-section"><h3 class="r-card-title"><span>🖼️</span> Image Background</h3>
                 <p class="r-helper" style="margin-bottom:10px">Upload a static image to use as your background</p>
