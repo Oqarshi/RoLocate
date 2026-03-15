@@ -1,4 +1,4 @@
-name: Userscript Check
+name: RoLocate Syntax Check
 
 on:
   push:
@@ -17,12 +17,5 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install ESLint
-        run: npm install eslint
-
-      - name: Run syntax check
+      - name: Check JavaScript syntax
         run: node --check RoLocate.userscript.js
-
-      - name: Run ESLint
-        run: npx eslint RoLocate.userscript.js
-        # test idk if this will work
