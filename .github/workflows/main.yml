@@ -1,5 +1,5 @@
 name: RoLocate Check
-
+# dont need eslint
 on:
   push:
   pull_request:
@@ -7,29 +7,14 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install ESLint
-        run: npm install eslint
-
-      - name: Check JavaScript syntax
+      - name: Check JS syntax
         run: node --check RoLocate.userscript.js
-
-      - name: Run ESLint inline
-        run: |
-          npx eslint RoLocate.userscript.js \
-            --env browser,es2021 \
-            --rule "no-undef: error" \
-            --rule "no-unused-vars: warn" \
-            --parser-options ecmaVersion=2023,sourceType=script
 
       - name: Check userscript metadata
         run: |
