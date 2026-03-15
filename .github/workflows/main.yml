@@ -1,4 +1,4 @@
-name: RoLocate Syntax Check
+name: RoLocate Check
 
 on:
   push:
@@ -17,5 +17,30 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install ESLint
+        run: npm install eslint
+
       - name: Check JavaScript syntax
         run: node --check RoLocate.userscript.js
+
+      - name: Run ESLint inline
+        run: |
+          npx eslint RoLocate.userscript.js \
+            --env browser,es2021 \
+            --rule "no-undef: error" \
+            --rule "no-unused-vars: warn" \
+            --parser-options ecmaVersion=2023,sourceType=script
+
+      - name: Check userscript metadata
+        run: |
+          HEADER=$(head -n 50 RoLocate.userscript.js)
+          MISSING=""
+          for FIELD in "@name" "@namespace" "@version" "@description" "@match" "@author" "@license" "@grant"; do
+            echo "$HEADER" | grep -q "$FIELD" || MISSING="$MISSING $FIELD"
+          done
+          if [ ! -z "$MISSING" ]; then
+            echo "❌ Missing metadata fields:$MISSING"
+            exit 1
+          else
+            echo "✅ All required metadata fields present"
+          fi
