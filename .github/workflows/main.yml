@@ -1,5 +1,8 @@
 name: RoLocate Check
 # dont need eslint
+
+# ok so what this does is that it performs a check. Everytime a new version of RoLocate is commited/pulled/merged, this will check if
+# the userscript has a header like the // ==UserScript== section and any syntax errors.
 on:
   push:
   pull_request:
