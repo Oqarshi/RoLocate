@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RoLocate
 // @namespace    https://oqarshi.github.io/
-// @version      45.5
+// @version      45.6
 // @description  Adds filter options to roblox server page. Alternative to paid extensions like RoPro, RoGold®, RoQol, and RoKit.
 // @author       Oqarshi
 // @match        https://www.roblox.com/*
@@ -341,70 +341,15 @@
     function Update_Popup() {
         localStorage.removeItem('ROLOCATE_compactprivateservers'); // remove this cause its called better private servers now
 
-        const VERSION = "V45.5";
-        const PREV_VERSION = "V44.5";
+        const VERSION = "V45.6";
+        const PREV_VERSION = "V45.5";
 
         const CHANGELOG = {
-        EasterEggs: {
-            title: "Easter Eggs",
-            icon: "🥚",
-            description: "Hidden Easter Eggs have been added across the script. Have fun finding them!",
-            badge: "New"
-        },
-        SettingsUpgrade: {
-            title: "Settings Overhaul",
-            icon: "⚙️",
-            description: "Added a Technical tab with storage info, live console, reset button, searchable settings, contributor list, and more preset options.",
-            badge: "Updated"
-        },
-        UIUpdates: {
-            title: "UI & Appearance Updates",
-            icon: "🎨",
-            description: "Light Mode support added, responsive game cards introduced, SVG icons applied, and Smart Join popup UI slightly improved.",
-            badge: "Updated"
-        },
-        PerformanceBoost: {
-            title: "Performance Improvements",
-            icon: "🚀",
-            description: "Script size reduced by ~59%, faster Smart Join, and Fast Server Search is now the default.",
-            badge: "Improved"
-        },
-        ServerRegions: {
-            title: "Server Region Accuracy",
-            icon: "🌐",
-            description: "Moved from IP detection to datacenters for better accuracy and smaller script size. Fixed incorrect Dallas region flags.",
-            badge: "Fixed"
-        },
-        SmartSearch: {
-            title: "Smart Search Enhancements",
-            icon: "🔍",
-            description: "Smart Search now shows friend & follower counts, verified badges, and supports adding games directly to Quick Launch.",
-            badge: "Updated"
-        },
-        QuickLaunch: {
-            title: "Quick Launch Improvements",
-            icon: "📌",
-            description: "Games can now be reordered via drag & drop instead of arrow buttons.",
-            badge: "Updated"
-        },
-        PrivateServers: {
-            title: "Better Private Servers",
-            icon: "🔒",
-            description: "Compact Private Servers renamed to Better Private Servers. Now shows only your private servers with more improvements planned.",
-            badge: "Updated"
-        },
-        SecurityAndFixes: {
-            title: "Bug Fixes & Stability",
-            icon: "🛠️",
-            description: "Fixed Recent Servers issues, SmartSearch UI bugs, and added join confirmation when already in a game.",
-            badge: "Fixed"
-        },
-        AndMore: {
-            title: "And More!",
-            icon: "✨",
-            description: "This update includes many more improvements, fixes, and changes. Visit the full changelog to see everything.",
-            badge: "Info",
-            link: "https://oqarshi.github.io/Invite/rolocate/changelog/"
+        ServerSearch: {
+            title: "Server Region Search",
+            icon: "🌍",
+            description: "As of April 2026, Roblox has significantly restricted how server regions are discovered, limiting results to only 10 servers per second. Sorry!",
+            badge: "updated"
         }
         };
 
@@ -912,7 +857,7 @@
             return `
         <div class="home-section">
             <img class="rolocate-logo" src="${window.Base64Images.logo}" alt="ROLOCATE Logo">
-            <div class="version">Rolocate: Version 45.5</div>
+            <div class="version">Rolocate: Version 45.6</div>
             <div class="section-separator"></div>
             <p>Rolocate by Oqarshi.</p>
             <p class="license-note">
@@ -10604,7 +10549,6 @@ li a.about-link:hover::after {
                             return;
                         }
 
-                        // function to get location data for a datacenter ID
                         function getLocationData(datacenterId) {
                             const locationId = serverRegionsByIp[datacenterId];
                             if (locationId && serverRegionsByIp._locations && serverRegionsByIp._locations[locationId]) {
@@ -10620,7 +10564,7 @@ li a.about-link:hover::after {
                             return;
                         }
 
-                        location.placeVersion = json.joinScript.PlaceVersion; // not wrapping this in an object cause it breaks stuff. so this should do
+                        location.placeVersion = json.joinScript.PlaceVersion;
                         resolve(location);
                     },
                     onerror: function(error) {
@@ -10631,153 +10575,142 @@ li a.about-link:hover::after {
             });
         }
 
-        // Batching logic with rate limit handling
-        const queue = fetchServerDetails._queue || [];
-        const concurrencyLimit = 100; // this can be any value from 1 to 2000 (integer)
+        // batching
 
-        if (!fetchServerDetails._queue) {
-            fetchServerDetails._queue = queue;
-            fetchServerDetails._activeCount = 0;
-            fetchServerDetails._rateLimited = false;
+        const BATCH_SIZE     = 10; // roblox recently added this limit idk why
+        const BATCH_INTERVAL = 1000; // holy nerf roblox. whyyyyyyyyy
+
+        if (!fetchServerDetails._queue)                   fetchServerDetails._queue = [];
+        if (fetchServerDetails._timer === undefined)      fetchServerDetails._timer = null;
+        if (fetchServerDetails._rateLimited === undefined) fetchServerDetails._rateLimited = false;
+
+        function startDispatcher() {
+            if (fetchServerDetails._timer !== null) return;
+
+            fetchServerDetails._timer = setInterval(() => {
+                const q = fetchServerDetails._queue;
+                if (q.length === 0) {
+                    clearInterval(fetchServerDetails._timer);
+                    fetchServerDetails._timer = null;
+                    return;
+                }
+                const batch = q.splice(0, BATCH_SIZE);
+                ConsoleLogEnabled(`Dispatching batch of ${batch.length} requests`);
+                batch.forEach(task => task());
+            }, BATCH_INTERVAL);
         }
 
-        return new Promise((resolve, reject) => {
-            const makeRequest = async (gameId, jobId) => {
-                return new Promise((innerResolve, innerReject) => {
-                    GM_xmlhttpRequest({
-                        method: "POST",
-                        url: "https://gamejoin.roblox.com/v1/join-game-instance",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "User-Agent": "Roblox/WinInet",
-                        },
-                        data: JSON.stringify({
-                            placeId: gameId,
-                            gameId: jobId
-                        }),
-                        onload: function(response) {
-                            const json = JSON.parse(response.responseText);
-                            ConsoleLogEnabled("API Response:", json);
+        const makeRequest = async (gameId, jobId) => {
+            return new Promise((innerResolve, innerReject) => {
+                GM_xmlhttpRequest({
+                    method: "POST",
+                    url: "https://gamejoin.roblox.com/v1/join-game-instance",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "User-Agent": "Roblox/WinInet"
+                    },
+                    withCredentials: true,
+                    data: JSON.stringify({ placeId: gameId, gameId: jobId }),
+                    onload: function(response) {
+                        const json = JSON.parse(response.responseText);
+                        ConsoleLogEnabled("API Response:", json);
 
-                            // Check if we got rate limited (status undefined)
-                            if (json.status === undefined) {
-                                ConsoleLogEnabled("Rate limited detected - status undefined");
-                                innerReject('rate_limited');
-                                return;
-                            }
+                        if (json.status === undefined) {
+                            ConsoleLogEnabled("Rate limited detected - status undefined");
+                            innerReject('rate_limited');
+                            return;
+                        }
+                        if (json.status === 12 && json.message === 'You need to purchase access to this game before you can play.') {
+                            innerReject('purchase_required');
+                            return;
+                        }
+                        if (json.status === 12 && json.message === 'Cannot join this non-root place due to join restrictions') {
+                            innerReject('subplace_join_restriction');
+                            return;
+                        }
+                        if (json.status === 23 && json.message.includes('You have been banned from this experience by its creators.')) {
+                            innerReject('banned_by_creator');
+                            return;
+                        }
 
-                            if (json.status === 12 && json.message === 'You need to purchase access to this game before you can play.') {
-                                innerReject('purchase_required');
-                                return;
-                            }
+                        const datacenterId = json?.joinScript?.DataCenterId;
+                        if (!datacenterId) {
+                            ConsoleLogEnabled("API Response (No DataCenterId) - Full Server:", json);
+                            innerReject(`Unable to fetch server location: Status ${json.status}`);
+                            return;
+                        }
 
-                            if (json.status === 12 && json.message === 'Cannot join this non-root place due to join restrictions') {
-                                innerReject('subplace_join_restriction');
-                                return;
-                            }
+                        function getLocationData(id) {
+                            const locationId = serverRegionsByIp[id];
+                            if (locationId && serverRegionsByIp._locations?.[locationId])
+                                return serverRegionsByIp._locations[locationId];
+                            return null;
+                        }
 
-                            if (json.status === 23 && json.message.includes('You have been banned from this experience by its creators.')) {
-                                reject('banned_by_creator');
-                                return;
-                            }
+                        const location = getLocationData(String(datacenterId));
+                        if (!location) {
+                            ConsoleLogEnabled("API Response (Unknown Location):", json);
+                            innerReject(`Unknown datacenter ID ${datacenterId}`);
+                            return;
+                        }
 
-                            const datacenterId = json?.joinScript?.DataCenterId;
-                            if (!datacenterId) {
-                                ConsoleLogEnabled("API Response (No DataCenterId) Which means Full Server!:", json);
-                                innerReject(`Unable to fetch server location: Status ${json.status}`);
-                                return;
-                            }
-
-                            // function to get location data for a datacenter ID
-                            function getLocationData(datacenterId) {
-                                const locationId = serverRegionsByIp[datacenterId];
-                                if (locationId && serverRegionsByIp._locations && serverRegionsByIp._locations[locationId]) {
-                                    return serverRegionsByIp._locations[locationId];
-                                }
-                                return null;
-                            }
-
-                            const location = getLocationData(String(datacenterId));
-                            if (!location) {
-                                ConsoleLogEnabled("API Response (Unknown Location):", json);
-                                //// this is for finding server regions
-                                //// Store unknown datacenter ID in localStorage
-                                //let unknownDatacenters = JSON.parse(localStorage.getItem("unknownDatacenters") || "[]");
-                                //if (!unknownDatacenters.includes(datacenterId)) {
-                                //    unknownDatacenters.push(datacenterId);
-                                //    localStorage.setItem("unknownDatacenters", JSON.stringify(unknownDatacenters));
-                                //}
-                                innerReject(`Unknown datacenter ID ${datacenterId}`);
-                                return;
-                            }
-
-                            location.placeVersion = json.joinScript.PlaceVersion; // samething
-                            innerResolve(location);
-                        },
-                        onerror: function(error) {
-                            ConsoleLogEnabled("API Request Failed:", error);
-                            innerReject(`Failed to fetch server details: ${error}`);
-                        },
-                    });
+                        location.placeVersion = json.joinScript.PlaceVersion;
+                        innerResolve(location);
+                    },
+                    onerror: function(error) {
+                        ConsoleLogEnabled("API Request Failed:", error);
+                        innerReject(`Failed to fetch server details: ${error}`);
+                    },
                 });
-            };
+            });
+        };
 
+        return new Promise((resolve, reject) => {
             const task = async () => {
-                try {
-                    fetchServerDetails._activeCount++;
+                let attempts = 0;
+                const maxAttempts = 100;
 
-                    let result;
-                    let attempts = 0;
-                    const maxAttempts = 100; // prevent infinite loops
-
-                    while (attempts < maxAttempts) {
-                        try {
-                            result = await makeRequest(gameId, jobId);
-                            // if we get here, request was successful
-                            if (fetchServerDetails._rateLimited) {
-                                ConsoleLogEnabled("Rate limit cleared, resuming normal operation");
-                                fetchServerDetails._rateLimited = false;
+                while (attempts < maxAttempts) {
+                    try {
+                        const result = await makeRequest(gameId, jobId);
+                        if (fetchServerDetails._rateLimited) {
+                            ConsoleLogEnabled("Rate limit cleared, resuming normal operation");
+                            fetchServerDetails._rateLimited = false;
+                        }
+                        resolve(result);
+                        return;
+                    } catch (err) {
+                        if (err === 'rate_limited') {
+                            if (!fetchServerDetails._rateLimited) {
+                                ConsoleLogEnabled("Rate limited — will retry in next batch window");
+                                fetchServerDetails._rateLimited = true;
                             }
-                            break;
-                        } catch (err) {
-                            if (err === 'rate_limited') {
-                                if (!fetchServerDetails._rateLimited) {
-                                    ConsoleLogEnabled("Rate limited - retrying every second until cleared");
-                                    fetchServerDetails._rateLimited = true;
-                                }
-                                ConsoleLogEnabled(`Rate limit retry attempt ${attempts + 1}`);
-                                await delay(1000); // wait 1 second before retry
-                                attempts++;
-                            } else {
-                                // for other errors, don't retry
-                                throw err;
-                            }
+                            ConsoleLogEnabled(`Rate limit retry attempt ${attempts + 1}`);
+                            await delay(1000);
+                            attempts++;
+                        } else {
+                            reject(err);
+                            return;
                         }
                     }
-
-                    if (attempts >= maxAttempts) {
-                        throw new Error(`Rate limited for too long, exceeded ${maxAttempts} attempts`);
-                    }
-
-                    resolve(result);
-                } catch (err) {
-                    reject(err);
-                } finally {
-                    fetchServerDetails._activeCount--;
-                    if (queue.length > 0) {
-                        const next = queue.shift();
-                        next();
-                    }
                 }
+                reject(new Error(`Rate limited for too long, exceeded ${maxAttempts} attempts`));
             };
 
-            if (fetchServerDetails._activeCount < concurrencyLimit) {
-                task();
-            } else {
-                queue.push(task);
-            }
+            fetchServerDetails._queue.push(task);
+            startDispatcher();
         });
     }
+
+
+    /*******************************************************
+    name of function: delay
+    description: custom delay also known as sleep function in js cause this language sucks and doesent have a default built-in sleep.
+    *******************************************************/
+    function delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
     /*******************************************************
     name of function: HandleRecentServersAddGames
     description: Adds recent servers to localstorage for safe
@@ -17192,7 +17125,7 @@ select:hover, select:focus {
                 if (prevValue && Array.from(versionSelect.options).some(o => o.value === prevValue)) {
                     versionSelect.value = prevValue;
                 }
-            };
+            }
             // on city change update versions so no bugs
             const citySelect = cityDropdown.querySelector('select');
             citySelect.addEventListener('change', () => {
@@ -17806,6 +17739,7 @@ select:hover, select:focus {
                 }
 
                 notifications(`Please do not leave this page as it slows down the search. \nFound a total of ${totalServers} servers.`, 'success', '👍', '3000');
+                notifications(`As of April 2026, Roblox has significantly restricted how server regions are discovered, limiting results to only 10 servers per second. Sorry!`, 'warning', ' 😢 ', '10000');
 
                 let serverDetails = [];
                 const thumbnailCache = new Map(); // cache for thumbnails
@@ -17813,7 +17747,7 @@ select:hover, select:focus {
 
                 // process servers to get location data (WITHOUT waiting for thumbnails)
                 if (useBatching) {
-                    const batchSize = 100;
+                    const batchSize = 10;
                     let processedCount = 0;
 
                     for (let i = 0; i < servers.length; i += batchSize) {
@@ -17878,7 +17812,7 @@ select:hover, select:focus {
                                 } else {
                                     clearInterval(interval);
                                 }
-                            }, 0.5);
+                            }, 90);
                         }
 
                         updateProcessedCountSmoothly(previousProcessedCount, processedCount);
