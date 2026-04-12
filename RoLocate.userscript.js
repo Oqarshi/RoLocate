@@ -27,8 +27,6 @@
 // @connect      groups.roblox.com
 // @connect      users.roblox.com
 // @connect      catalog.roblox.com
-// @connect      avatar.roblox.com
-// @connect      accountinformation.roblox.com
 // ==/UserScript==
 
 
@@ -6234,6 +6232,7 @@ li a.about-link:hover::after {
         const fetchAvatar = async (selector, fallback) => {
             const selectors = [
                 selector,
+                ".age-bracket-label .avatar-card-image img",
                 ".avatar.avatar-headshot-xs .thumbnail-2d-container.avatar-card-image img",
             ];
             for (let i = 0; i < 3; i++) {
