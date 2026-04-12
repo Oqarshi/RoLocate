@@ -29,7 +29,7 @@
     </p>
 
     <p>
-      <strong>Version 45.6</strong> · Created &amp; maintained by <strong>Oqarshi</strong>
+      <strong>Version 46.6</strong> · Created &amp; maintained by <strong>Oqarshi</strong>
     </p>
 
     <p>

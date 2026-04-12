@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RoLocate
 // @namespace    https://oqarshi.github.io/
-// @version      45.6
+// @version      46.6
 // @description  Adds filter options to roblox server page. Alternative to paid extensions like RoPro, RoGold®, RoQol, and RoKit.
 // @author       Oqarshi
 // @match        https://www.roblox.com/*
@@ -14,7 +14,7 @@
 // @grant        GM_setValue
 // @grant        GM_deleteValue
 // @require      https://update.greasyfork.org/scripts/535590/1586769/Rolocate%20Base64%20Image%20Library%2020.js
-// @require      https://update.greasyfork.org/scripts/547134/1754967/Rolocate%20Server%20Region%20Data%20%28Data%20Saving%29.js
+// @require      https://update.greasyfork.org/scripts/547134/1796560/Rolocate%20Server%20Region%20Data%20%28Data%20Saving%29.js
 // @require      https://update.greasyfork.org/scripts/540553/1648593/Rolocate%20Flag%20Base64%20Data.js
 // @require      https://update.greasyfork.org/scripts/544437/1642116/Rolocate%20Restore%20Classic%20Terms%20All%20Languages.js
 // @connect      thumbnails.roblox.com
@@ -27,7 +27,10 @@
 // @connect      groups.roblox.com
 // @connect      users.roblox.com
 // @connect      catalog.roblox.com
+// @connect      avatar.roblox.com
+// @connect      accountinformation.roblox.com
 // ==/UserScript==
+
 
 /**
  * -- RoLocate Userscript --------------------------------
@@ -71,34 +74,33 @@
 (function() {
     'use strict';
 
-
     //---------------XSS Attack Vectors Protection--------------------
     // ik this should be fixed, but roblox engineers are not the brightest...
     // so extra protection i guess.
-    // escape the hmtl. Used in consolog function, notifications function, etc.
+    // escape the html. Used in consolog function, notifications function, etc.
     const escapeHtmlnoxssattackvectors = (text) => {
         const temp = document.createElement('div');
         temp.textContent = text;
         return temp.innerHTML;
     };
 
-    // for numbers. currently used in mutualfriends function
+    // for numbers. currently used in loadbetterprofileinfo function
     const sanitizeUserId = (id) => {
         const numId = parseInt(id, 10);
         return (!isNaN(numId) && numId > 0) ? numId : 0; // return 0 install of null yea
     };
 
-    // for attributes. currenltyy used in custombackgrounds function
+    // for attributes. currenlty used in custombackgrounds function
     const sanitizeAttribute = (str) => {
         return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
     };
 
-    // for hex value colors. currenltyy used in custombackgrounds function
+    // for hex value colors. currenlty used in custombackgrounds function
     const sanitizeColor = (color) => {
         return /^#[0-9A-Fa-f]{6}$/.test(color) ? color : '#ffffff';
     };
 
-    // for css values like rgb and rgba. currenltyy used in custombackgrounds function
+    // for css values like rgb and rgba. currenlty used in custombackgrounds function
     const sanitizeCssValue = (value) => {
         const rgbaPattern = /^rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*[\d.]+\s*)?\)$/;
         const hexPattern = /^#[0-9A-Fa-f]{3,6}$/;
@@ -111,7 +113,7 @@
     description: console.logs everything if settings is turned
     on
     *******************************************************/
-    const MAX_LOG_BYTES = 3 * 1024 * 1024; // 3 mb
+    const MAX_LOG_BYTES = 3 * 1024 * 1024; // 3 mb of ram
     let rolocateLogSize = 0;
 
     function ConsoleLogEnabled(...args) {
@@ -138,6 +140,8 @@
     name of function: isDarkMode
     description: tells if user is using dark mode on roblox
     *******************************************************/
+    // ok so this doesent work for custombackgrounds and im to lazy to figure out a solutions so im sorry lmao
+    // ik i could jsut send a request to the roblox api, but thats more work so nah
     function isDarkMode(bypass = false) {
         if (!bypass && localStorage.getItem("ROLOCATE_forcedarkmode") === "true") { // exception
             return true;
@@ -167,18 +171,18 @@
         // 1st: try to grab the userId directly from Roblox's JS object
         const primaryUserId = sanitizeUserId(Roblox?.CurrentUser?.userId);
 
-        // some extensions like roseal break this and set the userId to 0
-        // so if user id is not 0, return if it is then try another method
+        // some extensions like roseal and btr break this and set the userId to 0
+        // so if user id is not 0, return, if it is then try another method
         if (primaryUserId && primaryUserId !== 0) {
             return primaryUserId;
         }
 
         // 2nd: check in dom for user id instead
-        const Userid2ndmethodcauserosealbreakyeayeay = document.querySelector('meta[name="user-data"]');
-        if (Userid2ndmethodcauserosealbreakyeayeay) {
+        const Userid2ndmethodcauserosealandbtrbreakyeayeay = document.querySelector('meta[name="user-data"]');
+        if (Userid2ndmethodcauserosealandbtrbreakyeayeay) {
             // get it then yea
             const fallbackUserId = parseInt(
-                Userid2ndmethodcauserosealbreakyeayeay.getAttribute('data-userid'),
+                Userid2ndmethodcauserosealandbtrbreakyeayeay.getAttribute('data-userid'),
                 10
             );
 
@@ -191,6 +195,489 @@
         // lowkey just give up, im too lazy to find an api that exposes the userid
         return 0;
     }
+
+    /*******************************************************
+    name of function: getUniverseIdFromPlaceId
+    description: gets universeid from place id
+    *******************************************************/
+    function getUniverseIdFromPlaceId(placeId) {
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: `https://games.roblox.com/v1/games/multiget-place-details?placeIds=${placeId}`,
+                headers: {
+                    "Accept": "application/json"
+                },
+                onload: function(response) {
+                    if (response.status === 200) {
+                        try {
+                            const data = JSON.parse(response.responseText);
+                            if (Array.isArray(data) && data.length > 0 && data[0].universeId) {
+                                // Console log inside the function
+                                ConsoleLogEnabled(`Universe ID for place ${placeId}: ${data[0].universeId}`);
+                                resolve(data[0].universeId);
+                            } else {
+                                reject(new Error("Universe ID not found in response."));
+                            }
+                        } catch (e) {
+                            reject(e);
+                        }
+                    } else {
+                        reject(new Error(`HTTP error! Status: ${response.status}`));
+                    }
+                },
+                onerror: function(err) {
+                    reject(err);
+                }
+            });
+        });
+    }
+
+    /*******************************************************
+    name of function: getGameIconFromUniverseId
+    description: gets the game icon
+    *******************************************************/
+    function getGameIconFromUniverseId(universeIds) {
+        const isSingle = !Array.isArray(universeIds);
+        const idsArray = isSingle ? [universeIds] : universeIds;
+
+        // Split into chunks of 10
+        const chunkSize = 10;
+        const chunks = [];
+        for (let i = 0; i < idsArray.length; i += chunkSize) {
+            chunks.push(idsArray.slice(i, i + chunkSize));
+        }
+
+        // Helper to fetch one chunk
+        function fetchChunk(chunk) {
+            const apiUrl = `https://thumbnails.roblox.com/v1/games/icons?universeIds=${chunk.join(",")}&size=512x512&format=Png&isCircular=false&returnPolicy=PlaceHolder`;
+
+            return new Promise((resolve, reject) => {
+                GM_xmlhttpRequest({
+                    method: "GET",
+                    url: apiUrl,
+                    headers: {
+                        "Accept": "application/json"
+                    },
+                    onload: function(response) {
+                        if (response.status === 200) {
+                            try {
+                                const data = JSON.parse(response.responseText);
+                                resolve(data.data || []);
+                            } catch (err) {
+                                reject(err);
+                            }
+                        } else {
+                            reject(new Error(`HTTP error! Status: ${response.status}`));
+                        }
+                    },
+                    onerror: reject
+                });
+            });
+        }
+
+        // Run all chunk requests
+        return Promise.all(chunks.map(fetchChunk))
+            .then(results => {
+                const combined = results.flat();
+
+                if (combined.length === 0) {
+                    throw new Error("No data returned.");
+                }
+
+                // MULTIPLE → return map
+                if (!isSingle) {
+                    const map = {};
+                    combined.forEach(item => {
+                        if (item.imageUrl) {
+                            map[item.targetId] = item.imageUrl;
+                        }
+                    });
+                    return map;
+                }
+
+                // SINGLE → return single URL (unchanged behavior)
+                const item = combined.find(d => d.targetId == universeIds);
+                if (item && item.imageUrl) {
+                    ConsoleLogEnabled(`Game icon URL for universe ${universeIds}: ${item.imageUrl}`);
+                    return item.imageUrl;
+                }
+
+                throw new Error("Image URL not found in response.");
+            });
+    }
+
+    /*******************************************************
+    name of function: getGameDetailsBatch
+    description: gets game details
+    *******************************************************/
+    async function getGameDetailsBatch(universeIds) {
+        // im to lazy to refactor the entire feature to adapt to the new batch so we gotta do this instead.
+        const single = !Array.isArray(universeIds);
+        if (single) universeIds = [universeIds];
+
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: `https://games.roblox.com/v1/games?universeIds=${universeIds.join(',')}`,
+                headers: { "Accept": "application/json" },
+                onload: function(response) {
+                    if (response.status === 200) {
+                        try {
+                            const data = JSON.parse(response.responseText);
+                            if (single) {
+                                resolve(data.data && data.data.length > 0 ? data.data[0] : null);
+                            } else {
+                                const map = {};
+                                data.data.forEach(game => { map[game.id] = game; });
+                                resolve(map);
+                            }
+                        } catch (e) { reject(e); }
+                    } else {
+                        reject(new Error(`HTTP ${response.status}`));
+                    }
+                },
+                onerror: reject
+            });
+        });
+    }
+
+    /*******************************************************
+    name of function: getGameVotesFromUniverseId
+    description: gets game vots/likes/dislikes
+    *******************************************************/
+    function getGameVotesFromUniverseId(universeIds) {
+        const isSingle = !Array.isArray(universeIds);
+        const idsArray = isSingle ? [universeIds] : universeIds;
+
+        // Split into chunks of 10
+        const chunkSize = 10;
+        const chunks = [];
+        for (let i = 0; i < idsArray.length; i += chunkSize) {
+            chunks.push(idsArray.slice(i, i + chunkSize));
+        }
+
+        // Helper to fetch one chunk
+        function fetchChunk(chunk) {
+            const apiUrl = `https://games.roblox.com/v1/games/votes?universeIds=${chunk.join(",")}`;
+
+            return new Promise((resolve, reject) => {
+                GM_xmlhttpRequest({
+                    method: "GET",
+                    url: apiUrl,
+                    headers: {
+                        "Accept": "application/json"
+                    },
+                    onload: function(response) {
+                        if (response.status === 200) {
+                            try {
+                                const data = JSON.parse(response.responseText);
+                                resolve(data.data || []);
+                            } catch (err) {
+                                reject(err);
+                            }
+                        } else {
+                            reject(new Error(`HTTP error! Status: ${response.status}`));
+                        }
+                    },
+                    onerror: reject
+                });
+            });
+        }
+
+        // Run all chunk requests
+        return Promise.all(chunks.map(fetchChunk))
+            .then(results => {
+                const combined = results.flat();
+
+                if (combined.length === 0) {
+                    throw new Error("No data returned.");
+                }
+
+                // MULTIPLE → return map
+                if (!isSingle) {
+                    const map = {};
+                    combined.forEach(item => {
+                        map[item.id] = {
+                            upVotes: item.upVotes,
+                            downVotes: item.downVotes
+                        };
+                    });
+                    return map;
+                }
+
+                // SINGLE → return one object (backward compatible)
+                const item = combined.find(d => d.id == universeIds);
+                if (item) {
+                    ConsoleLogEnabled(`Votes for universe ${universeIds}: 👍 ${item.upVotes} | 👎 ${item.downVotes}`);
+                    return {
+                        upVotes: item.upVotes,
+                        downVotes: item.downVotes
+                    };
+                }
+
+                throw new Error("Votes not found in response.");
+            });
+    }
+
+    /*******************************************************
+    name of function: fetchPlayerThumbnailsBatch
+    description: gets player thumbnails
+    *******************************************************/
+    async function fetchPlayerThumbnailsBatch(userIds) {
+        if (!userIds.length) return [];
+        const params = new URLSearchParams({userIds: userIds.join(","), size: "150x150", format: "Png", isCircular: "false"});
+        const url = `https://thumbnails.roblox.com/v1/users/avatar-headshot?${params.toString()}`;
+        return new Promise((resolve) => {
+            GM_xmlhttpRequest({
+                method: "GET", url: url, headers: {"Accept": "application/json"},
+                onload: function(response) {
+                    try {
+                        if (response.status === 200) resolve(JSON.parse(response.responseText).data || []);
+                        else resolve([]);
+                    } catch (error) { resolve([]); }
+                },
+                onerror: function() { resolve([]); }
+            });
+        });
+    }
+
+    /*******************************************************
+    name of function: fetchGroupIconsBatch
+    description: gets group icons. Taken from smartsearch function for later use
+    *******************************************************/
+    async function fetchGroupIconsBatch(groupIds) {
+        if (!groupIds.length) return [];
+        const params = new URLSearchParams({groupIds: groupIds.join(","), size: "150x150", format: "Png", isCircular: "false"});
+        const url = `https://thumbnails.roblox.com/v1/groups/icons?${params.toString()}`;
+        return new Promise((resolve) => {
+            GM_xmlhttpRequest({
+                method: "GET", url: url, headers: {"Accept": "application/json"},
+                onload: function(response) {
+                    try {
+                        if (response.status === 200) resolve(JSON.parse(response.responseText).data || []);
+                        else resolve([]);
+                    } catch (error) { resolve([]); }
+                },
+                onerror: function() { resolve([]); }
+            });
+        });
+    }
+
+    /*******************************************************
+    name of function: fetchPlayerThumbnails
+    description: gets player thumbnails on player tokens from server api.
+    if quick the it skips queue etc
+    *******************************************************/
+    const fetchPlayerThumbnails = (() => {
+        const queue = [];
+        let processing = false;
+        return async function(playerTokens, quick = false) {
+            ConsoleLogEnabled("Function called with playerTokens:", playerTokens);
+
+            const body = (quick ? playerTokens.slice(0, 5) : playerTokens).map(token => ({
+                requestId: `0:${token}:AvatarHeadshot:150x150:png:regular`,
+                type: "AvatarHeadShot",
+                targetId: 0,
+                token,
+                format: "png",
+                size: "150x150",
+            }));
+
+            // --- QUICK MODE ---
+            if (quick) {
+                return new Promise((resolve) => {
+                    GM_xmlhttpRequest({
+                        method: "POST",
+                        url: "https://thumbnails.roblox.com/v1/batch",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Accept": "application/json"
+                        },
+                        data: JSON.stringify(body),
+                        onload: function(response) {
+                            try {
+                                if (response.status >= 200 && response.status < 300) {
+                                    const data = JSON.parse(response.responseText);
+                                    resolve(data.data || []);
+                                } else {
+                                    ConsoleLogEnabled(`HTTP error! Status: ${response.status}`);
+                                    resolve([]);
+                                }
+                            } catch (error) {
+                                ConsoleLogEnabled('Error parsing batch thumbnail response:', error);
+                                resolve([]);
+                            }
+                        },
+                        onerror: function(err) {
+                            ConsoleLogEnabled('Request error fetching batch thumbnails:', err);
+                            resolve([]);
+                        }
+                    });
+                });
+            }
+
+            // --- NORMAL (QUEUE) MODE ---
+            const waitHalfSecond = (ms = 250) => new Promise(res => setTimeout(res, ms));
+            return new Promise(resolve => {
+                ConsoleLogEnabled("Pushing to queue:", playerTokens);
+                queue.push({ playerTokens, resolve });
+                const processQueue = async () => {
+                    if (processing) {
+                        ConsoleLogEnabled("Already processing, exiting...");
+                        return;
+                    }
+                    processing = true;
+                    ConsoleLogEnabled("Started processing queue...");
+                    while (queue.length > 0) {
+                        const { playerTokens, resolve } = queue.shift();
+                        ConsoleLogEnabled("Processing batch:", playerTokens);
+                        const body = playerTokens.map(token => ({
+                            requestId: `0:${token}:AvatarHeadshot:150x150:png:regular`,
+                            type: "AvatarHeadShot",
+                            targetId: 0,
+                            token,
+                            format: "png",
+                            size: "150x150",
+                        }));
+                        let success = false;
+                        let data = [];
+                        while (!success) {
+                            ConsoleLogEnabled("Sending request to thumbnails.roblox.com...");
+                            const response = await fetch("https://thumbnails.roblox.com/v1/batch", {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    Accept: "application/json",
+                                },
+                                body: JSON.stringify(body),
+                            });
+                            ConsoleLogEnabled("Response status:", response.status);
+                            if (response.status === 429) {
+                                ConsoleLogEnabled("Rate limited. Waiting...");
+                                await waitHalfSecond();
+                            } else {
+                                const json = await response.json();
+                                data = json.data || [];
+                                success = true;
+                                ConsoleLogEnabled("Received data:", data);
+                            }
+                        }
+                        resolve(data);
+                        ConsoleLogEnabled("Resolved promise with data");
+                    }
+                    processing = false;
+                    ConsoleLogEnabled("Finished processing queue.");
+                };
+                processQueue();
+            });
+        };
+    })();
+
+    /*******************************************************
+    name of function: fetchCatalogItemDetails
+    description: gets stats for a catalog item
+    *******************************************************/
+    async function fetchCatalogItemDetails(assetId) {
+        return new Promise((resolve) => {
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: `https://catalog.roblox.com/v1/catalog/items/${assetId}/details?itemType=Asset`,
+                headers: {"Accept": "application/json"},
+                onload: function(response) {
+                    if (response.status === 200) {
+                        try { resolve(JSON.parse(response.responseText)); }
+                        catch (e) { resolve(null); }
+                    } else resolve(null);
+                },
+                onerror: function() { resolve(null); }
+            });
+        });
+    }
+
+    /*******************************************************
+    name of function: fetchCatalogThumbnailsBatch
+    description: gets the icons for catalog items
+    *******************************************************/
+    async function fetchCatalogThumbnailsBatch(assetIds) {
+        if (!assetIds.length) return [];
+        const params = new URLSearchParams({assetIds: assetIds.join(","), size: "150x150", format: "png", isCircular: "false"});
+        const url = `https://thumbnails.roblox.com/v1/assets?${params.toString()}`;
+        return new Promise((resolve) => {
+            GM_xmlhttpRequest({
+                method: "GET", url: url, headers: {"Accept": "application/json"},
+                onload: function(response) {
+                    try {
+                        if (response.status === 200) resolve(JSON.parse(response.responseText).data || []);
+                        else resolve([]);
+                    } catch (error) { resolve([]); }
+                },
+                onerror: function() { resolve([]); }
+            });
+        });
+    }
+
+    /*******************************************************
+    name of function: fetchBundleThumbnailsBatch
+    description: gets the thumbnails in a bundle
+    *******************************************************/
+    async function fetchBundleThumbnailsBatch(bundleIds) {
+        if (!bundleIds.length) return [];
+        const params = new URLSearchParams({bundleIds: bundleIds.join(","), size: "150x150", format: "png", isCircular: "false"});
+        const url = `https://thumbnails.roblox.com/v1/bundles/thumbnails?${params.toString()}`;
+        return new Promise((resolve) => {
+            GM_xmlhttpRequest({
+                method: "GET", url: url, headers: {"Accept": "application/json"},
+                onload: function(response) {
+                    try {
+                        if (response.status === 200) resolve(JSON.parse(response.responseText).data || []);
+                        else resolve([]);
+                    } catch (error) { resolve([]); }
+                },
+                onerror: function() { resolve([]); }
+            });
+        });
+    }
+
+    //---------------Gets the users stats from apis--------------------
+    /*******************************************************
+    name of function: fetchUserDataBatch
+    description: fetches all user data needed for banned user display or something else in the future
+    *******************************************************/
+    async function fetchUserStatsBatch(userId, mode) {
+        const gmFetch = url => new Promise((resolve) => {
+            GM_xmlhttpRequest({
+                method: "GET", url,
+                headers: { "Accept": "application/json" },
+                onload: r => { try { resolve(JSON.parse(r.responseText)); } catch { resolve(null); } },
+                onerror: () => resolve(null),
+            });
+        });
+
+       // for smartsearch we only send two requests yea. im master at optimization
+       if (mode === "smartsearch") return Promise.all([
+            gmFetch(`https://friends.roblox.com/v1/users/${userId}/friends/count`),
+            gmFetch(`https://friends.roblox.com/v1/users/${userId}/followers/count`),
+        ]);
+
+        // yea for banned users here. used for banned users for now
+        const [userInfo, friendCount, followerCount, followingCount, favoriteGames] = await Promise.all([
+            gmFetch(`https://users.roblox.com/v1/users/${userId}`),
+            gmFetch(`https://friends.roblox.com/v1/users/${userId}/friends/count`),
+            gmFetch(`https://friends.roblox.com/v1/users/${userId}/followers/count`),
+            gmFetch(`https://friends.roblox.com/v1/users/${userId}/followings/count`),
+            gmFetch(`https://games.roblox.com/v2/users/${userId}/favorite/games`),
+        ]);
+
+        return {
+            userInfo,
+            friendCount:   friendCount?.count   ?? 0,
+            followerCount: followerCount?.count  ?? 0,
+            followingCount: followingCount?.count ?? 0,
+            favoriteGames:  favoriteGames?.data  ?? [],
+        };
+    }
+    //---------------End of Gets the users stats from apis--------------------
 
     /*******************************************************
     name of function: notifications
@@ -334,475 +821,361 @@
         };
     }
 
-    /*******************************************************
-    name of function: Update_Popup
-    description: notifications for updates!
-    *******************************************************/
     function Update_Popup() {
-        localStorage.removeItem('ROLOCATE_compactprivateservers'); // remove this cause its called better private servers now
+        localStorage.removeItem('ROLOCATE_compactprivateservers');
+        localStorage.removeItem('ROLOCATE_mutualfriends');
 
-        const VERSION = "V45.6";
-        const PREV_VERSION = "V45.5";
-
-        const CHANGELOG = {
-        ServerSearch: {
-            title: "Server Region Search",
-            icon: "🌍",
-            description: "As of April 2026, Roblox has significantly restricted how server regions are discovered, limiting results to only 10 servers per second. Sorry!",
-            badge: "updated"
-        }
+        const VERSION = "V46.5", PREV_VERSION = "V45.5";
+        const changelog = {
+            BetterProfileInfo: ["🧑‍💻","Better Profile Info","Replaces Mutual Friends; adds detailed stats like mutuals, followers, and following.","New"],
+            PrivateServerSearch:["🔎","Private Server Search","Search your friends' private servers (may be slightly buggy).","New"],
+            StatusControls:     ["🟢","Status & Join Controls","Change online status and game join status via Show Old Greeting.","New"],
+            PlaytimeStats:      ["⏱️","Playtime & RoPro","View weekly playtime and RoPro compatibility via Show Old Greeting.","New"],
+            BestFriendsUI:      ["👥","Best Friends Improvements","Hover dropdown added and popup loads faster.","Improved"],
+            CustomBackgrounds:  ["🎨","Custom Backgrounds","More customization options added, plus presets for easier setup.","Improved"],
+            Adblocker:          ["🏠","Remove All Roblox Ads","Option to hide Standout Games section.","Improved"],
+            SmartSearchUpdate:  ["🔍","Smart Search","Prioritizes exact usernames (friends first) and shows banned users.","Improved"],
+            BugFixes:           ["🛠️","Bug Fixes","Fixed trailer autoplay, Best Friends (BTR/RoSeal), server filter (BTR), and old greeting issues.","Fixed"],
+            RemovedFeature:     ["🗑️","Removed Feature","Mutual Friends removed and replaced by Better Profile Info.","Removed"],
+            MoreInfo:           ["✨","More Info","For full details, view the complete changelog here.","Info","https://oqarshi.github.io/Invite/rolocate/changelog/"]
         };
 
-        const currentVersion = localStorage.getItem('version') || "V0.0";
-        if (currentVersion === VERSION) return;
+        const cur = localStorage.getItem('version') || "V0.0";
+        if (cur === VERSION) return;
         localStorage.setItem('version', VERSION);
         if (localStorage.getItem(PREV_VERSION)) localStorage.removeItem(PREV_VERSION);
 
-        const style = document.createElement('style');
-        style.innerHTML = `
-    .rup-popup {
-        display: flex; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5);
-        justify-content: center; align-items: center; z-index: 1000; opacity: 0;
-        animation: rup-fadeIn 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+        const s = document.createElement('style');
+        s.innerHTML = `
+.rup-popup {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    animation: rup-in 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+    opacity: 0;
+}
+.rup-content {
+    background: #2a2a2a;
+    border-radius: 20px;
+    width: 650px;
+    max-width: 95%;
+    max-height: 85vh;
+    overflow: hidden;
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4);
+    border: 1px solid #404040;
+    color: #e8e8e8;
+    display: flex;
+    flex-direction: column;
+    animation: rup-up 0.6s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+    transform: scale(0.95);
+}
+.rup-header {
+    padding: 24px 32px;
+    border-bottom: 1px solid #404040;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    background: #1f1f1f;
+    position: relative;
+}
+.rup-logo {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    flex-shrink: 0;
+}
+.rup-title {
+    font-size: 24px;
+    font-weight: 600;
+    color: #fff;
+    margin: 0 0 4px;
+    letter-spacing: -0.5px;
+}
+.rup-version {
+    display: inline-block;
+    background: #1a1a1a;
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid #404040;
+}
+.rup-refresh-btn {
+    background: #3a3a3a;
+    color: #e8e8e8;
+    border: 1px solid #505050;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    transition: background 0.15s;
+}
+.rup-refresh-btn:hover {
+    background: #454545;
+}
+.rup-refresh-btn:active {
+    background: #555;
+    transform: scale(0.96);
+    transition:
+        transform 0.08s,
+        background 0.08s;
+}
+.rup-main {
+    padding: 24px 32px;
+    overflow-y: auto;
+    background: #252525;
+    flex: 1;
+}
+.rup-main::-webkit-scrollbar {
+    width: 6px;
+}
+.rup-main::-webkit-scrollbar-track {
+    background: #1a1a1a;
+}
+.rup-main::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 3px;
+}
+.rup-main::-webkit-scrollbar-thumb:hover {
+    background: #666;
+}
+.rup-top {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+.rup-devmsg {
+    background: #1a1a1a;
+    border-radius: 8px;
+    padding: 16px;
+    border-left: 3px solid #555;
+    flex: 1;
+}
+.rup-devmsg b {
+    display: block;
+    color: #fff;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+.rup-devmsg p {
+    font-size: 13px;
+    color: #ccc;
+    line-height: 1.5;
+    margin: 0;
+}
+.rup-help {
+    background: #1a1a1a;
+    border-radius: 8px;
+    padding: 16px;
+    border: 1px solid #404040;
+    min-width: 200px;
+}
+.rup-help b {
+    display: block;
+    font-size: 14px;
+    color: #fff;
+    margin-bottom: 12px;
+}
+.rup-link {
+    color: #70a5ff;
+    text-decoration: none;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: rgba(112, 165, 255, 0.1);
+    border: 1px solid rgba(112, 165, 255, 0.2);
+    margin-bottom: 8px;
+    transition: all 0.2s;
+}
+.rup-link:last-child {
+    margin-bottom: 0;
+}
+.rup-link:hover {
+    color: #fff;
+    background: rgba(112, 165, 255, 0.2);
+    border-color: rgba(112, 165, 255, 0.4);
+    transform: translateX(2px);
+}
+.rup-ftitle {
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 16px;
+}
+.rup-feat {
+    margin-bottom: 12px;
+    border-radius: 10px;
+    padding: 16px;
+    background: #1f1f1f;
+    border: 1px solid #404040;
+    transition: all 0.2s;
+}
+.rup-feat:hover {
+    border-color: #555;
+    background: #2a2a2a;
+    transform: translateY(-2px);
+}
+.rup-feat-hd {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+.rup-feat-hd span:first-child {
+    font-size: 20px;
+    min-width: 24px;
+}
+.rup-feat-hd div {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 500;
+    color: #fff;
+}
+.rup-badge {
+    background: #404040;
+    color: #ccc;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.rup-feat p {
+    font-size: 14px;
+    color: #aaa;
+    line-height: 1.5;
+    margin: 0;
+}
+.rup-feat a {
+    display: inline-block;
+    margin-top: 8px;
+    color: #70a5ff;
+    text-decoration: none;
+    font-size: 13px;
+    transition: all 0.2s;
+}
+.rup-feat a:hover {
+    color: #90b5ff;
+    transform: translateX(2px);
+}
+.rup-footer {
+    padding: 20px 32px;
+    border-top: 1px solid #404040;
+    background: #1f1f1f;
+    text-align: center;
+}
+.rup-footer p {
+    font-size: 12px;
+    color: #999;
+    margin: 0;
+}
+@keyframes rup-in {
+    from {
+        opacity: 0;
     }
+    to {
+        opacity: 1;
+    }
+}
+@keyframes rup-up {
+    0% {
+        transform: scale(0.95) translateY(10px);
+    }
+    100% {
+        transform: scale(1) translateY(0);
+    }
+}
+@media (max-width: 768px) {
     .rup-content {
-        background: #2a2a2a; border-radius: 20px; padding: 0; width: 650px; max-width: 95%;
-        max-height: 85vh; overflow: hidden; box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4);
-        border: 1px solid #404040; color: #e8e8e8; transform: scale(0.95);
-        animation: rup-scaleUp 0.6s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
-        display: flex; flex-direction: column;
+        width: 95%;
     }
-    .rup-header {
-        padding: 24px 32px; border-bottom: 1px solid #404040; display: flex;
-        align-items: flex-start; gap: 16px; background: #1f1f1f; position: relative;
+    .rup-top {
+        flex-direction: column;
     }
-    .rup-logo {
-        width: 56px; height: 56px; border-radius: 12px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); flex-shrink: 0;
+    .rup-help {
+        min-width: auto;
     }
-    .rup-header-content { flex: 1; }
-    .rup-title {
-        font-size: 24px; font-weight: 600; color: #ffffff; margin: 0 0 4px;
-        letter-spacing: -0.5px;
-    }
-    .rup-version {
-        display: inline-block; background: #1a1a1a; color: #ffffff; padding: 6px 12px;
-        border-radius: 6px; font-size: 13px; font-weight: 500; border: 1px solid #404040;
-    }
-    .rup-refresh-btn {
-        background: #3a3a3a; color: #e8e8e8; border: 1px solid #505050;
-        padding: 8px 16px; border-radius: 8px; font-size: 13px;
-        font-weight: 500; cursor: pointer; transition: all 0.3s ease;
-        display: flex; align-items: center; gap: 8px;
-        position: absolute; top: 16px; right: 16px;
-    }
-    .rup-refresh-btn:hover {
-        background: #454545; transform: translateY(-1px);
-    }
-    .rup-refresh-btn:active {
-        transform: translateY(0);
-    }
+}
+`;
+        document.head.appendChild(s);
 
-    .rup-main {
-        padding: 24px 32px; overflow-y: auto; background: #252525; flex: 1;
-    }
-    .rup-top-section {
-        display: flex; gap: 12px; margin-bottom: 20px;
-    }
-    .rup-developer-message {
-        background: #1a1a1a; border-radius: 8px; padding: 16px;
-        border-left: 3px solid #555555; flex: 1;
-    }
-    .rup-developer-message-title {
-        font-weight: 600; color: #ffffff; margin-bottom: 8px; font-size: 14px;
-    }
-    .rup-developer-message-text {
-        font-size: 13px; color: #cccccc; line-height: 1.5;
-    }
-    .rup-help-section {
-        background: #1a1a1a; border-radius: 8px; padding: 16px;
-        border: 1px solid #404040; min-width: 200px;
-    }
-    .rup-help-title {
-        font-size: 14px; font-weight: 600; color: #ffffff; margin-bottom: 12px;
-    }
-    .rup-help-link {
-        color: #70a5ff; text-decoration: none; font-size: 13px;
-        display: flex; align-items: center; gap: 8px; padding: 8px 10px;
-        border-radius: 6px; transition: all 0.3s ease;
-        background: rgba(112, 165, 255, 0.1); border: 1px solid rgba(112, 165, 255, 0.2);
-        margin-bottom: 8px;
-    }
-    .rup-help-link:last-child {
-        margin-bottom: 0;
-    }
-    .rup-help-link:hover {
-        color: #ffffff; background: rgba(112, 165, 255, 0.2);
-        border-color: rgba(112, 165, 255, 0.4); transform: translateX(2px);
-    }
-    .rup-help-link-icon {
-        font-size: 16px;
-    }
-    .rup-features-title {
-        font-size: 18px; font-weight: 600; color: #ffffff; margin-bottom: 16px;
-    }
-    .rup-feature-item {
-        margin-bottom: 12px; border-radius: 10px; padding: 16px;
-        background: #1f1f1f; border: 1px solid #404040;
-        transition: all 0.3s ease;
-    }
-    .rup-feature-item:hover {
-        border-color: #555555; background: #2a2a2a; transform: translateY(-2px);
-    }
-    .rup-feature-header {
-        display: flex; align-items: center; gap: 12px; margin-bottom: 8px;
-    }
-    .rup-feature-icon { font-size: 20px; min-width: 24px; }
-    .rup-feature-title {
-        flex: 1; font-size: 15px; font-weight: 500; color: #ffffff; margin: 0;
-    }
-    .rup-feature-badge {
-        background: #404040; color: #cccccc; padding: 4px 8px; border-radius: 4px;
-        font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;
-    }
-    .rup-feature-description {
-        font-size: 14px; color: #aaaaaa; line-height: 1.5; margin: 0;
-    }
-    .rup-feature-link {
-        display: inline-block; margin-top: 8px; color: #70a5ff;
-        text-decoration: none; font-size: 13px; transition: all 0.3s ease;
-    }
-    .rup-feature-link:hover {
-        color: #90b5ff; transform: translateX(2px);
-    }
-    .rup-footer {
-        padding: 20px 32px; border-top: 1px solid #404040; background: #1f1f1f;
-        display: flex; align-items: center; justify-content: center;
-    }
-    .rup-note {
-        font-size: 12px; color: #999999; margin: 0;
-    }
-    .rup-main::-webkit-scrollbar { width: 6px; }
-    .rup-main::-webkit-scrollbar-track { background: #1a1a1a; }
-    .rup-main::-webkit-scrollbar-thumb {
-        background: #555555; border-radius: 3px;
-    }
-    .rup-main::-webkit-scrollbar-thumb:hover { background: #666666; }
+        const feats = Object.values(changelog).map(([icon, title, desc, badge, link]) => `
+            <div class="rup-feat">
+                <div class="rup-feat-hd"><span>${icon}</span><div>${title}</div><span class="rup-badge">${badge}</span></div>
+                <p>${desc}</p>
+                ${link ? `<a href="${link}" target="_blank">${link}</a>` : ''}
+            </div>`).join('');
 
-    @keyframes rup-fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-    }
-    @keyframes rup-fadeOut {
-        from { opacity: 1; }
-        to { opacity: 0; }
-    }
-    @keyframes rup-scaleUp {
-        0% { transform: scale(0.95) translateY(10px); }
-        100% { transform: scale(1) translateY(0); }
-    }
-    @keyframes rup-scaleDown {
-        from { transform: scale(1); }
-        to { transform: scale(0.9); opacity: 0; }
-    }
-
-    @media (max-width: 768px) {
-        .rup-content { width: 95%; }
-        .rup-footer { flex-direction: column; text-align: center; }
-        .rup-top-section { flex-direction: column; }
-        .rup-help-section { min-width: auto; }
-    }
-    `;
-        document.head.appendChild(style);
-
-        const featuresHTML = Object.entries(CHANGELOG).map(([key, feat]) => `
-            <div class="rup-feature-item">
-                <div class="rup-feature-header">
-                    <span class="rup-feature-icon">${feat.icon}</span>
-                    <div class="rup-feature-title">${feat.title}</div>
-                    <span class="rup-feature-badge">${feat.badge}</span>
-                </div>
-                <p class="rup-feature-description">${feat.description}</p>
-                ${feat.link ? `<a href="${feat.link}" target="_blank" class="rup-feature-link">https://oqarshi.github.io/Invite/rolocate/changelog/</a>` : ''}
-            </div>
-        `).join('');
-
-        const popupHTML = `
+        const el = document.createElement('div');
+        el.innerHTML = `
             <div class="rup-popup">
                 <div class="rup-content">
                     <div class="rup-header">
                         <img class="rup-logo" src="${window.Base64Images.logo}" alt="Rolocate Logo">
-                        <div class="rup-header-content">
-                            <h1 class="rup-title">Rolocate Update</h1>
-                            <div class="rup-version">${VERSION}</div>
-                        </div>
-                        <button class="rup-refresh-btn" onclick="this.style.transform='scale(0.95)';setTimeout(()=>location.reload(),100)">
-                            Exit (Refresh) <span style="font-size: 16px;">✕</span>
-                        </button>
+                        <div><h1 class="rup-title">Rolocate Update</h1><div class="rup-version">${VERSION}</div></div>
+                        <button class="rup-refresh-btn" onclick="location.reload()">Exit (Refresh) <span style="font-size:16px">✕</span></button>
                     </div>
-
                     <div class="rup-main">
-                        <div class="rup-top-section">
-                            <div class="rup-developer-message">
-                                <div class="rup-developer-message-title">From Oqarshi:</div>
-                                <div class="rup-developer-message-text">Please report any issues on GreasyFork if something breaks! Thank you! RoLocate is designed to be used with Roblox's dark mode or dark theme.</div>
+                        <div class="rup-top">
+                            <div class="rup-devmsg">
+                                <b>From Oqarshi:</b>
+                                <p>Please report any issues on GreasyFork if something breaks! Thank you! RoLocate is designed to be used with Roblox's dark mode or dark theme.</p>
                             </div>
-
-                            <div class="rup-help-section">
-                                <div class="rup-help-title">Need Help?</div>
-                                <a href="https://oqarshi.github.io/Invite/rolocate/docs/" target="_blank" class="rup-help-link">
-                                    <span class="rup-help-link-icon">📖</span>
-                                    <span>Documentation</span>
-                                </a>
-                                <a href="https://greasyfork.org/en/scripts/523727-rolocate/feedback" target="_blank" class="rup-help-link">
-                                    <span class="rup-help-link-icon">🛡️</span>
-                                    <span>Support</span>
-                                </a>
+                            <div class="rup-help">
+                                <b>Need Help?</b>
+                                <a href="https://oqarshi.github.io/Invite/rolocate/docs/" target="_blank" class="rup-link"><span>📖</span><span>Documentation</span></a>
+                                <a href="https://greasyfork.org/en/scripts/523727-rolocate/feedback" target="_blank" class="rup-link"><span>🛡️</span><span>Support</span></a>
                             </div>
                         </div>
-
-                        <div class="rup-features-title">✨ What's New in ${VERSION}</div>
-                        ${featuresHTML}
+                        <div class="rup-ftitle">✨ What's New in ${VERSION}</div>
+                        ${feats}
                     </div>
-
-                    <div class="rup-footer">
-                        <p class="rup-note">This notification will not appear again until the next version release.</p>
-                    </div>
+                    <div class="rup-footer"><p>This notification will not appear again until the next version release.</p></div>
                 </div>
-            </div>
-        `;
-
-        const popupContainer = document.createElement('div');
-        popupContainer.innerHTML = popupHTML;
-        document.body.appendChild(popupContainer);
-
-
+            </div>`;
+        document.body.appendChild(el);
     }
 
 
+    // default settings.
     const defaultSettings = {
-        enableLogs: false, // disabled by default
-        removeads: true, // enabled by default
-        togglefilterserversbutton: true, // enable by default
-        toggleserverhopbutton: true, // enable by default
-        AutoRunServerRegions: false, // disabled by default
-        ShowOldGreeting: true, // enabled by default
-        togglerecentserverbutton: true, // enable by default
-        prioritylocation: "automatic", // automatic by default
-        fastservers: true, // enabled by default
-        invertplayercount: false, // disabled by default
-        enablenotifications: true, // enabled by default
-        disabletrailer: true, // enabled by default
-        gamequalityfilter: false, // disabled by default
-        mutualfriends: true, // enabled by default
-        disablechat: false, // disabled by default
-        smartsearch: true, // enabled by default
-        quicklaunchgames: true, // enabled by default
-        smartjoinpopup: true, // enabled by default
-        betterfriends: true, // enabled by default
-        restoreclassicterms: true, // enabled by default
-        betterprivateservers: true, // enabled by default
-        custombackgrounds: false, // disabled by default
-        btrobloxfix: false, // disabled by default
-        mobilemode: false, // disabled by default
-        joinconfirmation: true, // enabled by default
-        forcedarkmode: false, // disabled by default
-        responsivegamecards: true // enabled by default
+        enableLogs: false, removeads: true, togglefilterserversbutton: true,
+        toggleserverhopbutton: true, AutoRunServerRegions: false, ShowOldGreeting: true,
+        togglerecentserverbutton: true, prioritylocation: "automatic", fastservers: true,
+        invertplayercount: false, enablenotifications: true, disabletrailer: true,
+        gamequalityfilter: false, loadbetterprofileinfo: true, disablechat: false,
+        smartsearch: true, quicklaunchgames: true, smartjoinpopup: true,
+        betterfriends: true, restoreclassicterms: true, betterprivateservers: true,
+        custombackgrounds: false, btrobloxfix: false, mobilemode: false,
+        joinconfirmation: true, forcedarkmode: false, responsivegamecards: true,
+        bettergamestats: false
     };
 
+    // presets in settings
     const presetConfigurations = {
-        default: {
-            name: "Default",
-            settings: {
-                enableLogs: false,
-                removeads: true,
-                togglefilterserversbutton: true,
-                toggleserverhopbutton: true,
-                AutoRunServerRegions: false,
-                ShowOldGreeting: true,
-                togglerecentserverbutton: true,
-                prioritylocation: "automatic",
-                fastservers: true,
-                invertplayercount: false,
-                enablenotifications: true,
-                disabletrailer: true,
-                gamequalityfilter: false,
-                mutualfriends: true,
-                disablechat: false,
-                smartsearch: true,
-                quicklaunchgames: true,
-                smartjoinpopup: true,
-                betterfriends: true,
-                restoreclassicterms: true,
-                betterprivateservers: true,
-                custombackgrounds: false,
-                btrobloxfix: false,
-                mobilemode: false,
-                joinconfirmation: true,
-                forcedarkmode: false,
-                responsivegamecards: true
-            }
-        },
-        mobilesettings: {
-            name: "Mobile Settings",
-            settings: {
-                enableLogs: false,
-                removeads: true,
-                togglefilterserversbutton: true,
-                toggleserverhopbutton: true,
-                AutoRunServerRegions: false,
-                ShowOldGreeting: true,
-                togglerecentserverbutton: true,
-                prioritylocation: "automatic",
-                fastservers: true,
-                invertplayercount: false,
-                enablenotifications: true,
-                disabletrailer: true,
-                gamequalityfilter: false,
-                mutualfriends: false,
-                disablechat: true,
-                smartsearch: true,
-                quicklaunchgames: true,
-                smartjoinpopup: false,
-                betterfriends: true,
-                restoreclassicterms: true,
-                betterprivateservers: true,
-                custombackgrounds: false,
-                btrobloxfix: false,
-                mobilemode: true,
-                joinconfirmation: true,
-                forcedarkmode: false,
-                responsivegamecards: false
-            }
-        },
-        developerpref: {
-            name: "Developer Preference",
-            settings: {
-                enableLogs: true,
-                removeads: true,
-                togglefilterserversbutton: true,
-                toggleserverhopbutton: true,
-                AutoRunServerRegions: false,
-                ShowOldGreeting: true,
-                togglerecentserverbutton: true,
-                prioritylocation: "automatic",
-                fastservers: true,
-                invertplayercount: false,
-                enablenotifications: true,
-                disabletrailer: true,
-                gamequalityfilter: false,
-                mutualfriends: true,
-                disablechat: true,
-                smartsearch: true,
-                quicklaunchgames: true,
-                smartjoinpopup: true,
-                betterfriends: true,
-                restoreclassicterms: true,
-                betterprivateservers: true,
-                custombackgrounds: false,
-                btrobloxfix: false,
-                mobilemode: false,
-                joinconfirmation: true,
-                forcedarkmode: false,
-                responsivegamecards: true
-            }
-        },
-        serverfiltersonly: {
-            name: "Server Filters Only",
-            settings: {
-                enableLogs: false,
-                removeads: false,
-                togglefilterserversbutton: true,
-                toggleserverhopbutton: false,
-                AutoRunServerRegions: false,
-                ShowOldGreeting: false,
-                togglerecentserverbutton: false,
-                prioritylocation: "automatic",
-                fastservers: true,
-                invertplayercount: false,
-                enablenotifications: true,
-                disabletrailer: false,
-                gamequalityfilter: false,
-                mutualfriends: false,
-                disablechat: false,
-                smartsearch: false,
-                quicklaunchgames: false,
-                smartjoinpopup: true,
-                betterfriends: false,
-                restoreclassicterms: false,
-                betterprivateservers: false,
-                custombackgrounds: false,
-                btrobloxfix: false,
-                mobilemode: false,
-                joinconfirmation: true,
-                forcedarkmode: false,
-                responsivegamecards: false
-            }
-        },
-        smartsearchonly: {
-            name: "Smart Search Only",
-            settings: {
-                enableLogs: false,
-                removeads: false,
-                togglefilterserversbutton: false,
-                toggleserverhopbutton: false,
-                AutoRunServerRegions: false,
-                ShowOldGreeting: false,
-                togglerecentserverbutton: false,
-                prioritylocation: "automatic",
-                fastservers: false,
-                invertplayercount: false,
-                enablenotifications: true,
-                disabletrailer: false,
-                gamequalityfilter: false,
-                mutualfriends: false,
-                disablechat: false,
-                smartsearch: true,
-                quicklaunchgames: false,
-                smartjoinpopup: false,
-                betterfriends: false,
-                restoreclassicterms: false,
-                betterprivateservers: false,
-                custombackgrounds: false,
-                btrobloxfix: false,
-                mobilemode: false,
-                joinconfirmation: false,
-                forcedarkmode: false,
-                responsivegamecards: false
-            }
-        },
-        disablerolocate: {
-            name: "Disable RoLocate",
-            settings: {
-                enableLogs: false,
-                removeads: false,
-                togglefilterserversbutton: false,
-                toggleserverhopbutton: false,
-                AutoRunServerRegions: false,
-                ShowOldGreeting: false,
-                togglerecentserverbutton: false,
-                prioritylocation: "automatic",
-                fastservers: false,
-                invertplayercount: false,
-                enablenotifications: true, // ik its suppose to turn off evyerhitng but its for confirmation
-                disabletrailer: false,
-                gamequalityfilter: false,
-                mutualfriends: false,
-                disablechat: false,
-                smartsearch: false,
-                quicklaunchgames: false,
-                smartjoinpopup: false,
-                betterfriends: false,
-                restoreclassicterms: false,
-                betterprivateservers: false,
-                custombackgrounds: false,
-                btrobloxfix: false,
-                mobilemode: false,
-                joinconfirmation: false,
-                forcedarkmode: false,
-                responsivegamecards: false
-            }
-        }
+      default: { name: "Default", settings: {} },
+      mobilesettings: { name: "Mobile Settings", settings: {"loadbetterprofileinfo": false, "disablechat": true, "smartjoinpopup": false, "mobilemode": true, "responsivegamecards": false} },
+      developerpref: { name: "Dev Settings", settings: {"enableLogs": true, "disablechat": true, "bettergamestats": true} },
+      serverfiltersonly: { name: "Server Filters Only", settings: {"removeads": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "disabletrailer": false, "loadbetterprofileinfo": false, "smartsearch": false, "quicklaunchgames": false, "betterfriends": false, "restoreclassicterms": false, "betterprivateservers": false, "responsivegamecards": false} },
+      smartsearchonly: { name: "Smart Search Only", settings: {"removeads": false, "togglefilterserversbutton": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "fastservers": false, "disabletrailer": false, "loadbetterprofileinfo": false, "quicklaunchgames": false, "smartjoinpopup": false, "betterfriends": false, "restoreclassicterms": false, "betterprivateservers": false, "joinconfirmation": false, "responsivegamecards": false} },
+      disablerolocate: { name: "Disable RoLocate", settings: {"removeads": false, "togglefilterserversbutton": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "fastservers": false, "disabletrailer": false, "loadbetterprofileinfo": false, "smartsearch": false, "quicklaunchgames": false, "smartjoinpopup": false, "betterfriends": false, "restoreclassicterms": false, "betterprivateservers": false, "joinconfirmation": false, "responsivegamecards": false} },
     };
 
     function initializeLocalStorage() {
@@ -856,13 +1229,30 @@
         if (section === "home") {
             return `
         <div class="home-section">
-            <img class="rolocate-logo" src="${window.Base64Images.logo}" alt="ROLOCATE Logo">
-            <div class="version">Rolocate: Version 45.6</div>
+            <div style="display:flex;align-items:center;justify-content:center;gap:18px;margin-bottom:4px;">
+                <img class="rolocate-logo" src="${window.Base64Images.logo}" alt="ROLOCATE Logo" style="margin:0;">
+                <div style="text-align:left;">
+                    <div style="font-size:22px;font-weight:700;color:#fff;letter-spacing:0.5px;line-height:1.1;">RoLocate</div>
+                    <div style="margin-top:8px;display:inline-block;background:rgba(220,53,69,0.08);border:1.5px solid rgba(220,53,69,0.35);padding:3px 10px;border-radius:8px;">
+                        <span style="font-size:13px;font-weight:700;color:#e8566a;letter-spacing:1.5px;">V 46.5</span>
+                    </div>
+                </div>
+            </div>
             <div class="section-separator"></div>
             <p>Rolocate by Oqarshi.</p>
             <p class="license-note">
                 Licensed under a <strong>Custom License – Personal Use Only</strong>. No redistribution.
             </p>
+            <div class="home-links">
+                <a class="home-link-btn github-greasyfork-btn" href="https://github.com/Oqarshi/RoLocate" target="_blank">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                    View on GitHub
+                </a>
+                <a class="home-link-btn github-greasyfork-btn" href="https://greasyfork.org/en/scripts/523727-rolocate" target="_blank">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M5.89 2.227a0.28 0.28 0 0 1 0.266 0.076l5.063 5.062c0.54 0.54 0.509 1.652 -0.031 2.192l8.771 8.77c1.356 1.355 -0.36 3.097 -1.73 1.728l-8.772 -8.77c-0.54 0.54 -1.651 0.571 -2.191 0.031l-5.063 -5.06c-0.304 -0.304 0.304 -0.911 0.608 -0.608l3.714 3.713L7.59 8.297 3.875 4.582c-0.304 -0.304 0.304 -0.911 0.607 -0.607l3.715 3.714 1.067 -1.066L5.549 2.91c-0.228 -0.228 0.057 -0.626 0.342 -0.683ZM12 0C5.374 0 0 5.375 0 12s5.374 12 12 12c6.625 0 12 -5.375 12 -12S18.625 0 12 0Z"/></svg>
+                    View on GreasyFork
+                </a>
+            </div>
         </div>
     `;
         }
@@ -1097,13 +1487,13 @@
             </label>
 
             <label class="toggle-slider new_label">
-                <input type="checkbox" id="mutualfriends">
+                <input type="checkbox" id="loadbetterprofileinfo">
                 <span class="slider"></span>
-                Mutual Friends
+                Better Profile Info
                 <span class="new">New
                     <span class="tooltip">Just Released/Updated</span>
                 </span>
-                <span class="help-icon" data-help="Enable Mutual Friends">?</span>
+                <span class="help-icon" data-help="Enable Better Profile Info">?</span>
             </label>
 
             <label class="toggle-slider new_label">
@@ -1158,7 +1548,7 @@
             <p>Special thanks to everyone who has contributed to this project:</p>
             <ul>
                 <li><a href="https://www.roblox.com/users/545334824/profile" target="_blank">Oqarshi</a> <span style="color: #888;">• Creator & Maintainer</span></li>
-                <li><a href="https://www.roblox.com/users/3795846072/profile" target="_blank">Waivy</a> <span style="color: #888;">• Bug Fixes</span></li>
+                <li><a href="https://www.roblox.com/users/3795846072/profile" target="_blank">Waivy</a> <span style="color: #888;">• Contributor</span></li>
             </ul>
 
             <div class="section-separator"></div>
@@ -1330,27 +1720,13 @@
             return `
                 <style>
                   @keyframes rolocateFadeIn {
-                    from {
-                      opacity: 0;
-                      transform: scale(.95);
-                    }
-
-                    to {
-                      opacity: 1;
-                      transform: scale(1);
-                    }
+                    from { opacity: 0; transform: scale(.95); }
+                    to   { opacity: 1; transform: scale(1); }
                   }
 
                   @keyframes rolocateFadeOut {
-                    from {
-                      opacity: 1;
-                      transform: scale(1);
-                    }
-
-                    to {
-                      opacity: 0;
-                      transform: scale(.95);
-                    }
+                    from { opacity: 1; transform: scale(1); }
+                    to   { opacity: 0; transform: scale(.95); }
                   }
                 </style>
                 <div class="about-section">
@@ -1396,6 +1772,7 @@
                 <li id="help-Invert Player Count"><strong>Invert Player Count:</strong> <span>For server regions: shows low-player servers when enabled, high-player servers when disabled. You can also control this on the Roblox server popup.</span></li>
                 <li id="help-Recent Servers"><strong>Recent Servers:</strong> <span>Shows the most recent servers you have joined in the past 3 days.</span></li>
                 <li id="help-Join Confirmation"><strong>Join Confirmation:</strong> <span>Shows a popup when the user is trying to join a server/game when the user is already in a game.</span></li>
+                <li id="help-Better Game Stats"><strong>Better Game Stats:</strong> <span>For now only shows estimated revenue of a Roblox game. Its in the place where all other stats in games are.</span></li>
             </ul>
 
             <div class="section-separator"></div>
@@ -1408,7 +1785,7 @@
                 <li id="help-Restore Classic Terms"><strong>Restore Classic Terms:</strong> <span>Reverts corporate buzzwords Roblox has added. Example: “Connections” becomes “Friends”. May not be translated into all languages yet.</span></li>
                 <li id="help-Better Private Servers"><strong>Better Private Servers:</strong> <span>Compacts private servers on game pages, so that they do not take up so much space.</span></li>
                 <li id="help-Responsive Game Cards"><strong>Responsive Game Cards:</strong> <span>Makes game cards on the website more responsive when hovering over them.</span></li>
-                <li id="help-Backgrounds"><strong>Backgrounds:</strong> <span>Allows you to change the background of your roblox page and customize the colors of other stuff on the page.</span></li>
+                <li id="help-Backgrounds"><strong>Backgrounds:</strong> <span>Allows you to change the background of your roblox page and customize the colors of other stuff on the page. Still very experimental as there could be UI and storage issues.</span></li>
             </ul>
 
             <div class="section-separator"></div>
@@ -1428,7 +1805,7 @@
             <h3 class="grayish-center">✨ Extra Tab</h3>
             <ul>
                 <li id="help-Game Quality Filter"><strong>Game Quality Filter:</strong> <span>Removes games from the charts/discover page based on your settings.</span></li>
-                <li id="help-Enable Mutual Friends"><strong>Mutual Friends:</strong> <span>Displays friends you share with a certain person on their profile page.</span></li>
+                <li id="help-Enable Better Profile Info"><strong>Better Profile Info:</strong> <span>Displays mutual friends, accountage, followers, etc on another users profile page.</span></li>
                 <li id="help-Disable Chat"><strong>Disable Chat:</strong> <span>Disables the chat feature on the roblox website.</span></li>
                 <li id="help-Quick Launch Games"><strong>Quick Launch Games:</strong> <span>Adds the ability to quickly launch your favorite games from the homepage.</span></li>
                 <li id="help-Show Old Greeting"><strong>Show Old Greeting:</strong> <span>Shows the old greeting Roblox had on their home page.</span></li>
@@ -1451,17 +1828,14 @@
     <div class="general-section">
 
         <span class="general_section">Common settings in most extensions! ⚙️🔧</span>
-        <label class="toggle-slider new_label">
+        <label class="toggle-slider">
             <input type="checkbox" id="smartsearch">
             <span class="slider"></span>
             SmartSearch
-            <span class="new">New
-                <span class="tooltip">Just Released/Updated</span>
-            </span>
             <span class="help-icon" data-help="Smart Search">?</span>
         </label>
 
-        <label class="toggle-slider">
+        <label class="toggle-slider new_label">
             <input type="checkbox" id="AutoRunServerRegions">
             <span class="slider"></span>
             Auto Server Regions
@@ -1501,6 +1875,17 @@
                 <span class="tooltip">Just Released/Updated</span>
             </span>
             <span class="help-icon" data-help="Join Confirmation">?</span>
+        </label>
+
+        <label class="toggle-slider new_label">
+            <input type="checkbox" id="bettergamestats">
+            <span class="slider"></span>
+            Better Game Stats
+            <span class="new">New
+                <span class="tooltip">Just Released/Updated</span>
+            </span>
+            <button id="edit-bettergamestats-btn" class="edit-button" type="button" style="display: none;">Edit</button>
+            <span class="help-icon" data-help="Better Game Stats">?</span>
         </label>
     </div>
 `;
@@ -1556,6 +1941,35 @@
         // put css in
         const style = document.createElement("style");
         style.textContent = `
+.home-links {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 18px;
+    flex-wrap: wrap;
+}
+.home-link-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.3s cubic-bezier(0.19, 1, 0.22, 1);
+    border: 1px solid transparent;
+}
+.github-greasyfork-btn {
+    background: rgba(255,255,255,0.07);
+    color: #e0e0e0;
+    border-color: rgba(255,255,255,0.12);
+}
+.github-greasyfork-btn:hover {
+    background: rgba(255,255,255,0.13);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+}
 .highlight-setting {
     animation: highlightPulse 2s ease;
     background: rgba(76, 175, 80, 0.2) !important;
@@ -1563,7 +1977,6 @@
     border-radius: 8px !important;
     box-shadow: 0 0 20px rgba(76, 175, 80, 0.4) !important;
 }
-
 @keyframes highlightPulse {
     0% {
         background: rgba(76, 175, 80, 0.3);
@@ -1578,12 +1991,10 @@
         box-shadow: 0 0 15px rgba(76, 175, 80, 0.3);
     }
 }
-
 .search-container {
     width: 100%;
     position: relative;
 }
-
 #settings-search {
     width: 100%;
     padding: 10px 12px;
@@ -1595,14 +2006,12 @@
     transition: all 0.4s cubic-bezier(0.19, 1, 0.22, 1);
     box-sizing: border-box;
 }
-
 #settings-search:focus {
     outline: none;
     background: rgba(255, 255, 255, 0.08);
     border-color: #4CAF50;
     box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.15);
 }
-
 #search-suggestions {
     position: absolute;
     top: 100%;
@@ -1622,20 +2031,13 @@
     transition: opacity 0.3s cubic-bezier(0.19, 1, 0.22, 1),
                 transform 0.3s cubic-bezier(0.19, 1, 0.22, 1);
 }
-
 #search-suggestions.show {
     display: block;
 }
-
 @keyframes fadeInItem {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
-
 .search-suggestion-item {
     padding: 10px 12px;
     cursor: pointer;
@@ -1647,50 +2049,28 @@
     position: relative;
     overflow: hidden;
 }
-
-.search-suggestion-item::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 3px;
-    height: 100%;
-    background: transparent;
-    transition: background 0.3s cubic-bezier(0.19, 1, 0.22, 1);
-}
-
 .search-suggestion-item.matched {
     background: rgba(76, 175, 80, 0.08);
     border-left: 3px solid #4CAF50;
 }
-
-.search-suggestion-item.matched::before {
-    background: #4CAF50;
-}
-
 .search-suggestion-item.unmatched {
     background: rgba(255, 255, 255, 0.02);
     opacity: 0.7;
 }
-
 .search-suggestion-item:last-child {
     border-bottom: none;
 }
-
 .search-suggestion-item:hover {
     background: rgba(76, 175, 80, 0.15);
     transform: translateX(2px);
     padding-left: 16px;
 }
-
 .search-suggestion-item.matched:hover {
     background: rgba(76, 175, 80, 0.2);
 }
-
 .search-suggestion-item:active {
     transform: translateX(5px) scale(0.98);
 }
-
 .suggestion-title {
     color: #4CAF50;
     font-weight: 600;
@@ -1698,39 +2078,31 @@
     margin-bottom: 2px;
     transition: color 0.3s ease;
 }
-
 .search-suggestion-item.unmatched .suggestion-title {
     color: #999;
 }
-
 .search-suggestion-item:hover .suggestion-title {
     color: #5fd663;
 }
-
 .suggestion-section {
     color: #999;
     font-size: 11px;
     transition: color 0.3s ease;
 }
-
 .search-suggestion-item:hover .suggestion-section {
     color: #b0b0b0;
 }
-
 #search-suggestions::-webkit-scrollbar {
     width: 6px;
 }
-
 #search-suggestions::-webkit-scrollbar-track {
     background: #1a1a1a;
     border-radius: 3px;
 }
-
 #search-suggestions::-webkit-scrollbar-thumb {
     background: #4CAF50;
     border-radius: 3px;
 }
-
 #search-suggestions::-webkit-scrollbar-thumb:hover {
     background: #5fd663;
 }
@@ -1845,14 +2217,13 @@
     background: #666;
     color: white;
 }
-
 @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
 }
 @keyframes fadeOut {
-    from { opacity: 1; }
-    to { opacity: 0; }
+    from { opacity: 1; transform: scale(1); }
+    to { opacity: 0; transform: scale(0.96); }
 }
 .fade-in {
     animation: fadeIn 0.25s ease-out forwards;
@@ -1860,87 +2231,79 @@
 .fade-out {
     animation: fadeOut 0.2s ease-in forwards;
 }
-
 .confirm-btn:active,
 .cancel-btn:active {
     transform: scale(0.96);
     filter: brightness(0.95);
 }
 .grayish-center {
-  color: white;
-  font-weight: bold;
-  text-align: center;
-  position: relative;
-  display: inline-block;
-  font-size: 18px !important;
+    color: white;
+    font-weight: bold;
+    text-align: center;
+    position: relative;
+    display: inline-block;
+    font-size: 18px !important;
 }
 .grayish-center::after {
-  content: "";
-  display: block;
-  margin: 4px auto 0;
-  width: 50%;
-  border-bottom: 2px solid #888888;
-  opacity: 0.6;
-  border-radius: 2px;
+    content: "";
+    display: block;
+    margin: 4px auto 0;
+    width: 50%;
+    border-bottom: 2px solid #888888;
+    opacity: 0.6;
+    border-radius: 2px;
 }
 li a.about-link {
-  position: relative !important;
-  font-weight: bold !important;
-  color: #60a5fa !important;
-  text-decoration: none !important;
-  cursor: pointer !important;
-  transition: color 0.2s ease !important;
+    position: relative !important;
+    font-weight: bold !important;
+    color: #60a5fa !important;
+    text-decoration: none !important;
+    cursor: pointer !important;
+    transition: color 0.2s ease !important;
 }
-
 li a.about-link::after {
-  content: '' !important;
-  position: absolute !important;
-  left: 0 !important;
-  bottom: -2px !important;
-  height: 2px !important;
-  width: 100% !important;
-  background-color: #60a5fa !important;
-  transform: scaleX(0) !important;
-  transform-origin: left !important;
-  transition: transform 0.3s ease !important;
+    content: '' !important;
+    position: absolute !important;
+    left: 0 !important;
+    bottom: -2px !important;
+    height: 2px !important;
+    width: 100% !important;
+    background-color: #60a5fa !important;
+    transform: scaleX(0) !important;
+    transform-origin: left !important;
+    transition: transform 0.3s ease !important;
 }
-
 li a.about-link:hover {
-  color: #3b82f6 !important;
+    color: #3b82f6 !important;
 }
-
 li a.about-link:hover::after {
-  transform: scaleX(1) !important;
+    transform: scaleX(1) !important;
 }
-
 .about-section ul li a {
-  position: relative;
-  font-weight: bold;
-  color: #60a5fa;
-  text-decoration: none;
-  cursor: pointer;
-  transition: color 0.2s ease;
+    position: relative;
+    font-weight: bold;
+    color: #60a5fa;
+    text-decoration: none;
+    cursor: pointer;
+    transition: color 0.2s ease;
 }
-
 .about-section ul li a::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  bottom: -2px;
-  height: 2px;
-  width: 100%;
-  background-color: #60a5fa;
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 0.3s ease;
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: -2px;
+    height: 2px;
+    width: 100%;
+    background-color: #60a5fa;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.3s ease;
 }
-
 .about-section ul li a:hover {
-  color: #3b82f6;
+    color: #3b82f6;
 }
-
 .about-section ul li a:hover::after {
-  transform: scaleX(1);
+    transform: scaleX(1);
 }
 .license-note {
     font-size: 0.8em;
@@ -1970,8 +2333,8 @@ li a.about-link:hover::after {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 18px;
+    height: 18px;
     background: rgba(220, 53, 69, 0.15);
     border-radius: 50%;
     font-size: 12px;
@@ -1990,7 +2353,6 @@ li a.about-link:hover::after {
     box-shadow: 0 3px 5px rgba(0, 0, 0, 0.15);
     cursor: pointer;
 }
-
 .help-icon::after {
     content: "Click for help";
     position: absolute;
@@ -2096,14 +2458,6 @@ li a.about-link:hover::after {
     visibility: visible;
     opacity: 1;
     z-index: 10001;
-}
-@keyframes fadeIn {
-    from { opacity: 0; transform: scale(0.96); }
-    to { opacity: 1; transform: scale(1); }
-}
-@keyframes fadeOut {
-    from { opacity: 1; transform: scale(1); }
-    to { opacity: 0; transform: scale(0.96); }
 }
 @keyframes sectionFade {
     from { opacity: 0; transform: translateY(12px); }
@@ -2224,13 +2578,9 @@ li a.about-link:hover::after {
 .settings-sidebar .active:hover {
     transform: translateX(0);
 }
-.settings-sidebar li:hover::before {
-    height: 100%;
-}
 .settings-sidebar .active::before {
     background: #dc3545;
 }
-
 .settings-sidebar::-webkit-scrollbar {
     width: 6px;
 }
@@ -2245,12 +2595,10 @@ li a.about-link:hover::after {
 .settings-sidebar::-webkit-scrollbar-thumb:hover {
     background: #006400;
 }
-
 .settings-sidebar {
     scrollbar-width: thin;
     scrollbar-color: darkgreen black;
 }
-
 .settings-content {
     flex: 1;
     padding: 24px;
@@ -2263,7 +2611,6 @@ li a.about-link:hover::after {
     background: #1e1e1e;
     position: relative;
 }
-
 .settings-content::-webkit-scrollbar {
     width: 6px;
 }
@@ -2302,7 +2649,6 @@ li a.about-link:hover::after {
 .settings-content div {
     animation: sectionFade 0.7s cubic-bezier(0.19, 1, 0.22, 1);
 }
-
 .toggle-slider {
     display: flex;
     align-items: center;
@@ -2353,9 +2699,6 @@ li a.about-link:hover::after {
 .toggle-slider input:checked + .slider::before {
     transform: translateX(20px);
 }
-.toggle-slider input:checked + .slider::after {
-    opacity: 1;
-}
 .rolocate-logo {
     width: 90px !important;
     height: 90px !important;
@@ -2369,16 +2712,6 @@ li a.about-link:hover::after {
 }
 .rolocate-logo:hover {
     transform: scale(1.05);
-}
-.version {
-    font-size: 13px;
-    color: #aaa;
-    margin-bottom: 24px;
-    display: inline-block;
-    padding: 5px 14px;
-    background: rgba(220, 53, 69, 0.1);
-    border-radius: 18px;
-    border: 1px solid rgba(220, 53, 69, 0.2);
 }
 .settings-content ul {
     text-align: left;
@@ -2430,7 +2763,6 @@ li a.about-link:hover::after {
     box-shadow: 0 0 6px rgba(120, 120, 120, 0.2);
     transition: box-shadow 0.3s ease;
 }
-
 .general_section:hover {
     box-shadow: 0 0 10px rgba(120, 120, 120, 0.35);
 }
@@ -2447,7 +2779,6 @@ li a.about-link:hover::after {
     box-shadow: 0 0 6px rgba(107, 92, 255, 0.25);
     transition: box-shadow 0.3s ease;
 }
-
 .appearance_section:hover {
     box-shadow: 0 0 12px rgba(107, 92, 255, 0.5);
 }
@@ -2489,21 +2820,17 @@ li a.about-link:hover::after {
     transform: translateY(-3px);
     background: linear-gradient(135deg, #1e8449 0%, #196f3d 100%);
 }
-.edit-nav-button:hover::before {
-    left: 100%;
-}
 .edit-nav-button:active {
     background: linear-gradient(135deg, #1e8449 0%, #196f3d 100%);
     transform: translateY(1px);
 }
-
 #prioritylocation-select {
     width: 100%;
     padding: 10px 14px;
     border-radius: 6px;
     background: rgba(255, 255, 255, 0.05);
     color: #e0e0e0;
-    font-size: 14px
+    font-size: 14px;
     appearance: none;
     background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%23dc3545" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>');
     background-repeat: no-repeat;
@@ -2514,7 +2841,6 @@ li a.about-link:hover::after {
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
     border-color: rgba(255, 255, 255, 0.05);
 }
-
 #location-hint {
     margin-top: 10px;
     font-size: 12px;
@@ -2526,14 +2852,12 @@ li a.about-link:hover::after {
     line-height: 1.6;
     transition: all 0.5s ease;
 }
-
 .section-separator {
     width: 100%;
     height: 1px;
     background: linear-gradient(90deg, transparent, #272727, transparent);
     margin: 24px 0;
 }
-
 .help-section h3, .about-section h3 {
     color: white;
     margin-top: 20px;
@@ -2541,7 +2865,6 @@ li a.about-link:hover::after {
     font-size: 16px;
     text-align: left;
 }
-
 .hint-text {
     font-size: 13px;
     color: #a0a0a0;
@@ -2549,7 +2872,6 @@ li a.about-link:hover::after {
     margin-left: 16px;
     text-align: left;
 }
-
 .location-settings {
     background: rgba(255, 255, 255, 0.03);
     border-radius: 6px;
@@ -2568,20 +2890,6 @@ li a.about-link:hover::after {
     font-size: 14px;
     font-weight: 500;
 }
-.help-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    background: rgba(220, 53, 69, 0.2);
-    border-radius: 50%;
-    font-size: 11px;
-    color: #ff3b47;
-    cursor: help;
-    transition: all 0.5s ease;
-}
-
 #manual-coordinates {
     margin-top: 12px !important;
 }
@@ -2601,11 +2909,9 @@ li a.about-link:hover::after {
 #save-coordinates {
     margin-top: 6px !important;
 }
-
 .animated-content {
     animation: sectionFade 0.7s cubic-bezier(0.19, 1, 0.22, 1);
 }
-
 .section-divider {
     height: 1px !important;
     background: linear-gradient(90deg, transparent, #444, transparent);
@@ -2614,7 +2920,6 @@ li a.about-link:hover::after {
     cursor: default !important;
     pointer-events: none;
 }
-
 .section-divider:hover {
     background: linear-gradient(90deg, transparent, #444, transparent) !important;
     transform: none !important;
@@ -2642,88 +2947,80 @@ li a.about-link:hover::after {
                     settingsTitle.textContent = section.charAt(0).toUpperCase() + section.slice(1);
                     settingsBody.innerHTML = getSettingsContent(section);
 
+                    // helper to show edit buttons. a lot easier now
+                    function bindToggle({ sectionKey, checkboxId, buttonId, storageKey, saveOnChange = true }) {
+                        const checkbox = document.getElementById(checkboxId);
+                        const button = document.getElementById(buttonId);
+
+                        if (!checkbox || !button) return;
+
+                        // initial state
+                        const saved = localStorage.getItem(storageKey) === "true";
+                        button.style.display = saved ? "block" : "none";
+                        checkbox.checked = saved;
+
+                        // listener
+                        checkbox.addEventListener("change", function () {
+                            const isEnabled = this.checked;
+
+                            if (saveOnChange) {
+                                localStorage.setItem(storageKey, isEnabled);
+                            }
+
+                            button.style.display = isEnabled ? "block" : "none";
+                        });
+                    }
 
                     if (section === "general") {
-                        const autoserverregionscheckbox = document.getElementById("AutoRunServerRegions");
-                        const editButton_autoserverregionsbtn = document.getElementById("edit-autoserverregionsbutton-btn");
-                        if (autoserverregionscheckbox && editButton_autoserverregionsbtn) {
-                            // show edit button
-                            editButton_autoserverregionsbtn.style.display = localStorage.getItem("ROLOCATE_AutoRunServerRegions") === "true" ? "block" : "none";
-                            // uhh on and off for edit buttoin
-                            autoserverregionscheckbox.addEventListener("change", function() {
-                                const isEnabled = this.checked;
-                                editButton_autoserverregionsbtn.style.display = isEnabled ? "block" : "none";
-                            });
-                        }
+                        bindToggle({
+                            checkboxId: "AutoRunServerRegions",
+                            buttonId: "edit-autoserverregionsbutton-btn",
+                            storageKey: "ROLOCATE_AutoRunServerRegions"
+                        });
+
+                        bindToggle({
+                            checkboxId: "bettergamestats",
+                            buttonId: "edit-bettergamestats-btn",
+                            storageKey: "ROLOCATE_bettergamestats"
+                        });
                     }
-                    // quick nav and removeads stuff
+
                     if (section === "appearance") {
-                        // remove the ads
-                        const removeAdsCheckbox = document.getElementById("removeads");
-                        const editRemoveAdsButton = document.getElementById("edit-removeads-btn");
-                        if (removeAdsCheckbox && editRemoveAdsButton) {
-                            editRemoveAdsButton.style.display = localStorage.getItem("ROLOCATE_removeads") === "true" ? "block" : "none";
-                            removeAdsCheckbox.addEventListener("change", function() {
-                                const isEnabled = this.checked;
-                                localStorage.setItem("ROLOCATE_removeads", isEnabled);
-                                editRemoveAdsButton.style.display = isEnabled ? "block" : "none";
-                            });
-                        }
+                        bindToggle({
+                            checkboxId: "removeads",
+                            buttonId: "edit-removeads-btn",
+                            storageKey: "ROLOCATE_removeads"
+                        });
 
-                        const betterprivateserversCheckbox = document.getElementById("betterprivateservers");
-                        const editBetterPrivateServersButton = document.getElementById("edit-betterprivateservers-btn");
-                        if (betterprivateserversCheckbox && editBetterPrivateServersButton) {
-                            editBetterPrivateServersButton.style.display = localStorage.getItem("ROLOCATE_betterprivateservers") === "true" ? "block" : "none";
-                            betterprivateserversCheckbox.addEventListener("change", function() {
-                                const isEnabled = this.checked;
-                                localStorage.setItem("ROLOCATE_betterprivateservers", isEnabled);
-                                editBetterPrivateServersButton.style.display = isEnabled ? "block" : "none";
-                            });
-                        }
+                        bindToggle({
+                            checkboxId: "betterprivateservers",
+                            buttonId: "edit-betterprivateservers-btn",
+                            storageKey: "ROLOCATE_betterprivateservers"
+                        });
 
-                        // custom backtgrounds
-                        const customBackgroundsCheckbox = document.getElementById("custombackgrounds");
-                        const editBackgroundsButton = document.getElementById("edit-backgrounds-btn");
-                        if (customBackgroundsCheckbox && editBackgroundsButton) {
-
-                            editBackgroundsButton.style.display = localStorage.getItem("ROLOCATE_custombackgrounds") === "true" ? "block" : "none";
-
-                            // update localstorage and show edit button if button has any
-                            customBackgroundsCheckbox.addEventListener("change", function() {
-                                const isEnabled = this.checked;
-                                localStorage.setItem("ROLOCATE_custombackgrounds", isEnabled);
-                                editBackgroundsButton.style.display = isEnabled ? "block" : "none";
-                            });
-                        }
+                        bindToggle({
+                            checkboxId: "custombackgrounds",
+                            buttonId: "edit-backgrounds-btn",
+                            storageKey: "ROLOCATE_custombackgrounds"
+                        });
                     }
 
                     if (section === "advanced") {
-                        const serverfilterscheckbox = document.getElementById("togglefilterserversbutton");
-                        const editButton_serverfiltersbtn = document.getElementById("edit-serverfilters-btn");
-                        if (serverfilterscheckbox && editButton_serverfiltersbtn) {
-                            // show edit button
-                            editButton_serverfiltersbtn.style.display = localStorage.getItem("ROLOCATE_togglefilterserversbutton") === "true" ? "block" : "none";
-                            // uhh on and off for edit buttoin
-                            serverfilterscheckbox.addEventListener("change", function() {
-                                const isEnabled = this.checked;
-                                editButton_serverfiltersbtn.style.display = isEnabled ? "block" : "none";
-                            });
-                        }
+                        bindToggle({
+                            checkboxId: "togglefilterserversbutton",
+                            buttonId: "edit-serverfilters-btn",
+                            storageKey: "ROLOCATE_togglefilterserversbutton"
+                        });
                     }
 
                     if (section === "extras") {
-                        const gameQualityCheckbox = document.getElementById("gamequalityfilter");
-                        const editButton = document.getElementById("edit-gamequality-btn");
-                        if (gameQualityCheckbox && editButton) {
-                            // show edit button
-                            editButton.style.display = localStorage.getItem("ROLOCATE_gamequalityfilter") === "true" ? "block" : "none";
-                            // uhh on and off for edit buttoin
-                            gameQualityCheckbox.addEventListener("change", function() {
-                                const isEnabled = this.checked;
-                                editButton.style.display = isEnabled ? "block" : "none";
-                            });
-                        }
+                        bindToggle({
+                            checkboxId: "gamequalityfilter",
+                            buttonId: "edit-gamequality-btn",
+                            storageKey: "ROLOCATE_gamequalityfilter"
+                        });
                     }
+
                     settingsBody.style.transition = "all 0.4s cubic-bezier(0.19, 1, 0.22, 1)";
                     settingsTitle.style.transition = "all 0.4s cubic-bezier(0.19, 1, 0.22, 1)";
                     void settingsBody.offsetWidth;
@@ -2819,35 +3116,36 @@ li a.about-link:hover::after {
             }
         });
         // all settings that are shown in search in settings
-        // js for the search funcitonality
+        // js for the search funcitonality & suggestions based on wording
         const searchableSettings = [
-            ["SmartSearch", "general", "smartsearch", "search smart instant"],
-            ["Auto Server Regions", "general", "AutoRunServerRegions", "server region auto location"],
-            ["Fast Server Search", "general", "fastservers", "fast server speed quick"],
+            ["SmartSearch", "general", "smartsearch", "search smart instant fast quick banned user"],
+            ["Auto Server Regions", "general", "AutoRunServerRegions", "auto server regions automatic"],
+            ["Fast Server Search", "general", "fastservers", "fast server speed quick 100x"],
             ["Invert Player Count", "general", "invertplayercount", "invert player count"],
             ["Recent Servers", "general", "togglerecentserverbutton", "recent server history"],
-            ["Join Confirmation", "general", "joinconfirmation", "join confirm popup"],
+            ["Join Confirmation", "general", "joinconfirmation", "join confirm popup ingame"],
+            ["Better Game Stats", "general", "bettergamestats", "better game stats statistics revenue money gamepass"],
             ["Disable Trailer Autoplay", "appearance", "disabletrailer", "trailer autoplay video"],
-            ["Smart Join Popup", "appearance", "smartjoinpopup", "join popup smart"],
-            ["Remove All Roblox Ads", "appearance", "removeads", "ads remove block"],
-            ["Restore Classic Terms", "appearance", "restoreclassicterms", "classic terms restore"],
+            ["Smart Join Popup", "appearance", "smartjoinpopup", "join popup smart region"],
+            ["Remove All Roblox Ads", "appearance", "removeads", "ads remove block ad blocker recommend recommended standout sitin for you recomend"],
+            ["Restore Classic Terms", "appearance", "restoreclassicterms", "classic terms restore friends groups catalog connections communities marketplace"],
             ["Responsive Game Cards", "appearance", "responsivegamecards", "game cards responsive"],
-            ["Better Private Servers", "appearance", "betterprivateservers", "private server compact"],
-            ["Custom Backgrounds", "appearance", "custombackgrounds", "background custom theme"],
+            ["Better Private Servers", "appearance", "betterprivateservers", "small private server compact"],
+            ["Custom Backgrounds", "appearance", "custombackgrounds", "custom background custom theme"],
             ["Enable Console Logs", "advanced", "enableLogs", "console log debug"],
-            ["Enable Server Filters", "advanced", "togglefilterserversbutton", "server filter"],
-            ["Enable Server Hop Button", "advanced", "toggleserverhopbutton", "server hop button"],
+            ["Enable Server Filters", "advanced", "togglefilterserversbutton", "server filter server regions best connection small server"],
+            ["Enable Server Hop Button", "advanced", "toggleserverhopbutton", "server hop button random server"],
             ["Enable Notifications", "advanced", "enablenotifications", "notification alert"],
             ["Fix BTRoblox Compatability", "advanced", "btrobloxfix", "btroblox fix compatible"],
-            ["Mobile Mode", "advanced", "mobilemode", "mobile mode phone"],
-            ["Force Dark Mode Styles", "advanced", "forcedarkmode", "dark mode force theme"],
-            ["Set Default Location Mode", "advanced", "prioritylocation-select", "location gps coordinates"],
-            ["Game Quality Filter", "extras", "gamequalityfilter", "game quality filter"],
-            ["Mutual Friends", "extras", "mutualfriends", "mutual friends shared"],
+            ["Mobile Mode", "advanced", "mobilemode", "mobile mode phone android ios"],
+            ["Force Dark Mode Styles", "advanced", "forcedarkmode", "dark mode force theme fix"],
+            ["Set Default Location Mode", "advanced", "prioritylocation-select", "location gps coordinates manual automatic"],
+            ["Game Quality Filter", "extras", "gamequalityfilter", "game quality filter bad games"],
+            ["Better Profile Info", "extras", "loadbetterprofileinfo", "mutual friends shared account age"],
             ["Disable Chat", "extras", "disablechat", "chat disable hide"],
-            ["Quick Launch Games", "extras", "quicklaunchgames", "quick launch favorite"],
+            ["Quick Launch Games", "extras", "quicklaunchgames", "quick launch favorite pinned games"],
             ["Show Old Greeting", "extras", "ShowOldGreeting", "old greeting classic"],
-            ["Better Friends", "extras", "betterfriends", "friends better best"]
+            ["Better Friends", "extras", "betterfriends", "best friends better"]
         ].map(([name, section, id, keywords]) => ({
             name, section, id, keywords: keywords.split(' ')
         }));
@@ -3109,6 +3407,13 @@ li a.about-link:hover::after {
             });
         }
 
+        const editbettergamestats = document.getElementById("edit-bettergamestats-btn");
+        if (editbettergamestats) {
+            editbettergamestats.addEventListener("click", () => {
+                bettergamestats_settings();
+            });
+        }
+
         // save coordinates button duh
         const saveCoordinatesBtn = document.getElementById("save-coordinates");
         if (saveCoordinatesBtn) {
@@ -3250,13 +3555,12 @@ li a.about-link:hover::after {
     function applyPreset(presetKey) {
         const preset = presetConfigurations[presetKey];
         if (!preset) return;
-
-        Object.entries(preset.settings).forEach(([key, value]) => {
+        const merged = { ...defaultSettings, ...preset.settings };
+        Object.entries(merged).forEach(([key, value]) => {
             localStorage.setItem(`ROLOCATE_${key}`, value);
         });
-
         notifications(`${preset.name} preset applied! Refreshing the page in 3 seconds...`, 'success', '⚡', 3000);
-        setTimeout(() => { location.reload(); }, 3000); // refresh after 5 seconds
+        setTimeout(() => { location.reload(); }, 3000);
     }
 
     function showConfirmation(title, message, onConfirm) {
@@ -3366,7 +3670,7 @@ li a.about-link:hover::after {
     description: popup for customizing the ads
     *******************************************************/
     function editremoveads () {
-      // don’t open it twice
+      // don't open it twice
       if (document.getElementById('rolocate-ad-settings-modal')) return;
 
       // default toggle values
@@ -3376,7 +3680,9 @@ li a.about-link:hover::after {
         sponsoredSections: true,
         todaysPicks: true,
         recommendedForYou: true,
-        feedItems: true
+        feedItems: true,
+        standoutGames: true,
+        sitdownGames: true
       };
 
       // load saved settings and fall back to defaults
@@ -3413,10 +3719,12 @@ li a.about-link:hover::after {
       const toggleOptions = [
         ['adIframes', 'Ad Iframes'],
         ['sponsoredGames', 'Sponsored Games'],
-        ['sponsoredSections', 'Sponsored Sections'],
-        ['todaysPicks', "Today's Picks"],
-        ['recommendedForYou', 'Recommended For You'],
-        ['feedItems', 'Feed Posts']
+        ['sponsoredSections', 'Sponsored Sections (Home Page)'],
+        ['todaysPicks', "Today's Picks (Home Page)"],
+        ['recommendedForYou', 'Recommended For You (Home Page)'],
+        ['feedItems', 'Feed Posts (Home Page)'],
+        ['standoutGames', 'Standout Games (Home Page)'],
+        ['sitdownGames', 'Sitdown Games (Home Page)'],
       ];
 
       // container for all toggles
@@ -3438,17 +3746,18 @@ li a.about-link:hover::after {
         row.onmouseenter = () => (row.style.background = '#2d2d2d');
         row.onmouseleave = () => (row.style.background = '#262626');
 
+        const on = settings[key];
         row.innerHTML = `
           <span style="font-size:13px">${label}</span>
-          <input type="checkbox" id="${key}" ${settings[key] ? 'checked' : ''} style="display:none">
+          <input type="checkbox" id="${key}" ${on ? 'checked' : ''} style="display:none">
           <div class="tgl" style="
             width:36px;height:20px;border-radius:20px;
-            background:${settings[key] ? '#16a34a' : '#444'};
+            background:${on ? '#16a34a' : '#444'};
             position:relative;transition:.15s;
           ">
             <div style="
               width:16px;height:16px;border-radius:50%;background:#fff;
-              position:absolute;top:2px;left:${settings[key] ? '18px' : '2px'};
+              position:absolute;top:2px;left:${on ? '18px' : '2px'};
               transition:.15s;
             "></div>
           </div>
@@ -3475,6 +3784,13 @@ li a.about-link:hover::after {
         display:flex;justify-content:flex-end;gap:8px;margin-top:14px;
       `;
 
+      // close animation + cleanup
+      const closeModal = () => {
+        modal.style.transform = 'scale(.96) translateY(12px)';
+        overlay.style.opacity = '0';
+        setTimeout(() => overlay.remove(), 200);
+      };
+
       // reusable button factory
       const createButton = (text, bgColor, onClick) => {
         const button = document.createElement('button');
@@ -3488,13 +3804,6 @@ li a.about-link:hover::after {
         button.onmouseleave = () => (button.style.opacity = 1);
         button.onclick = onClick;
         return button;
-      };
-
-      // close animation + cleanup
-      const closeModal = () => {
-        modal.style.transform = 'scale(.96) translateY(12px)';
-        overlay.style.opacity = '0';
-        setTimeout(() => overlay.remove(), 200);
       };
 
       // add buttons
@@ -3547,7 +3856,9 @@ li a.about-link:hover::after {
             sponsoredSections: true,
             todaysPicks: true,
             recommendedForYou: true,
-            feedItems: true
+            feedItems: true,
+            standoutGames: true,
+            sitdownGames: true
         };// if no settings use default settings
         const settings = { ...defaultSettings, ...userSettings };
 
@@ -3558,17 +3869,23 @@ li a.about-link:hover::after {
         name of function: removeElements
         description: remove the roblox elements where ads and specific sections are in
         no script removal to avoid conflicts
-        Updated to filter based on user settings
         *******************************************************/
         function removeElements() {
             // prevent multiple runs at same time
             if (isRunning) return;
             isRunning = true;
 
+            // helper: hide an element once and mark it done
+            const hide = (el) => {
+                if (doneMap.get(el)) return;
+                el.style.display = "none";
+                doneMap.set(el, true);
+            };
+
             try {
                 // block ad iframes if enabled by roblox for some reason
                 if (settings.adIframes) {
-                    const adIframes = document.querySelectorAll(`
+                    document.querySelectorAll(`
                         .ads-container iframe,
                         .abp iframe,
                         .abp-spacer iframe,
@@ -3581,9 +3898,7 @@ li a.about-link:hover::after {
                         .profile-ads-container iframe,
                         #ad iframe,
                         iframe[src*="roblox.com/user-sponsorship/"]
-                    `);
-
-                    adIframes.forEach(iframe => {
+                    `).forEach(iframe => {
                         if (!doneMap.get(iframe)) {
                             // hide instead of remove cause no want page break
                             iframe.style.display = "none";
@@ -3598,64 +3913,38 @@ li a.about-link:hover::after {
                     document.querySelectorAll(".game-card-native-ad").forEach(ad => {
                         if (!doneMap.get(ad)) {
                             const gameCard = ad.closest(".game-card-container");
-                            if (gameCard) {
-                                gameCard.style.display = "none";
-                            }
+                            if (gameCard) hide(gameCard);
                             doneMap.set(ad, true);
                         }
                     });
                 }
 
-                // block sponsored sections if enabled
-                if (settings.sponsoredSections) {
-                    document.querySelectorAll(".game-sort-carousel-wrapper").forEach(wrapper => {
-                        if (doneMap.get(wrapper)) return;
+                // block carousel sections by header name
+                const carouselBlockList = [
+                    settings.sponsoredSections  && /^sponsored$/i,
+                    settings.todaysPicks        && /today's picks(:|$)/i,
+                    settings.standoutGames      && /standout games/i,
+                    settings.sitdownGames       && /sitdown games/i,
+                ].filter(Boolean);
 
-                        const headerText = wrapper.querySelector('[data-testid="text-icon-row-text"]')?.textContent.trim();
-                        const linkElement = wrapper.querySelector('a[href*="/sortName/v2/"]');
-
-                        // Check if it's specifically a sponsored section
-                        const isSponsored = headerText === "Sponsored" ||
-                            (linkElement && linkElement.href.includes("/sortName/v2/Sponsored"));
-
-                        if (isSponsored) {
-                            wrapper.style.display = "none";
-                            doneMap.set(wrapper, true);
-                        }
-                    });
-                }
-
-                // block "today's picks" section if enabled
-                if (settings.todaysPicks) {
+                if (carouselBlockList.length) {
                     document.querySelectorAll('.game-sort-carousel-wrapper').forEach(wrapper => {
                         if (doneMap.get(wrapper)) return;
-
-                        const headerText = wrapper.querySelector('[data-testid="text-icon-row-text"]');
-                        if (headerText && /today's picks(:|$)/i.test(headerText.textContent.trim())) {
-                            wrapper.style.display = "none";
-                            doneMap.set(wrapper, true);
+                        const headerText = wrapper.querySelector('[data-testid="text-icon-row-text"]')?.textContent.trim();
+                        if (headerText && carouselBlockList.some(rx => rx.test(headerText))) {
+                            hide(wrapper);
                         }
                     });
                 }
 
                 // block "recommended for you" section if enabled
                 if (settings.recommendedForYou) {
-                    document.querySelectorAll('[data-testid="home-page-game-grid"]').forEach(grid => {
-                        if (!doneMap.get(grid)) {
-                            grid.style.display = "none";
-                            doneMap.set(grid, true);
-                        }
-                    });
+                    document.querySelectorAll('[data-testid="home-page-game-grid"]').forEach(hide);
                 }
 
                 // block feed items if enabled
                 if (settings.feedItems) {
-                    document.querySelectorAll(".sdui-feed-item-container").forEach(node => {
-                        if (!doneMap.get(node)) {
-                            node.style.display = "none";
-                            doneMap.set(node, true);
-                        }
-                    });
+                    document.querySelectorAll(".sdui-feed-item-container").forEach(hide);
                 }
 
             } finally {
@@ -3679,7 +3968,6 @@ li a.about-link:hover::after {
         // im a master at glitch fixing ikr
         setTimeout(removeElements, 100);
     }
-
 
     /*******************************************************
     name of function: changeServerCount
@@ -4058,34 +4346,25 @@ li a.about-link:hover::after {
     description: popup for customizing better private server settings
     *******************************************************/
     function editprivateserversettings() {
-      // check if Better Private Servers is enabled
       const bpsEnabled = localStorage.getItem('ROLOCATE_betterprivateservers');
       if (bpsEnabled !== 'true') return;
 
-      // don't open it twice
       if (document.getElementById('rolocate-ps-settings-modal')) return;
 
-      notifications('“Compact Private Servers” and “Private Server Search” are temporarily locked due to stability issues and will be available to be changed in the next update. Sorry about this!', 'info', '😢', '15000');
-
-      // default toggle values
       const defaultSettings = {
         compactPrivateServers: true,
         onlyYourPrivateServers: false,
         privateServerSearch: false
       };
 
-      // load saved settings and fall back to defaults
       const savedSettings = JSON.parse(
         localStorage.getItem('ROLOCATE_editprivateserversettings') || '{}'
       );
       const settings = { ...defaultSettings, ...savedSettings };
 
-      // Force compact to always be true
+      // Compact Private Servers is always on
       settings.compactPrivateServers = true;
-      // Force privateServerSearch to always be false
-      settings.privateServerSearch = false;
 
-      // dark background overlay
       const overlay = document.createElement('div');
       overlay.id = 'rolocate-ps-settings-modal';
       overlay.style.cssText = `
@@ -4093,7 +4372,6 @@ li a.about-link:hover::after {
         background:rgba(0,0,0,.45);z-index:10000;opacity:0;transition:.2s;
       `;
 
-      // main modal box
       const modal = document.createElement('div');
       modal.style.cssText = `
         background:#181818;border-radius:14px;padding:18px;width:340px;max-width:92vw;
@@ -4101,7 +4379,6 @@ li a.about-link:hover::after {
         transform:scale(.96) translateY(12px);transition:.2s;
       `;
 
-      // title + subtitle
       modal.innerHTML = `
         <h2 style="margin:0;font-size:18px;text-align:center">Private Server Settings</h2>
         <p style="margin:6px 0 0px;text-align:center;font-size:12px;color:#aaa">
@@ -4109,25 +4386,21 @@ li a.about-link:hover::after {
         </p>
       `;
 
-      // toggle definitions
       const toggleOptions = [
         ['compactPrivateServers', 'Compact Private Servers'],
         ['onlyYourPrivateServers', 'Only Your Private Servers'],
         ['privateServerSearch', 'Private Server Search']
       ];
 
-      // container for all toggles
       const togglesContainer = document.createElement('div');
       togglesContainer.style.cssText = `
         background:#222;padding:10px;border-radius:10px;display:grid;gap:8px;
       `;
 
-      // store toggle elements for mutual exclusion logic
       const toggleElements = {};
 
-      // build each toggle row
       toggleOptions.forEach(([key, label]) => {
-        const isDisabled = key === 'compactPrivateServers' || key === 'privateServerSearch';
+        const isDisabled = key === 'compactPrivateServers';
 
         const row = document.createElement('label');
         row.style.cssText = `
@@ -4138,7 +4411,6 @@ li a.about-link:hover::after {
           opacity:${isDisabled ? '0.6' : '1'};
         `;
 
-        // hover effect (only for enabled toggles)
         if (!isDisabled) {
           row.onmouseenter = () => (row.style.background = '#2d2d2d');
           row.onmouseleave = () => (row.style.background = '#262626');
@@ -4164,33 +4436,34 @@ li a.about-link:hover::after {
         const toggle = row.querySelector('.tgl');
         const knob = toggle.querySelector('div');
 
-        // store references
         toggleElements[key] = { checkbox, toggle, knob };
 
-        // handle toggle click (skip if disabled)
-        if (!isDisabled) {
-          row.onclick = (e) => {
-            e.preventDefault();
+        if (!isDisabled) row.onclick = (e) => {
+          e.preventDefault();
+          const willBeChecked = !checkbox.checked;
+          checkbox.checked = willBeChecked;
+          toggle.style.background = willBeChecked ? '#16a34a' : '#444';
+          knob.style.left = willBeChecked ? '18px' : '2px';
 
-            const willBeChecked = !checkbox.checked;
-
-            // update current toggle
-            checkbox.checked = willBeChecked;
-            toggle.style.background = checkbox.checked ? '#16a34a' : '#444';
-            knob.style.left = checkbox.checked ? '18px' : '2px';
-          };
-        }
+          // mutual exclusion between onlyYourPrivateServers and privateServerSearch
+          const opposite = key === 'onlyYourPrivateServers' ? 'privateServerSearch' :
+                           key === 'privateServerSearch' ? 'onlyYourPrivateServers' : null;
+          if (opposite && willBeChecked && toggleElements[opposite]) {
+            const o = toggleElements[opposite];
+            o.checkbox.checked = false;
+            o.toggle.style.background = '#444';
+            o.knob.style.left = '2px';
+          }
+        };
 
         togglesContainer.appendChild(row);
       });
 
-      // buttons container
       const buttonRow = document.createElement('div');
       buttonRow.style.cssText = `
         display:flex;justify-content:flex-end;gap:8px;margin-top:14px;
       `;
 
-      // reusable button factory
       const createButton = (text, bgColor, onClick) => {
         const button = document.createElement('button');
         button.textContent = text;
@@ -4205,27 +4478,20 @@ li a.about-link:hover::after {
         return button;
       };
 
-      // close animation + cleanup
       const closeModal = () => {
         modal.style.transform = 'scale(.96) translateY(12px)';
         overlay.style.opacity = '0';
         setTimeout(() => overlay.remove(), 200);
       };
 
-      // add buttons
       buttonRow.append(
         createButton('Cancel', '#333', closeModal),
         createButton('Save', '#16a34a', () => {
           const newSettings = {};
           toggleOptions.forEach(([key]) => {
-            // Force compact to always be true and privateServerSearch to always be false
-            if (key === 'compactPrivateServers') {
-              newSettings[key] = true;
-            } else if (key === 'privateServerSearch') {
-              newSettings[key] = false;
-            } else {
-              newSettings[key] = document.getElementById(key).checked;
-            }
+            newSettings[key] = key === 'compactPrivateServers'
+              ? true
+              : document.getElementById(key).checked;
           });
 
           localStorage.setItem(
@@ -4233,7 +4499,6 @@ li a.about-link:hover::after {
             JSON.stringify(newSettings)
           );
 
-          // feedback stuff
           ConsoleLogEnabled('Private server settings saved:', newSettings);
           notifications('Settings saved', 'success', '👍', '5000');
 
@@ -4241,12 +4506,10 @@ li a.about-link:hover::after {
         })
       );
 
-      // assemble modal
       modal.append(togglesContainer, buttonRow);
       overlay.append(modal);
       document.body.append(overlay);
 
-      // animate in
       requestAnimationFrame(() => {
         overlay.style.opacity = '1';
         modal.style.transform = 'scale(1) translateY(0)';
@@ -4254,496 +4517,1098 @@ li a.about-link:hover::after {
     }
 
     /*******************************************************
-    applycustombackgrounds(): applies user background and handles transparency
-    *******************************************************/
+     * Storage helpers
+     * All non-file settings live in ONE localStorage key.
+     * File data (base64) stays in its own key per type.
+     *******************************************************/
+    const SETTINGS_KEY = 'ROLOCATE_CUSTOMBACKGROUND_settings';
+
+    function loadSettings() {
+        try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; }
+        catch { return {}; }
+    }
+
+    function saveSettings(patch) {
+        const current = loadSettings();
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...current, ...patch }));
+    }
+
+    function resetSettings() {
+        localStorage.removeItem(SETTINGS_KEY);
+    }
+
+    function getSetting(key, fallback = '') {
+        const val = loadSettings()[key];
+        return (val !== undefined && val !== null) ? val : fallback;
+    }
+
+    function getSavedFile(key) {
+        const getter = typeof GM_getValue !== 'undefined' ? GM_getValue : k => localStorage.getItem(k);
+        try { return JSON.parse(getter(`ROLOCATE_FILE_${key}`, null)); } catch { return null; }
+    }
+
+    function deleteSavedFile(key) {
+        const deleter = typeof GM_deleteValue !== 'undefined' ? GM_deleteValue : k => localStorage.removeItem(k);
+        deleter(`ROLOCATE_FILE_${key}`);
+    }
+
+
+    /*******************************************************
+     * applycustombackgrounds()
+     *******************************************************/
     async function applycustombackgrounds() {
-        // stupid storage helper
-        const getFile = k => {
-            let d = (typeof GM_getValue != 'undefined') ? GM_getValue(`ROLOCATE_FILE_${k}`) : localStorage.getItem(`ROLOCATE_FILE_${k}`);
-            return d ? JSON.parse(d) : null;
-        };
+        if (localStorage.getItem('ROLOCATE_custombackgrounds') !== 'true') return;
 
-        if (localStorage.getItem("ROLOCATE_custombackgrounds") !== "true") return;
+        const s               = loadSettings();
+        const useVideo        = s.use_animated !== 'false';
+        const videoURL        = s.video_url || '';
+        const textColor       = s.text_color || '';
+        const overrideText    = s.override_text_color === 'true';
+        const useAdvanced     = s.use_advanced === 'true';
+        const bgBlur          = parseFloat(s.blur ?? 0);
+        const bgOpacity       = parseFloat(s.opacity ?? 1);
+        const bgBrightness    = parseFloat(s.brightness ?? 1);
+        const bgScale         = s.scale || 'cover';
+        const bgBlendMode     = s.blend_mode || 'normal';
+        const overlayColor    = s.overlay_color || '';
+        const overlayOpacity  = parseFloat(s.overlay_opacity ?? 0);
 
-        // this was so painful
-        const useVid = localStorage.getItem('ROLOCATE_CUSTOMBACKGROUND_use_animated') === 'true';
-        const vidURL = localStorage.getItem('ROLOCATE_CUSTOMBACKGROUND_video_url') || '';
-        const txtColor = localStorage.getItem('ROLOCATE_CUSTOMBACKGROUND_text_color') || '';
-        const overrideTxt = localStorage.getItem('ROLOCATE_CUSTOMBACKGROUND_override_text_color') === 'true';
-        const adv = localStorage.getItem('ROLOCATE_CUSTOMBACKGROUND_use_advanced') === 'true';
+        // Remove existing injected elements
+        document.querySelectorAll('video[custom-bg], img[custom-bg], div[custom-bg-overlay], #custom-ui-style').forEach(el => el.remove());
 
-        // clear leftovers
-        document.querySelectorAll('video[custom-bg], img[custom-bg], #custom-ui-style').forEach(e => e.remove());
+        const bgElement = document.createElement(useVideo ? 'video' : 'img');
+        bgElement.setAttribute('custom-bg', '');
 
+        const filterParts = [];
+        if (bgBlur > 0)         filterParts.push(`blur(${bgBlur}px)`);
+        if (bgBrightness !== 1) filterParts.push(`brightness(${bgBrightness})`);
+
+        bgElement.style.cssText = `
+            position:fixed;top:0;left:0;width:100vw;height:100vh;
+            object-fit:${bgScale};z-index:-9999;pointer-events:none;
+            opacity:${bgOpacity};mix-blend-mode:${bgBlendMode};
+            ${filterParts.length ? `filter:${filterParts.join(' ')};` : ''}
+        `;
+        if (useVideo) { bgElement.muted = true; bgElement.loop = true; bgElement.playsInline = true; }
+
+        const savedFile = getSavedFile(useVideo ? 'video' : 'image');
         let hasBG = false;
-        const el = document.createElement(useVid ? 'video' : 'img');
-        el.setAttribute('custom-bg', '');
-        el.style.cssText = `position:fixed;top:0;left:0;width:100vw;height:100vh;object-fit:cover;z-index:-9999;pointer-events:none;`;
-        if (useVid) Object.assign(el, { muted: true, loop: true, playsInline: true });
-
-        const file = getFile(useVid ? 'video' : 'image');
-        if (file?.data) { el.src = file.data; hasBG = true; }
-        else if (useVid && vidURL) { el.src = vidURL; hasBG = true; }
+        if (savedFile?.data) { bgElement.src = savedFile.data; hasBG = true; }
+        else if (useVideo && videoURL) { bgElement.src = videoURL; hasBG = true; }
 
         if (hasBG) {
-            if (useVid) el.play().catch(() => {});
-            document.documentElement.appendChild(el);
+            if (useVideo) bgElement.play().catch(() => {});
+            document.documentElement.appendChild(bgElement);
+        } else if (overlayColor && overlayOpacity > 0) {
+            const overlayEl = document.createElement('div');
+            overlayEl.setAttribute('custom-bg-overlay', '');
+            overlayEl.style.cssText = `
+                position:fixed;top:0;left:0;width:100vw;height:100vh;
+                background:${overlayColor};opacity:${overlayOpacity};
+                z-index:-9998;pointer-events:none;
+            `;
+            document.documentElement.appendChild(overlayEl);
         }
 
-        // using the variable css isnt a good idea but idc
-        let css = hasBG ? `html,body,.content{background:transparent!important}` : '';
+        let css = hasBG ? `
+            html, body, body.dark-theme, body.light-theme,
+            #rbx-body, .rbx-body,
+            #content, .content,
+            #container-main, main.container-main,
+            #footer-container, footer.container-footer
+            { background: transparent !important; background-color: transparent !important; }
+        ` : '';
 
-        // advanced panel
-        if (adv) {
-            const def = 'rgba(45,45,45,0.85)';
-            const map = [
+        // Hide the cover gradient overlay
+        css += `.cover-gradient-overlay { display: none !important; }`;
+
+        if (useAdvanced) {
+            const fallback = 'rgba(45,45,45,0.85)';
+            const selectorMap = [
+                ['#header,#header.rbx-header,.rbx-header,#header .container-fluid', 'header-bar'],
+                ['#navigation,#navigation.rbx-left-col,#left-navigation-container,.rbx-left-col,.left-col-list,.simplebar-content', 'left-sidebar'],
+                ['#navigation-container', 'sidebar-wrapper'],
+                ...(hasBG ? [] : [
+                    ['#container-main,main.container-main,#content', 'main-content'],
+                    ['#footer-container,footer.container-footer', 'footer'],
+                ]),
+                ['.profile-header-top,.profile-avatar-section,.profile-header .prof', 'profile-header'],
                 ['.profile-avatar-mask', 'avatar-mask'],
                 ['.chat-body', 'chat-body'],
                 ['.dropdown-menu', 'dropdown-menu'],
-                ['.container-footer', 'footer']
+                ['.sticky-header-sorts,.filters-container,.filters-header-container,.catalog-search-options-top-bar', 'filters-bar'],
+                ['.profile-avatar-left,.profile-avatar-gradient,.cover-blur-overlay', 'avatar-overlays'],
+                ['.avatar-toggle-button,.foundation-web-button.bg-action-standard', 'avatar-toggle-btn'],
+                ['#rbx-private-running-games,.server-list-section,.empty-game-instances-container,.no-servers-message', 'server-list-empty'],
+                ['.catalog-header,.search-bars,.heading-container', 'catalog-header'],
+                ['.mobile-search-container,.search-bar,.search-form,.input-group', 'search-bar'],
+                ['.topic-container,.topic-carousel,.topic,.topic.unselected-topic', 'topic-chips'],
+                ['.buy-btns-container,.shopping-cart-btn-container,.buy-robux,.shopping-cart-btn', 'action-buttons'],
+                ['.groups-list-sidebar', 'groups-sidebar'],
+                ['#populated-item-list,.item-list-container,.item-card,.item-card-container,.item-card-link,.item-card-caption', 'item-cards'],
+                ['.catalog-header,.heading-container,.catalog-heading-container,.search-bars', 'catalog-header-bar'],
+                ['.search-bar,.search-form,.input-group,.search-input,.input-field', 'search-inputs'],
+                ['.topic-container,.topic-carousel,.topic,.topic.unselected-topic,.topic-navigation-button', 'topic-chips'],
+                ['.catalog-search-options-top-bar,.filter-select,.filter-items-container,.btn-secondary-md', 'catalog-filters'],
+                // rolocate stuff
+                ['.rolocate-greeting-header,.rolocate-profile-frame',          'greeting-header'],
+                ['.ROLOCATE_QUICKLAUNCHGAMES_new-games-container',              'quicklaunch'],
+                ['.friend-carousel-container,.react-friends-carousel-container','friends-carousel'],
+                ['.best-friends-section', 'best-friends'],
             ];
-            map.forEach(([sel, key]) => {
-                const c = localStorage.getItem(`ROLOCATE_CUSTOMBACKGROUND_style_${key}`) || def;
-                css += `${sel}{background-color:${c}!important}`;
+            selectorMap.forEach(([sel, key]) => {
+                const color = s[`style_${key}`] || fallback;
+                css += `${sel}{background-color:${color}!important}`;
+            });
+            // add this cause then borders look funnky af
+            const borderTargets = [
+                ['greeting-header',  '.rolocate-greeting-header,.rolocate-profile-frame'],
+                ['quicklaunch',      '.ROLOCATE_QUICKLAUNCHGAMES_new-games-container'],
+                ['friends-carousel', '.friend-carousel-container,.react-friends-carousel-container'],
+                ['best-friends', '.best-friends-section'],
+            ];
+            borderTargets.forEach(([key, sel]) => {
+                const color = s[`style_${key}`] || fallback;
+                css += `${sel}{border-color:${color}!important;outline-color:${color}!important}`;
+            });
+            // we fix the like uhh quicklaunch thing by removing the shaddow
+            css += `.ROLOCATE_QUICKLAUNCHGAMES_new-games-container{box-shadow:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}`;
+            css += `.ROLOCATE_QUICKLAUNCHGAMES_new-games-container *{text-shadow:none!important;filter:none!important}`;
+            // sidebar stuff my eye is twitching while adding this btw. Thingk i got like 2 hours of sleep in the past 24 hours
+            const sidebarText = s['style_sidebar-items-text'] || '#d0d0d0';
+            css += `
+                .left-col-list li:not(.rbx-upgrade-now),
+                .left-col-list li:not(.rbx-upgrade-now):hover,
+                .left-col-list a:not(#upgrade-now-button),
+                .left-col-list li:not(.rbx-upgrade-now):hover > a
+                {background:transparent!important;color:${sidebarText}!important}
+            `;
+        }
+
+        if (overrideText && textColor) css += `body,body *{color:${textColor}!important}`;
+
+        const styleTag = document.createElement('style');
+        styleTag.id = 'custom-ui-style';
+        styleTag.textContent = css;
+        document.head.appendChild(styleTag);
+
+        const transparentTargets = [
+            '.rolocate-greeting-header', '.best-friends-section',
+            '.friend-carousel-container', '.ROLOCATE_QUICKLAUNCHGAMES_new-games-container',
+            '.react-friends-carousel-container',
+        ];
+        const transparencyStyle = document.createElement('style');
+        transparencyStyle.id = 'rolocate-transparency-style';
+        document.head.appendChild(transparencyStyle);
+
+        function makeTransparent(selector) {
+            if (!transparencyStyle.textContent.includes(selector)) {
+                transparencyStyle.textContent += `${selector}{background:transparent!important;box-shadow:none!important;border-color:transparent!important}`;
+            }
+            document.querySelectorAll(selector).forEach(el => {
+                el.style.background = el.style.backgroundColor = 'transparent';
+                el.style.boxShadow = el.style.borderColor = 'none';
             });
         }
 
-        if (overrideTxt && txtColor) css += `body,body *{color:${txtColor}!important}`;
+        function checkTransparency() {
+            const bg = getComputedStyle(document.body).backgroundColor;
+            if (bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent') transparentTargets.forEach(makeTransparent);
+            else transparencyStyle.textContent = '';
+        }
 
-        const style = document.createElement('style');
-        style.id = 'custom-ui-style';
-        style.textContent = css;
-        document.head.appendChild(style);
+        checkTransparency();
 
-        // trasnaprent backgroudn
-        const targets = [
-            '.rolocate-greeting-header',
-            '.best-friends-section',
-            '.friend-carousel-container',
-            '.ROLOCATE_QUICKLAUNCHGAMES_new-games-container'
-        ];
-        const tStyle = document.createElement('style');
-        tStyle.id = 'rolocate-transparency-style';
-        document.head.appendChild(tStyle);
-
-        const applyTransparent = s => {
-            if (!tStyle.textContent.includes(s))
-                tStyle.textContent += `${s}{background:transparent!important;box-shadow:none!important;border-color:transparent!important}`;
-            document.querySelectorAll(s).forEach(e => {
-                Object.assign(e.style, { background: 'transparent', backgroundColor: 'transparent', boxShadow: 'none', borderColor: 'transparent' });
+        if (hasBG) {
+            const bgTransparencySelectors = [
+                '#rbx-body', '.rbx-body',
+                '#content', '.content',
+                '#container-main', 'main.container-main',
+                '#footer-container', 'footer.container-footer',
+            ];
+            const forceTransparent = () => {
+                bgTransparencySelectors.forEach(sel => {
+                    document.querySelectorAll(sel).forEach(el => {
+                        el.style.setProperty('background', 'transparent', 'important');
+                        el.style.setProperty('background-color', 'transparent', 'important');
+                    });
+                });
+            };
+            forceTransparent();
+            new MutationObserver(forceTransparent).observe(document.documentElement, {
+                childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'],
             });
-        };
+        }
 
-        const maybeTransparent = () => {
-            const bodyBg = getComputedStyle(document.body).backgroundColor;
-            if (bodyBg === 'rgba(0, 0, 0, 0)' || bodyBg === 'transparent') targets.forEach(applyTransparent);
-            else tStyle.textContent = '';
-        };
-
-        maybeTransparent(); // initial check
-
-        // wont even comment
-        new MutationObserver(maybeTransparent).observe(document.body, {
-            childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class']
+        new MutationObserver(checkTransparency).observe(document.body, {
+            childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'],
         });
     }
 
     /*******************************************************
-    name of function: showSettingsPopup_background
-    description: menu to manage the custom backgrounds
-    *******************************************************/
+     * showSettingsPopup_background()
+     *  // the ui for the background theme thingy
+     *******************************************************/
     function showSettingsPopup_background() {
-        notifications('Uh maybe i will work on this later but its kinda hard to update this', 'info', 'ℹ️', 4000);
-        // uh the file helper
-        const fileToBase64 = (file) => new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-        });
 
-        const saveFile = async (key, file) => {
-            // validate file type
-            const validImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/bmp']; // yea gif is considered an image.
-            const validVideoTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'];
-            const isImage = validImageTypes.includes(file.type);
-            const isVideo = validVideoTypes.includes(file.type);
-            if ((key === 'image' && !isImage) || (key === 'video' && !isVideo)) {
-                notifications(`Invalid file type: ${file.type}. Please upload a valid ${key === 'image' ? 'image (JPG, PNG, GIF, WebP)' : 'video (MP4, WebM, OGG)'} file.`, 'error', '⚠️', 8000);
+        // Save a file (image or video) to GM storage as base64
+        async function saveFile(key, file) {
+            const validImages = ['image/jpeg','image/jpg','image/png','image/gif','image/webp','image/bmp'];
+            const validVideos = ['video/mp4','video/webm','video/ogg','video/quicktime'];
+            if ((key === 'image' && !validImages.includes(file.type)) || (key === 'video' && !validVideos.includes(file.type))) {
+                notifications(`Invalid file type: ${file.type}.`, 'error', '⚠️', 8000);
                 return;
             }
+            const WARN = 5 * 1024 * 1024, HARD = 20 * 1024 * 1024;
+            if (file.size > HARD) { notifications('File exceeds 20 MB limit.', 'error', '⚠️', 8000); return; }
+            if (file.size > WARN) notifications('Warning: large file may slow page loads. Consider using a direct link!', 'warning', '⚠️', 10000);
+            if (typeof GM_setValue === 'undefined') { notifications('GM_setValue not available.', 'error', '⚠️', 8000); return; }
+            const base64 = await new Promise((res, rej) => {
+                const r = new FileReader();
+                r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file);
+            });
+            GM_setValue(`ROLOCATE_FILE_${key}`, JSON.stringify({ name: file.name, size: file.size, type: file.type, data: base64 }));
+        }
 
-            const SOFT_LIMIT = 5 * 1024 * 1024;   // 5MB - warning
-            const HARD_LIMIT = 20 * 1024 * 1024;  // 20MB - blocked
-            if (file.size > HARD_LIMIT) {
-                notifications(`File exceeds hard limit of ${(HARD_LIMIT / 1024 / 1024).toFixed(0)}MB (${(file.size / 1024 / 1024).toFixed(2)}MB). Please use a direct URL for larger files.`, 'error', '⚠️', 8000);
-                return;
-            }
-            if (file.size > SOFT_LIMIT) {
-                notifications(`Warning: File size is ${(file.size / 1024 / 1024).toFixed(2)}MB. Files over ${(SOFT_LIMIT / 1024 / 1024).toFixed(0)}MB may cause lag or slow page loads. Consider using a direct URL instead.`, 'warning', '⚠️', 10000);
-            }
-            if (typeof GM_setValue === 'undefined') {
-                notifications('Userscript storage (GM_setValue) not available. Cannot save file.', 'error', '⚠️', 8000);
-                return;
-            }
-            const base64Data = await fileToBase64(file);
-            const fileData = { name: file.name, size: file.size, type: file.type, data: base64Data };
-            GM_setValue(`ROLOCATE_FILE_${key}`, JSON.stringify(fileData));
-        };
-
-        const getFile = (key) => {
-            const storage = typeof GM_getValue !== 'undefined' ? GM_getValue : (k) => localStorage.getItem(k);
-            const data = storage(`ROLOCATE_FILE_${key}`, null);
-            if (!data) return null;
-            try { return JSON.parse(data); } catch { return null; }
-        };
-
-        const deleteFile = (key) => {
-            const del = typeof GM_deleteValue !== 'undefined' ? GM_deleteValue : (k) => localStorage.removeItem(k);
-            del(`ROLOCATE_FILE_${key}`);
-        };
-
-        // cleanup stuff
+        // Remove any existing popup before rebuilding
+        document.getElementById('rolocate-settings-overlay')?.remove();
         document.getElementById('rolocate-settings-popup')?.remove();
 
-        const style = document.createElement('style'); // css smaller to save space
-        style.textContent = `
-            @keyframes rFadeIn{from{opacity:0}to{opacity:1}}
-            @keyframes rSlideIn{from{opacity:0;transform:translate(-50%,-48%)scale(.96)}to{opacity:1;transform:translate(-50%,-50%)scale(1)}}
-            @keyframes rSlideTab{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
-            .r-toggle{position:relative;display:inline-block;width:44px;height:24px;vertical-align:middle}
-            .r-toggle input{opacity:0;width:0;height:0}
-            .r-slider{position:absolute;cursor:pointer;inset:0;background:#3d3d3d;transition:.25s;border-radius:24px}
-            .r-slider:before{content:"";position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#8a8a8a;transition:.25s;border-radius:50%}
-            input:checked+.r-slider{background:#2f4f3f}
-            input:checked+.r-slider:before{background:#5fb589;transform:translateX(20px)}
-            .r-input{width:100%;padding:10px;background:#2a2a2a;border:1px solid #3d3d3d;border-radius:6px;color:#d0d0d0;font-size:13px;transition:.2s;box-sizing:border-box}
-            .r-input:focus{outline:none;border-color:#5fb589;background:#2f2f2f}
-            .r-card{background:#242424;border-radius:10px;padding:16px;margin:0 0 12px;border:1px solid #323232;transition:border-color .2s}
-            .r-card:hover{border-color:#3d3d3d}
-            .r-card-title{color:#e0e0e0;margin:0 0 12px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
-            .r-label{display:flex;align-items:center;justify-content:space-between;margin:0;padding:10px 0}
-            .r-label-text{font-size:13px;color:#c0c0c0;line-height:1.4}
-            .r-helper{font-size:11px;color:#808080;margin:6px 0 0;line-height:1.5}
-            .r-upload-zone{margin-top:10px;padding:20px;background:#1e1e1e;border:2px dashed #3d3d3d;border-radius:8px;text-align:center;cursor:pointer;transition:.2s}
-            .r-upload-zone:hover{border-color:#5fb589;background:#232323}
-            .r-file-preview{margin-top:12px;padding:12px;background:#1e1e1e;border:1px solid #3d3d3d;border-radius:8px;display:flex;align-items:center;justify-content:space-between}
-            .r-file-info{display:flex;align-items:center;gap:10px;color:#c0c0c0;font-size:12px}
-            .r-remove-btn{padding:6px 12px;background:#3d2a2a;color:#ff9999;border:1px solid #4d3535;border-radius:5px;cursor:pointer;font-size:11px;font-weight:500;transition:.15s}
-            .r-remove-btn:hover{background:#4d3535;color:#ffb0b0}
-            .r-tabs{display:flex;gap:6px;margin-bottom:12px;background:#1e1e1e;padding:5px;border-radius:8px}
-            .r-tab{flex:1;padding:8px 12px;background:transparent;color:#808080;border:none;border-radius:5px;cursor:pointer;font-size:12px;font-weight:500;transition:.2s}
-            .r-tab:hover{background:#242424;color:#b5b5b5}
-            .r-tab.active{background:#2f4f3f;color:#5fb589}
-            .r-tab-content{display:none}
-            .r-tab-content.active{display:block;animation:rSlideTab .3s ease-out}
-            .r-adv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:10px}
-            .r-adv-item{padding:10px;background:#1e1e1e;border:1px solid #2a2a2a;border-radius:6px}
-            .r-adv-label{display:block;color:#999;font-size:10px;margin-bottom:5px;font-weight:500;text-transform:uppercase;letter-spacing:.5px}
+        // Inject scoped styles for the popup
+        const styleTag = document.createElement('style');
+        styleTag.textContent = `
+            @keyframes rFadeIn  { from{opacity:0}   to{opacity:1} }
+            @keyframes rSlideIn { from{opacity:0;transform:translate(-50%,-48%)scale(.97)} to{opacity:1;transform:translate(-50%,-50%)scale(1)} }
+            @keyframes rTabIn   { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
+            @keyframes rPresetIn{ from{opacity:0;transform:translateY(6px)}  to{opacity:1;transform:translateY(0)} }
+
+            .r-toggle           { position:relative;display:inline-block;width:44px;height:24px;vertical-align:middle;flex-shrink:0 }
+            .r-toggle input     { opacity:0;width:0;height:0 }
+            .r-slider           { position:absolute;cursor:pointer;inset:0;background:#3a3a3a;border-radius:24px;transition:background .25s }
+            .r-slider::before   { content:'';position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#777;border-radius:50%;transition:transform .25s,background .25s }
+            input:checked+.r-slider           { background:#2d5c45 }
+            input:checked+.r-slider::before   { background:#5fb589;transform:translateX(20px) }
+
+            .r-input            { width:100%;padding:9px 12px;background:#222;border:1px solid #383838;border-radius:7px;color:#d0d0d0;font-size:13px;box-sizing:border-box;transition:border-color .2s,background .2s }
+            .r-input:focus      { outline:none;border-color:#5fb589;background:#2a2a2a }
+            .r-card             { background:#212121;border-radius:10px;padding:18px;margin-bottom:12px;border:1px solid #2e2e2e;transition:border-color .2s }
+            .r-card:hover       { border-color:#3a3a3a }
+            .r-card-title       { color:#e8e8e8;margin:0 0 14px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;letter-spacing:.2px }
+            .r-row              { display:flex;align-items:center;justify-content:space-between;padding:8px 0;gap:16px }
+            .r-row-label        { font-size:13px;color:#bbb;line-height:1.4 }
+            .r-helper           { font-size:11px;color:#666;margin:6px 0 0;line-height:1.5 }
+
+            .r-slider-row       { display:flex;align-items:center;gap:10px;margin-top:8px }
+            .r-slider-row label { font-size:11px;color:#888;width:80px;flex-shrink:0;text-transform:uppercase;letter-spacing:.4px }
+            .r-range            { flex:1;-webkit-appearance:none;appearance:none;height:4px;background:#333;border-radius:4px;outline:none }
+            .r-range::-webkit-slider-thumb { -webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#5fb589;cursor:pointer;transition:transform .15s }
+            .r-range::-webkit-slider-thumb:hover { transform:scale(1.2) }
+            .r-range-value      { font-size:11px;color:#888;min-width:36px;text-align:right;font-family:Consolas,monospace }
+
+            .r-upload-zone      { margin-top:10px;padding:22px 16px;background:#1c1c1c;border:2px dashed #363636;border-radius:9px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s }
+            .r-upload-zone:hover{ border-color:#5fb589;background:#202020 }
+            .r-file-chip        { margin-top:10px;padding:10px 14px;background:#1c1c1c;border:1px solid #2e2e2e;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:10px }
+            .r-file-chip-info   { display:flex;align-items:center;gap:10px;color:#bbb;font-size:12px;min-width:0 }
+            .r-file-chip-name   { white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+            .r-remove-btn       { padding:5px 12px;background:#3a2222;color:#ff9999;border:1px solid #4d3333;border-radius:6px;cursor:pointer;font-size:11px;font-weight:500;flex-shrink:0;transition:background .15s }
+            .r-remove-btn:hover { background:#4d3333;color:#ffbbbb }
+
+            .r-tabs             { display:flex;gap:4px;margin-bottom:14px;background:#1c1c1c;padding:4px;border-radius:9px }
+            .r-tab              { flex:1;padding:8px 6px;background:transparent;color:#777;border:none;border-radius:6px;cursor:pointer;font-size:11px;font-weight:500;transition:background .2s,color .2s }
+            .r-tab:hover        { background:#262626;color:#aaa }
+            .r-tab.active       { background:#2d5c45;color:#5fb589 }
+            .r-tab-panel        { display:none }
+            .r-tab-panel.active { display:block;animation:rTabIn .25s ease-out }
+
+            .r-adv-grid         { display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin-top:10px }
+            .r-adv-item         { padding:10px;background:#1c1c1c;border:1px solid #272727;border-radius:7px }
+            .r-adv-item-label   { display:block;color:#888;font-size:10px;margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.5px }
+
+            .r-btn              { padding:10px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;border:none;transition:transform .15s,box-shadow .15s,background .15s }
+            .r-btn-ghost        { background:#252525;color:#aaa;border:1px solid #363636 }
+            .r-btn-ghost:hover  { background:#303030;color:#e0e0e0 }
+            .r-btn-primary      { background:linear-gradient(135deg,#5fb589,#2d5c45);color:#fff;box-shadow:0 3px 10px rgba(95,181,137,.25) }
+            .r-btn-primary:hover{ transform:translateY(-2px);box-shadow:0 6px 16px rgba(95,181,137,.35) }
+            .r-btn-primary:active{ transform:translateY(0) }
+
+            .r-preset-grid      { display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px }
+            .r-preset-card      { border-radius:10px;overflow:hidden;cursor:pointer;border:2px solid transparent;transition:border-color .2s,transform .15s,box-shadow .2s;animation:rPresetIn .3s ease-out both }
+            .r-preset-card:hover{ transform:translateY(-3px);box-shadow:0 8px 20px rgba(0,0,0,.5) }
+            .r-preset-card.selected{ border-color:#5fb589;box-shadow:0 0 0 3px rgba(95,181,137,.2) }
+            .r-preset-thumb     { height:72px;position:relative }
+            .r-preset-name      { font-size:11px;font-weight:600;padding:6px 8px;background:#1c1c1c;color:#d0d0d0;text-align:center;letter-spacing:.3px }
+            .r-select           { width:100%;padding:9px 12px;background:#222;border:1px solid #383838;border-radius:7px;color:#d0d0d0;font-size:13px;transition:border-color .2s;cursor:pointer }
+            .r-select:focus     { outline:none;border-color:#5fb589 }
+            .r-color-swatch     { width:38px;height:38px;border-radius:7px;border:none;cursor:pointer;padding:2px;background:none }
+
+            .r-notice           { padding:10px 12px;background:#1c2a1c;border:1px solid #2d5c45;border-radius:7px;font-size:11px;color:#5fb589;margin-top:10px }
+            .r-notice-warn      { background:#2a2200;border-color:#5c4a00;color:#c8a830 }
         `;
-        document.head.appendChild(style);
+        document.head.appendChild(styleTag);
 
-        // overlay
-        const overlay = Object.assign(document.createElement('div'), {
-            id: 'rolocate-settings-overlay',
-            style: 'position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:9999998;animation:rFadeIn .2s'
-        });
+        // Overlay backdrop
+        const overlay = document.createElement('div');
+        overlay.id = 'rolocate-settings-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999998;animation:rFadeIn .2s';
 
-        // popup
-        const popup = Object.assign(document.createElement('div'), {
-            id: 'rolocate-settings-popup',
-            style: 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1a1a1a;color:#d0d0d0;border:1px solid #2a2a2a;border-radius:14px;width:94%;max-width:520px;max-height:85vh;overflow:hidden;z-index:9999999;box-shadow:0 24px 48px rgba(0,0,0,.8);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;font-size:13px;animation:rSlideIn .3s cubic-bezier(.16,1,.3,1)'
-        });
+        // Main popup container
+        const popup = document.createElement('div');
+        popup.id = 'rolocate-settings-popup';
+        popup.style.cssText = `
+            position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+            background:#191919;color:#d0d0d0;border:1px solid #2a2a2a;border-radius:14px;
+            width:94%;max-width:540px;max-height:90vh;overflow:hidden;
+            z-index:9999999;box-shadow:0 28px 56px rgba(0,0,0,.85);
+            font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+            font-size:13px;display:flex;flex-direction:column;
+            animation:rSlideIn .3s cubic-bezier(.16,1,.3,1);
+        `;
 
-        // the header
-        const header = Object.assign(document.createElement('div'), {
-            innerHTML: `<div style="display:flex;align-items:center;gap:10px">
-                <div style="width:36px;height:36px;background:linear-gradient(135deg,#5fb589,#2f4f3f);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px">🎨</div>
-                <div><h2 style="margin:0;color:#fff;font-weight:600;font-size:16px;line-height:1.3">Custom Backgrounds</h2></div>`,
-            style: 'background:linear-gradient(135deg,#2a2a2a,#1e1e1e);padding:18px 20px;border-bottom:1px solid #2a2a2a;display:flex;align-items:center;justify-content:space-between'
-        });
+        // Animate out and remove the popup
+        function closePopup() {
+            overlay.style.animation = 'rFadeIn .18s reverse';
+            popup.style.animation   = 'rSlideIn .18s reverse';
+            setTimeout(() => { overlay.remove(); popup.remove(); styleTag.remove(); }, 180);
+        }
 
-        const closeBtn = Object.assign(document.createElement('button'), {
-            innerHTML: '✕',
-            style: 'background:#2a2a2a;color:#999;border:none;width:32px;height:32px;font-size:16px;cursor:pointer;border-radius:7px;transition:.15s',
-            onmouseover() { this.style.cssText += 'background:#3d3d3d;color:#fff' },
-            onmouseout() { this.style.cssText = this.style.cssText.replace(/background:#3d3d3d;color:#fff/, 'background:#2a2a2a;color:#999') },
-            onclick() {
-                popup.style.animation = 'rSlideIn .2s reverse';
-                overlay.style.animation = 'rFadeIn .2s reverse';
-                setTimeout(() => { overlay.remove(); popup.remove(); }, 200);
-            }
-        });
-        header.appendChild(closeBtn);
+        // Header with title and close button
+        const header = document.createElement('div');
+        header.style.cssText = 'background:linear-gradient(135deg,#222,#1c1c1c);padding:16px 20px;border-bottom:1px solid #252525;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;';
+        header.innerHTML = `
+            <div style="display:flex;align-items:center;gap:12px">
+                <div style="width:34px;height:34px;background:linear-gradient(135deg,#5fb589,#2d5c45);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:17px">🎨</div>
+                <div>
+                    <div style="color:#fff;font-weight:600;font-size:15px">Custom Backgrounds</div>
+                    <div style="color:#555;font-size:11px;margin-top:1px">Personalize The Roblox Website!</div>
+                </div>
+            </div>`;
+        const closeButton = document.createElement('button');
+        closeButton.textContent = '✕';
+        closeButton.style.cssText = 'background:#252525;color:#777;border:none;width:30px;height:30px;font-size:14px;cursor:pointer;border-radius:7px;transition:background .15s,color .15s;flex-shrink:0;';
+        closeButton.addEventListener('mouseover', () => { closeButton.style.background = '#333'; closeButton.style.color = '#fff'; });
+        closeButton.addEventListener('mouseout',  () => { closeButton.style.background = '#252525'; closeButton.style.color = '#777'; });
+        closeButton.addEventListener('click', closePopup);
+        header.appendChild(closeButton);
         popup.appendChild(header);
 
-        // content
-        const content = Object.assign(document.createElement('div'), {
-            style: 'padding:18px 20px;overflow-y:auto;max-height:calc(85vh - 160px)'
-        });
+        // Scrollable content area that holds all tab panels
+        const contentArea = document.createElement('div');
+        contentArea.style.cssText = 'padding:18px 20px;overflow-y:auto;flex:1;';
 
-        // the tabs ooooo
-        const tabs = Object.assign(document.createElement('div'), {
-            className: 'r-tabs',
-            innerHTML: `<button class="r-tab active" data-tab="basic">Basic</button>
-                <button class="r-tab" data-tab="appearance">Appearance</button>
-                <button class="r-tab" data-tab="advanced">Advanced</button>`
-        });
-        content.appendChild(tabs);
+        // Tab bar at the top of the content area
+        const tabBar = document.createElement('div');
+        tabBar.className = 'r-tabs';
+        tabBar.innerHTML = `
+            <button class="r-tab active" data-panel="basic">Basic</button>
+            <button class="r-tab" data-panel="filters">Filters</button>
+            <button class="r-tab" data-panel="appearance">Appearance</button>
+            <button class="r-tab" data-panel="advanced">Advanced</button>
+            <button class="r-tab" data-panel="presets">Presets ✨</button>
+        `;
+        contentArea.appendChild(tabBar);
 
-        // get localStorage helper
-        const localstoragegetternator = (key, def = '') => localStorage.getItem(`ROLOCATE_CUSTOMBACKGROUND_${key}`) || def;
-
-        // basictav
-        const basicTab = Object.assign(document.createElement('div'), {
-            className: 'r-tab-content active',
-            innerHTML: `<div class="r-card">
-                <h3 class="r-card-title"><span>🎬</span> Background Type</h3>
-                <label class="r-label"><span class="r-label-text">Animated Video Background</span>
-                <label class="r-toggle"><input type="checkbox" id="use-animated" ${localstoragegetternator('use_animated', 'true') !== 'false' ? 'checked' : ''}><span class="r-slider"></span></label></label>
-                <p class="r-helper">Choose between a video or an image</p></div>
-                <div class="r-card" id="video-section"><h3 class="r-card-title"><span>📹</span> Video Background</h3>
-                <label style="display:block;color:#c0c0c0;font-size:12px;margin-bottom:8px;font-weight:500">Video Source</label>
-                <input type="text" id="video-url" class="r-input" value="${sanitizeAttribute(localstoragegetternator('video_url'))}" placeholder="https://example.com/video.mp4">
-                <p class="r-helper">Enter a direct URL to an MP4 video file, or upload your own below</p>
-                <input type="file" id="video-file-input" accept="video/*" style="display:none">
-                <div class="r-upload-zone" id="video-upload-zone"><div style="font-size:28px;margin-bottom:6px">📤</div>
-                <div style="color:#b5b5b5;font-size:13px;font-weight:500;margin-bottom:4px">Upload Video File</div>
-                <div style="color:#808080;font-size:11px">Click to browse • Max 5MB • MP4, WebM</div></div>
-                <div id="video-file-preview" style="display:none"></div></div>
-                <div class="r-card" id="image-section"><h3 class="r-card-title"><span>🖼️</span> Image Background</h3>
-                <p class="r-helper" style="margin-bottom:10px">Upload a static image to use as your background</p>
-                <input type="file" id="image-file-input" accept="image/*" style="display:none">
-                <div class="r-upload-zone" id="image-upload-zone"><div style="font-size:28px;margin-bottom:6px">📤</div>
-                <div style="color:#b5b5b5;font-size:13px;font-weight:500;margin-bottom:4px">Upload Image File</div>
-                <div style="color:#808080;font-size:11px">Click to browse • Max 5MB • JPG, PNG, GIF</div></div>
-                <div id="image-file-preview" style="display:none"></div></div>`
-        });
-        content.appendChild(basicTab);
-
-        // appearance tab
-        const appearanceTab = Object.assign(document.createElement('div'), {
-            className: 'r-tab-content',
-            innerHTML: `<div class="r-card"><h3 class="r-card-title"><span>🎨</span> Text Color</h3>
-                <label class="r-label"><span class="r-label-text">Custom text color</span>
-                <label class="r-toggle"><input type="checkbox" id="override-text-color" ${localstoragegetternator('override_text_color') === 'true' ? 'checked' : ''}>
-                <span class="r-slider"></span></label></label>
-                <div id="text-color-group" style="margin-top:14px;transition:opacity .2s;${localstoragegetternator('override_text_color') === 'true' ? '' : 'opacity:.3;pointer-events:none'}">
-                <div style="display:flex;align-items:center;gap:10px">
-                <input type="color" id="text-color" value="${sanitizeColor(localstoragegetternator('text_color', '#ffffff'))}" style="width:50px;height:50px;border:none;border-radius:8px;cursor:pointer">
-                <div style="flex:1"><input type="text" id="text-color-hex" class="r-input" value="${sanitizeColor(localstoragegetternator('text_color', '#ffffff'))}" style="font-family:Consolas,monospace;text-align:center;font-size:12px"></div>
-                <div style="padding:14px 20px;background:#2a2a2a;border-radius:8px;border:1px solid #3d3d3d">
-                <span id="text-color-preview" style="font-size:13px;font-weight:600">Preview</span></div></div>
-                <p class="r-helper">This will change all text on the page to your selected color</p></div></div>`
-        });
-        content.appendChild(appearanceTab);
-
-        // the advanced tav
-        const advancedTab = Object.assign(document.createElement('div'), {
-            className: 'r-tab-content',
-            innerHTML: `<div class="r-card"><h3 class="r-card-title"><span>⚙️</span> Advanced Settings</h3>
-                <label class="r-label"><span class="r-label-text">Enable Advanced UI Styling</span>
-                <label class="r-toggle"><input type="checkbox" id="use-advanced" ${localstoragegetternator('use_advanced') === 'true' ? 'checked' : ''}>
-                <span class="r-slider"></span></label></label>
-                <p class="r-helper" style="margin-bottom:12px; color: red;">These styles are not documented correctly yet. So yea advanced users only.</p>
-                <div class="r-adv-grid" id="advanced-grid" style="${localstoragegetternator('use_advanced') === 'true' ? '' : 'display:none'}"></div></div>`
-        });
-        content.appendChild(advancedTab);
-        popup.appendChild(content);
-
-        // the footor of the popup
-        const footer = Object.assign(document.createElement('div'), {
-            style: 'padding:16px 20px;background:#1e1e1e;border-top:1px solid #2a2a2a;display:flex;justify-content:space-between;gap:10px'
-        });
-
-        const resetBtn = Object.assign(document.createElement('button'), {
-            textContent: '🔄 Reset All',
-            style: 'padding:10px 18px;background:#2a2a2a;color:#b5b5b5;border:1px solid #3d3d3d;border-radius:7px;cursor:pointer;font-weight:500;font-size:13px;transition:.15s',
-            onmouseover() { this.style.cssText += ';background:#3d3d3d;color:#fff' },
-            onmouseout() { this.style.cssText = this.style.cssText.replace(/;background:#3d3d3d;color:#fff/, '') }
-        });
-
-        const saveBtn = Object.assign(document.createElement('button'), {
-            textContent: '✓ Save Changes',
-            style: 'padding:10px 26px;background:linear-gradient(135deg,#5fb589,#2f4f3f);color:#fff;border:none;border-radius:7px;cursor:pointer;font-weight:600;font-size:13px;transition:.15s;box-shadow:0 3px 10px rgba(95,181,137,.3)',
-            onmouseover() { this.style.transform = 'translateY(-2px)'; this.style.boxShadow = '0 5px 14px rgba(95,181,137,.4)' },
-            onmouseout() { this.style.transform = 'translateY(0)'; this.style.boxShadow = '0 3px 10px rgba(95,181,137,.3)' }
-        });
-
-        footer.append(resetBtn, saveBtn);
-        popup.appendChild(footer);
-
-        // uhhhhhh the elemnt refreenrencessss
-        const $ = (sel) => popup.querySelector(sel);
-        const useAnimated = $('#use-animated');
-        const videoSection = $('#video-section');
-        const imageSection = $('#image-section');
-        const videoUrl = $('#video-url');
-        const overrideTextColor = $('#override-text-color');
-        const textColorGroup = $('#text-color-group');
-        const textColorInput = $('#text-color');
-        const textColorHex = $('#text-color-hex');
-        const textColorPreview = $('#text-color-preview');
-        const useAdvanced = $('#use-advanced');
-        const advancedGrid = $('#advanced-grid');
-
-        // the file upload
-        const updateFilePreview = (type) => {
-            const fileData = getFile(type);
-            const preview = document.querySelector(`#${type}-file-preview`);
-            if (fileData) {
-                preview.innerHTML = `<div class="r-file-preview"><div class="r-file-info">
-                    <span style="font-size:20px">${type === 'video' ? '📹' : '🖼️'}</span>
-                    <div><div style="font-weight:500" class="r-filename"></div>
-                    <div style="font-size:10px;color:#808080;margin-top:2px">${(fileData.size / 1024 / 1024).toFixed(2)} MB</div></div></div>
-                    <button class="r-remove-btn">Remove</button></div>`;
-
-                // no attakcs here
-                preview.querySelector('.r-filename').textContent = fileData.name;
-
-                preview.style.display = 'block';
-                preview.querySelector('.r-remove-btn').onclick = () => {
-                    deleteFile(type);
-                    preview.style.display = 'none';
-                    preview.innerHTML = '';
-                    document.querySelector(`#${type}-file-input`).value = '';
-                };
-            }
-        };
-
-        const setupFileUpload = (type) => {
-            const input = $(`#${type}-file-input`);
-            const zone = $(`#${type}-upload-zone`);
-            zone.onclick = () => input.click();
-            input.onchange = async (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    try { await saveFile(type, file); updateFilePreview(type); }
-                    catch (err) { alert(err.message); input.value = ''; }
-                }
-            };
-        };
-        setupFileUpload('video');
-        setupFileUpload('image');
-
-        // this does tab switching stuff
-        popup.querySelectorAll('.r-tab').forEach(tab => {
-            tab.onclick = () => {
-                popup.querySelectorAll('.r-tab').forEach(t => t.classList.remove('active'));
-                popup.querySelectorAll('.r-tab-content').forEach(tc => tc.classList.remove('active'));
-                tab.classList.add('active');
-                $(`.r-tab-content:nth-child(${Array.from(tab.parentNode.children).indexOf(tab) + 2})`).classList.add('active');
-            };
-        });
-
-        // update the visibiltiyiedsadasdasdjkahgdiakhgdikagsdJ
-        const updateVisibility = () => {
-            videoSection.style.display = useAnimated.checked ? 'block' : 'none';
-            imageSection.style.display = useAnimated.checked ? 'none' : 'block';
-            textColorGroup.style.opacity = overrideTextColor.checked ? '1' : '.3';
-            textColorGroup.style.pointerEvents = overrideTextColor.checked ? 'auto' : 'none';
-            textColorPreview.style.color = textColorInput.value;
-            advancedGrid.style.display = useAdvanced.checked ? 'grid' : 'none';
-        };
-
-        useAnimated.addEventListener('change', updateVisibility);
-        overrideTextColor.addEventListener('change', updateVisibility);
-        useAdvanced.addEventListener('change', updateVisibility);
-
-        textColorInput.addEventListener('input', () => {
-            textColorHex.value = textColorInput.value;
-            textColorPreview.style.color = textColorInput.value;
-        });
-
-        textColorHex.addEventListener('input', () => {
-            if (/^#[0-9A-F]{6}$/i.test(textColorHex.value)) {
-                textColorInput.value = textColorHex.value;
-                textColorPreview.style.color = textColorHex.value;
-            }
-        });
-
-        updateVisibility();
-
-        // bro finding all of these stiles on the roblox website was a pain
-        const styleMap = {
-            'profile-header': 'Profile Header', 'tabs-nav': 'Navigation Tabs', 'avatar-mask': 'Avatar Container',
-            'collections': 'Collections', 'switcher': 'Switcher', 'stats-panel': 'Statistics',
-            'search-input': 'Search Input', 'item-details': 'Item Details', 'comment-section': 'Comments',
-            'charts-container': 'Charts', 'vertical-menu': 'Vertical Menu', 'store-card-footer': 'Store Footer',
-            'submenu': 'Submenu', 'chat-body': 'Chat Body', 'dropdown-menu': 'Dropdown',
-            'select-group': 'Select Group', 'game-stats': 'Game Stats', 'server-banner': 'Server Banner',
-            'badge-rows': 'Badge Rows', 'security-container': 'Security Settings', 'security-desc': 'Security Desc',
-            'footer': 'Footer'
-        };
-
-        // random defaults
-        const defaultStyles = {
-            'profile-header': 'rgba(40,40,40,0.85)', 'tabs-nav': 'rgba(50,50,50,0.85)', 'avatar-mask': 'rgba(45,45,45,0.85)',
-            'collections': 'rgba(40,40,40,0.85)', 'switcher': 'rgba(50,50,50,0.85)', 'stats-panel': 'rgba(45,45,45,0.85)',
-            'search-input': 'rgba(40,40,40,0.85)', 'item-details': 'rgba(50,50,50,0.85)', 'comment-section': 'rgba(45,45,45,0.85)',
-            'charts-container': 'rgba(40,40,40,0.85)', 'vertical-menu': 'rgba(50,50,50,0.85)', 'store-card-footer': 'rgba(45,45,45,0.85)',
-            'submenu': 'rgba(40,40,40,0.85)', 'chat-body': 'rgba(50,50,50,0.85)', 'dropdown-menu': 'rgba(45,45,45,0.85)',
-            'select-group': 'rgba(40,40,40,0.85)', 'game-stats': 'rgba(50,50,50,0.85)', 'server-banner': 'rgba(45,45,45,0.85)',
-            'badge-rows': 'rgba(40,40,40,0.85)', 'security-container': 'rgba(50,50,50,0.85)', 'security-desc': 'rgba(45,45,45,0.85)',
-            'footer': 'rgba(40,40,40,0.85)'
-        };
-
-        Object.entries(styleMap).forEach(([key, label]) => {
-            const saved = sanitizeCssValue(localstoragegetternator(`style_${key}`, defaultStyles[key]));
-            advancedGrid.innerHTML += `<div class="r-adv-item"><label class="r-adv-label">${escapeHtmlnoxssattackvectors(label)}</label>
-                <input type="text" class="r-input" data-key="${sanitizeAttribute(key)}" value="${sanitizeAttribute(saved)}"
-                style="font-family:Consolas,monospace;font-size:11px;padding:6px" placeholder="rgba(0,0,0,0.85)"></div>`;
-        });
-
-        // save button
-        saveBtn.onclick = () => {
-            localStorage.setItem('ROLOCATE_CUSTOMBACKGROUND_use_animated', useAnimated.checked);
-            localStorage.setItem('ROLOCATE_CUSTOMBACKGROUND_video_url', videoUrl.value.trim());
-            localStorage.setItem('ROLOCATE_CUSTOMBACKGROUND_override_text_color', overrideTextColor.checked);
-            localStorage.setItem('ROLOCATE_CUSTOMBACKGROUND_text_color', textColorInput.value);
-            localStorage.setItem('ROLOCATE_CUSTOMBACKGROUND_use_advanced', useAdvanced.checked);
-            if (useAdvanced.checked) {
-                advancedGrid.querySelectorAll('input[data-key]').forEach(input => {
-                    localStorage.setItem(`ROLOCATE_CUSTOMBACKGROUND_style_${input.dataset.key}`, input.value.trim());
-                });
-            }
-            applycustombackgrounds();
-            popup.style.animation = 'rSlideIn .2s reverse';
-            overlay.style.animation = 'rFadeIn .2s reverse';
-            setTimeout(() => { overlay.remove(); popup.remove(); }, 200);
-        };
-
-        // reset button
-        resetBtn.onclick = () => {
-            const confirm = Object.assign(document.createElement('div'), {
-                innerHTML: `<h3 style="margin:0 0 10px;color:#e0e0e0;font-size:15px;font-weight:600">⚠️ Reset Everything?</h3>
-                    <p style="margin:0 0 20px;color:#b5b5b5;font-size:12px;line-height:1.5">This will restore all settings to defaults and delete all uploaded files. This cannot be undone.</p>
-                    <div style="display:flex;gap:8px;justify-content:flex-end">
-                    <button id="cancel-reset" style="padding:8px 16px;background:#2a2a2a;color:#b5b5b5;border:1px solid #3d3d3d;border-radius:7px;cursor:pointer;font-size:12px;font-weight:500;transition:.15s">Cancel</button>
-                    <button id="confirm-reset" style="padding:8px 16px;background:#5a3838;color:#ffb0b0;border:1px solid #6d4545;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;transition:.15s">Reset All</button></div>`,
-                style: 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1e1e1e;border:1px solid #3d3d3d;border-radius:10px;padding:24px;z-index:99999999;box-shadow:0 20px 50px rgba(0,0,0,.9);animation:rSlideIn .2s;min-width:320px'
+        // Helper: builds a labeled range slider row and wires up its live value display
+        function makeRangeRow(labelText, settingKey, min, max, step, defaultVal, suffix = '') {
+            const currentVal = parseFloat(getSetting(settingKey) !== '' ? getSetting(settingKey) : defaultVal);
+            const row = document.createElement('div');
+            row.className = 'r-slider-row';
+            row.innerHTML = `
+                <label>${labelText}</label>
+                <input type="range" class="r-range" data-setting="${settingKey}" min="${min}" max="${max}" step="${step}" value="${currentVal}">
+                <span class="r-range-value">${currentVal}${suffix}</span>
+            `;
+            const rangeInput   = row.querySelector('.r-range');
+            const valueDisplay = row.querySelector('.r-range-value');
+            rangeInput.addEventListener('input', () => {
+                valueDisplay.textContent = parseFloat(rangeInput.value).toFixed(step < 1 ? 2 : 0) + suffix;
             });
-            document.body.appendChild(confirm);
+            return row;
+        }
 
-            const cancel = confirm.querySelector('#cancel-reset');
-            const confirmBtn = confirm.querySelector('#confirm-reset');
-            cancel.onmouseover = () => { cancel.style.background = '#3d3d3d'; cancel.style.color = '#fff'; };
-            cancel.onmouseout = () => { cancel.style.background = '#2a2a2a'; cancel.style.color = '#b5b5b5'; };
-            confirmBtn.onmouseover = () => confirmBtn.style.background = '#6d4545';
-            confirmBtn.onmouseout = () => confirmBtn.style.background = '#5a3838';
-            cancel.onclick = () => confirm.remove();
-            confirmBtn.onclick = () => {
-                Object.keys(localStorage).forEach(k => { if (k.startsWith('ROLOCATE_CUSTOMBACKGROUND_')) localStorage.removeItem(k); });
-                deleteFile('video');
-                deleteFile('image');
-                confirm.remove();
-                location.reload();
-            };
-        };
+        // BASIC TAB - video/image source selection and upload
+        const basicPanel = document.createElement('div');
+        basicPanel.className = 'r-tab-panel active';
+        basicPanel.dataset.panel = 'basic';
+        basicPanel.innerHTML = `
+            <div class="r-card">
+                <h3 class="r-card-title">🎬 Background Type</h3>
+                <div class="r-row">
+                    <span class="r-row-label">Animated video background</span>
+                    <label class="r-toggle">
+                        <input type="checkbox" id="rBG-use-animated" ${getSetting('use_animated', 'true') !== 'false' ? 'checked' : ''}>
+                        <span class="r-slider"></span>
+                    </label>
+                </div>
+                <p class="r-helper">Toggle between a looping video or a static image.</p>
+            </div>
+            <div class="r-card" id="rBG-video-section">
+                <h3 class="r-card-title">📹 Video Background</h3>
+                <label style="display:block;color:#999;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Direct URL</label>
+                <input type="text" id="rBG-video-url" class="r-input" value="${sanitizeAttribute(getSetting('video_url'))}" placeholder="https://example.com/background.mp4">
+                <p class="r-helper">Or upload a file below (max 5 MB recommended; 20 MB hard limit).</p>
+                <input type="file" id="rBG-video-file-input" accept="video/*" style="display:none">
+                <div class="r-upload-zone" id="rBG-video-upload-zone">
+                    <div style="font-size:26px;margin-bottom:6px">📤</div>
+                    <div style="color:#b0b0b0;font-size:13px;font-weight:500;margin-bottom:3px">Upload Video</div>
+                    <div style="color:#666;font-size:11px">MP4 · WebM · OGG</div>
+                </div>
+                <div id="rBG-video-file-preview"></div>
+            </div>
+            <div class="r-card" id="rBG-image-section">
+                <h3 class="r-card-title">🖼️ Image Background</h3>
+                <p class="r-helper" style="margin-bottom:10px">Upload a static image (max 5 MB recommended; 20 MB hard limit).</p>
+                <input type="file" id="rBG-image-file-input" accept="image/*" style="display:none">
+                <div class="r-upload-zone" id="rBG-image-upload-zone">
+                    <div style="font-size:26px;margin-bottom:6px">📤</div>
+                    <div style="color:#b0b0b0;font-size:13px;font-weight:500;margin-bottom:3px">Upload Image</div>
+                    <div style="color:#666;font-size:11px">JPG · PNG · GIF · WebP</div>
+                </div>
+                <div id="rBG-image-file-preview"></div>
+            </div>
+        `;
+        contentArea.appendChild(basicPanel);
+
+        // FILTERS TAB - blur, opacity, brightness, fit, blend, overlay
+        const filtersPanel = document.createElement('div');
+        filtersPanel.className = 'r-tab-panel';
+        filtersPanel.dataset.panel = 'filters';
+
+        // Filter sliders card
+        const filtersCard = document.createElement('div');
+        filtersCard.className = 'r-card';
+        filtersCard.innerHTML = '<h3 class="r-card-title">🎛️ Background Filters</h3>';
+        filtersCard.appendChild(makeRangeRow('Blur',       'blur',       0, 20, 0.5,  '0', 'px'));
+        filtersCard.appendChild(makeRangeRow('Opacity',    'opacity',    0,  1, 0.05, '1', ''));
+        filtersCard.appendChild(makeRangeRow('Brightness', 'brightness', 0,  2, 0.05, '1', ''));
+
+        // Object-fit and blend mode dropdowns
+        const fitCard = document.createElement('div');
+        fitCard.className = 'r-card';
+        fitCard.innerHTML = `
+            <h3 class="r-card-title">📐 Fit &amp; Blend</h3>
+            <div class="r-row">
+                <span class="r-row-label">Object fit</span>
+                <select id="rBG-scale" class="r-select" style="max-width:150px">
+                    <option value="cover"   ${getSetting('scale', 'cover') === 'cover'   ? 'selected' : ''}>Cover (fill)</option>
+                    <option value="contain" ${getSetting('scale', 'cover') === 'contain' ? 'selected' : ''}>Contain (letterbox)</option>
+                    <option value="fill"    ${getSetting('scale', 'cover') === 'fill'    ? 'selected' : ''}>Stretch</option>
+                    <option value="none"    ${getSetting('scale', 'cover') === 'none'    ? 'selected' : ''}>Original size</option>
+                </select>
+            </div>
+            <div class="r-row" style="margin-top:4px">
+                <span class="r-row-label">Blend mode</span>
+                <select id="rBG-blend-mode" class="r-select" style="max-width:150px">
+                    ${['normal','multiply','screen','overlay','darken','lighten','color-dodge','color-burn','hard-light','soft-light','difference','exclusion','hue','saturation','color','luminosity']
+                        .map(mode => `<option value="${mode}" ${getSetting('blend_mode', 'normal') === mode ? 'selected' : ''}>${mode.charAt(0).toUpperCase() + mode.slice(1)}</option>`)
+                        .join('')}
+                </select>
+            </div>
+        `;
+
+        // Color overlay card (only visible when no background is set)
+        const overlayCard = document.createElement('div');
+        overlayCard.className = 'r-card';
+        const overlayColorVal   = getSetting('overlay_color', '#000000');
+        const overlayOpacityVal = parseFloat(getSetting('overlay_opacity', '0'));
+        overlayCard.innerHTML = `
+            <h3 class="r-card-title">🌈 Color Overlay</h3>
+            <div class="r-notice r-notice-warn">
+                ⚠️ The color overlay only appears when <strong>no custom background</strong> is uploaded or set.
+                With a video or image loaded it is automatically hidden so your background shows through cleanly.
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+                <input type="color" id="rBG-overlay-color" value="${sanitizeColor(overlayColorVal)}" class="r-color-swatch" style="width:48px;height:38px">
+                <input type="text"  id="rBG-overlay-color-hex" class="r-input" value="${sanitizeColor(overlayColorVal)}" style="font-family:Consolas,monospace;font-size:12px;max-width:110px">
+                <span style="font-size:11px;color:#666;flex:1">Overlay tint color</span>
+            </div>
+        `;
+        overlayCard.appendChild(makeRangeRow('Intensity', 'overlay_opacity', 0, 1, 0.05, overlayOpacityVal.toString(), ''));
+
+        filtersPanel.append(filtersCard, fitCard, overlayCard);
+        contentArea.appendChild(filtersPanel);
+
+        // APPEARANCE TAB - text color override
+        const appearancePanel = document.createElement('div');
+        appearancePanel.className = 'r-tab-panel';
+        appearancePanel.dataset.panel = 'appearance';
+        const savedTextColor = sanitizeColor(getSetting('text_color', '#ffffff'));
+        const textOverrideOn = getSetting('override_text_color') === 'true';
+        appearancePanel.innerHTML = `
+            <div class="r-card">
+                <h3 class="r-card-title">🎨 Text Color Override</h3>
+                <div class="r-row">
+                    <span class="r-row-label">Override all text color</span>
+                    <label class="r-toggle">
+                        <input type="checkbox" id="rBG-override-text-color" ${textOverrideOn ? 'checked' : ''}>
+                        <span class="r-slider"></span>
+                    </label>
+                </div>
+                <div id="rBG-text-color-group" style="margin-top:14px;transition:opacity .2s;${textOverrideOn ? '' : 'opacity:.35;pointer-events:none'}">
+                    <div style="display:flex;align-items:center;gap:10px">
+                        <input type="color" id="rBG-text-color" value="${savedTextColor}" class="r-color-swatch" style="width:48px;height:48px">
+                        <input type="text"  id="rBG-text-color-hex" class="r-input" value="${savedTextColor}" style="font-family:Consolas,monospace;text-align:center;font-size:12px;max-width:110px">
+                        <div style="flex:1;padding:13px 16px;background:#222;border-radius:8px;border:1px solid #333;text-align:center">
+                            <span id="rBG-text-color-preview" style="font-size:13px;font-weight:600;color:${savedTextColor}">Preview Text</span>
+                        </div>
+                    </div>
+                    <p class="r-helper">Forces every text element on the page to this color.</p>
+                </div>
+            </div>
+        `;
+        contentArea.appendChild(appearancePanel);
+
+        // ADVANCED TAB - per-element background color overrides
+        const advancedPanel = document.createElement('div');
+        advancedPanel.className = 'r-tab-panel';
+        advancedPanel.dataset.panel = 'advanced';
+        const advancedEnabled = getSetting('use_advanced') === 'true';
+        advancedPanel.innerHTML = `
+            <div class="r-card">
+                <h3 class="r-card-title">⚙️ Advanced UI Styling</h3>
+                <div class="r-row">
+                    <span class="r-row-label">Enable element-level background overrides</span>
+                    <label class="r-toggle">
+                        <input type="checkbox" id="rBG-use-advanced" ${advancedEnabled ? 'checked' : ''}>
+                        <span class="r-slider"></span>
+                    </label>
+                </div>
+                <p class="r-helper" style="color:#b05050;margin-bottom:12px">Here you can individually change each element of the roblox page!</p>
+                <div id="rBG-adv-controls" style="${advancedEnabled ? '' : 'display:none'}">
+                    <div style="padding:14px;background:#1a1a1a;border:1px solid #2e2e2e;border-radius:9px;margin-bottom:14px">
+                        <div class="r-row" style="padding:0 0 10px">
+                            <span style="font-size:12px;font-weight:600;color:#ccc">🎨 Apply to all elements at once</span>
+                            <label class="r-toggle">
+                                <input type="checkbox" id="rBG-adv-global-toggle">
+                                <span class="r-slider"></span>
+                            </label>
+                        </div>
+                        <div id="rBG-adv-global-inputs" style="opacity:.35;pointer-events:none;transition:opacity .2s">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                                <input type="color" id="rBG-adv-global-color" class="r-color-swatch" value="#1a1a1a" style="width:36px;height:32px">
+                                <div id="rBG-adv-global-preview" style="flex:1;height:32px;border-radius:6px;border:1px solid #333"></div>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:8px">
+                                <span style="font-size:10px;color:#666;width:52px;flex-shrink:0">Opacity</span>
+                                <input type="range" class="r-range" id="rBG-adv-global-opacity" min="0" max="100" step="1" value="90">
+                                <span id="rBG-adv-global-opacity-val" style="font-size:11px;color:#888;min-width:32px;text-align:right;font-family:Consolas,monospace">90%</span>
+                            </div>
+                            <button id="rBG-adv-global-apply" style="margin-top:10px;width:100%;padding:8px;background:#2d5c45;color:#5fb589;border:none;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;transition:background .15s">Apply to all elements</button>
+                        </div>
+                    </div>
+                    <div class="r-adv-grid" id="rBG-adv-grid"></div>
+                </div>
+            </div>
+        `;
+        contentArea.appendChild(advancedPanel);
+
+        // PRESETS TAB - themes
+        const PRESET_PROTECTED_KEYS = new Set(['use_animated', 'video_url']);
+
+        // Element keys that get the shared uiColor applied when a preset is used
+        const PRESET_UI_KEYS = [
+            'header-bar', 'left-sidebar', 'sidebar-wrapper', 'main-content',
+            'footer', 'profile-header', 'avatar-mask', 'chat-body', 'dropdown-menu',
+            'filters-bar', 'avatar-overlays', 'avatar-toggle-btn', 'server-list-empty',
+            'catalog-header', 'search-bar', 'topic-chips', 'action-buttons',
+            'groups-sidebar', 'item-cards', 'catalog-header-bar', 'search-inputs',
+            'catalog-filters', 'greeting-header', 'quicklaunch', 'friends-carousel',
+            'best-friends',
+            // note: 'sidebar-items-text' is intentionally excluded
+        ];
+
+        // Helper: expands a single rgba string into all the style_ keys for a preset
+        function buildPresetStyles(rgbaColor) {
+            const out = {};
+            PRESET_UI_KEYS.forEach(k => { out[`style_${k}`] = rgbaColor; });
+            return out;
+        }
+
+        const PRESETS = [
+            { id: 'oleddark',  name: 'Oled Dark',  thumb: 'linear-gradient(135deg,#000000,#000000,#000000)',
+              settings: { blur:'0', opacity:'1', brightness:'1', scale:'cover', blend_mode:'normal', overlay_color:'#000000', overlay_opacity:'0.4',  use_advanced:'true', ...buildPresetStyles('rgba(0,0,0,1)') }},
+            { id: 'clean',     name: 'Clean Dark', thumb: 'linear-gradient(135deg,#141414,#1e1e1e,#191919)',
+              settings: { blur:'0', opacity:'1', brightness:'1', scale:'cover', blend_mode:'normal', overlay_color:'#000000', overlay_opacity:'0',    use_advanced:'true', ...buildPresetStyles('rgba(24,24,24,1)') }},
+            { id: 'ocean',     name: 'Ocean',      thumb: 'linear-gradient(135deg,#020e1a,#053a5c,#071f3a)',
+              settings: { blur:'0', opacity:'1', brightness:'1', scale:'cover', blend_mode:'normal', overlay_color:'#000f1f', overlay_opacity:'0.35', use_advanced:'true', ...buildPresetStyles('rgba(3,22,42,1)') }},
+            { id: 'forest',    name: 'Forest',     thumb: 'linear-gradient(135deg,#0d1f0f,#1a3d20,#0f2a1a)',
+              settings: { blur:'0', opacity:'1', brightness:'1', scale:'cover', blend_mode:'normal', overlay_color:'#001a08', overlay_opacity:'0.3',  use_advanced:'true', ...buildPresetStyles('rgba(12,32,18,1)') }},
+            { id: 'crimson',   name: 'Crimson',    thumb: 'linear-gradient(135deg,#1a0505,#3d0f0f,#1f0808)',
+              settings: { blur:'0', opacity:'1', brightness:'1', scale:'cover', blend_mode:'normal', overlay_color:'#1a0000', overlay_opacity:'0.35', use_advanced:'true', ...buildPresetStyles('rgba(38,10,10,1)') }},
+            { id: 'amber',     name: 'Amber',      thumb: 'linear-gradient(135deg,#1a0c00,#3d1e00,#261000)',
+              settings: { blur:'0', opacity:'1', brightness:'1', scale:'cover', blend_mode:'normal', overlay_color:'#1a0800', overlay_opacity:'0.3',  use_advanced:'true', ...buildPresetStyles('rgba(35,17,0,1)') }},
+            { id: 'violet',    name: 'Violet',     thumb: 'linear-gradient(135deg,#0e0520,#2a0d4f,#1a0838)',
+              settings: { blur:'0', opacity:'1', brightness:'1', scale:'cover', blend_mode:'normal', overlay_color:'#0a0020', overlay_opacity:'0.35', use_advanced:'true', ...buildPresetStyles('rgba(20,8,50,1)') }},
+            { id: 'rose',      name: 'Rose',       thumb: 'linear-gradient(135deg,#1a0510,#3d0f25,#280818)',
+              settings: { blur:'0', opacity:'1', brightness:'1', scale:'cover', blend_mode:'normal', overlay_color:'#1a0010', overlay_opacity:'0.3',  use_advanced:'true', ...buildPresetStyles('rgba(40,8,22,1)') }},
+            { id: 'slate',     name: 'Slate',      thumb: 'linear-gradient(135deg,#0d1014,#1c2530,#131a22)',
+              settings: { blur:'0', opacity:'1', brightness:'1', scale:'cover', blend_mode:'normal', overlay_color:'#080c10', overlay_opacity:'0.3',  use_advanced:'true', ...buildPresetStyles('rgba(16,22,30,1)') }},
+            { id: 'copper',    name: 'Copper',     thumb: 'linear-gradient(135deg,#1a0e00,#3d2500,#2e1800)',
+              settings: { blur:'0', opacity:'1', brightness:'1', scale:'cover', blend_mode:'normal', overlay_color:'#150a00', overlay_opacity:'0.3',  use_advanced:'true', ...buildPresetStyles('rgba(38,22,0,1)') }},
+            { id: 'teal',      name: 'Teal',       thumb: 'linear-gradient(135deg,#001a18,#003d36,#002820)',
+              settings: { blur:'0', opacity:'1', brightness:'1', scale:'cover', blend_mode:'normal', overlay_color:'#001210', overlay_opacity:'0.3',  use_advanced:'true', ...buildPresetStyles('rgba(0,32,28,1)') }},
+            { id: 'graphite',  name: 'Graphite',   thumb: 'linear-gradient(135deg,#181818,#2e2e2e,#222222)',
+              settings: { blur:'0', opacity:'1', brightness:'1', scale:'cover', blend_mode:'normal', overlay_color:'#111111', overlay_opacity:'0.2',  use_advanced:'true', ...buildPresetStyles('rgba(30,30,30,1)') }},
+        ];
+
+        const presetsPanel = document.createElement('div');
+        presetsPanel.className = 'r-tab-panel';
+        presetsPanel.dataset.panel = 'presets';
+        const presetsCard = document.createElement('div');
+        presetsCard.className = 'r-card';
+        presetsCard.innerHTML = `
+            <h3 class="r-card-title">✨ Theme Presets</h3>
+            <p class="r-helper" style="margin-bottom:6px">Pick a preset to apply a curated look. Fine-tune it in the other tabs afterwards.</p>
+            <div class="r-notice" style="margin-bottom:14px">
+                🎬 Your Background Videos Will Still Show Through.
+            </div>
+            <div class="r-preset-grid" id="rBG-preset-grid"></div>
+            <div id="rBG-preset-active-label" style="display:none;margin-top:12px" class="r-notice">
+                ✓ <span id="rBG-preset-active-name"></span> applied - hit Save &amp; Apply to keep it.
+            </div>
+        `;
+        presetsPanel.appendChild(presetsCard);
+        contentArea.appendChild(presetsPanel);
+        popup.appendChild(contentArea);
+
+
+        // Footer with reset and save buttons
+        const footer = document.createElement('div');
+        footer.style.cssText = 'padding:14px 20px;background:#1c1c1c;border-top:1px solid #252525;display:flex;justify-content:space-between;gap:10px;flex-shrink:0;';
+        const resetButton = document.createElement('button');
+        resetButton.className   = 'r-btn r-btn-ghost';
+        resetButton.textContent = '🔄 Reset All';
+        const saveButton = document.createElement('button');
+        saveButton.className   = 'r-btn r-btn-primary';
+        saveButton.textContent = '✓ Save & Apply';
+        footer.append(resetButton, saveButton);
+        popup.appendChild(footer);
         document.body.append(overlay, popup);
 
-        updateFilePreview('video');
-        updateFilePreview('image');
+
+        // Shorthand to find elements inside the popup by id
+        function find(id) { return popup.querySelector(`#${id}`); }
+
+        // Cache all frequently accessed DOM references up front
+        const useAnimatedToggle  = find('rBG-use-animated');
+        const videoSection       = find('rBG-video-section');
+        const imageSection       = find('rBG-image-section');
+        const videoUrlInput      = find('rBG-video-url');
+        const overrideTextToggle = find('rBG-override-text-color');
+        const textColorGroup     = find('rBG-text-color-group');
+        const textColorPicker    = find('rBG-text-color');
+        const textColorHexInput  = find('rBG-text-color-hex');
+        const textColorPreview   = find('rBG-text-color-preview');
+        const useAdvancedToggle  = find('rBG-use-advanced');
+        const advancedControls   = find('rBG-adv-controls');
+        const advancedGrid       = find('rBG-adv-grid');
+        const overlayColorPicker = find('rBG-overlay-color');
+        const overlayColorHex    = find('rBG-overlay-color-hex');
+        const presetGrid         = find('rBG-preset-grid');
+        // These two are used in both applyPreset and collectAndSave, so cache them here
+        const scaleEl            = find('rBG-scale');
+        const blendEl            = find('rBG-blend-mode');
+
+
+        // Tab click handler - switches active tab and panel
+        tabBar.addEventListener('click', event => {
+            const clickedTab = event.target.closest('.r-tab');
+            if (!clickedTab) return;
+            tabBar.querySelectorAll('.r-tab').forEach(tab => tab.classList.remove('active'));
+            contentArea.querySelectorAll('.r-tab-panel').forEach(panel => panel.classList.remove('active'));
+            clickedTab.classList.add('active');
+            contentArea.querySelector(`.r-tab-panel[data-panel="${clickedTab.dataset.panel}"]`).classList.add('active');
+        });
+
+        // Sync visibility of sections based on toggle states
+        function updateVisibility() {
+            videoSection.style.display         = useAnimatedToggle.checked  ? 'block' : 'none';
+            imageSection.style.display         = useAnimatedToggle.checked  ? 'none'  : 'block';
+            textColorGroup.style.opacity       = overrideTextToggle.checked ? '1'     : '.35';
+            textColorGroup.style.pointerEvents = overrideTextToggle.checked ? 'auto'  : 'none';
+            advancedControls.style.display     = useAdvancedToggle.checked  ? 'block' : 'none';
+            if (textColorPreview) textColorPreview.style.color = textColorPicker.value;
+        }
+        useAnimatedToggle.addEventListener('change', updateVisibility);
+        overrideTextToggle.addEventListener('change', updateVisibility);
+        useAdvancedToggle.addEventListener('change', updateVisibility);
+        updateVisibility();
+
+
+        // Global advanced color/opacity controls (apply one color to all elements)
+        const globalToggle     = find('rBG-adv-global-toggle');
+        const globalInputs     = find('rBG-adv-global-inputs');
+        const globalColorPick  = find('rBG-adv-global-color');
+        const globalPreview    = find('rBG-adv-global-preview');
+        const globalOpacity    = find('rBG-adv-global-opacity');
+        const globalOpacityVal = find('rBG-adv-global-opacity-val');
+        const globalApplyBtn   = find('rBG-adv-global-apply');
+
+        // Update the color preview swatch with the current color + opacity
+        function updateGlobalPreview() {
+            const alpha = Math.round((globalOpacity.value / 100) * 255).toString(16).padStart(2, '0');
+            globalPreview.style.background = globalColorPick.value + alpha;
+        }
+
+        globalToggle.addEventListener('change', () => {
+            globalInputs.style.opacity       = globalToggle.checked ? '1'    : '.35';
+            globalInputs.style.pointerEvents = globalToggle.checked ? 'auto' : 'none';
+        });
+        globalColorPick.addEventListener('input', updateGlobalPreview);
+        globalOpacity.addEventListener('input', () => {
+            globalOpacityVal.textContent = globalOpacity.value + '%';
+            updateGlobalPreview();
+        });
+        globalApplyBtn.addEventListener('mouseover', () => globalApplyBtn.style.background = '#3d7a5c');
+        globalApplyBtn.addEventListener('mouseout',  () => globalApplyBtn.style.background = '#2d5c45');
+
+        // Push the global color+opacity to every non-text element in the grid
+        globalApplyBtn.addEventListener('click', () => {
+            const [r, g, b] = hexToRgb(globalColorPick.value);
+            const alpha      = (globalOpacity.value / 100).toFixed(2);
+            advancedGrid.querySelectorAll('[data-key]').forEach(item => {
+                const meta   = advancedStyleMap[item.dataset.key];
+                if (meta.isText) return; // skip text color entries
+                const picker = item.querySelector('.adv-color-pick');
+                if (!picker) return;
+                const opRange = item.querySelector('.adv-opacity-range');
+                if (opRange) { opRange.value = globalOpacity.value; opRange.dispatchEvent(new Event('input')); }
+                picker.value = globalColorPick.value;
+                picker.dispatchEvent(new Event('input'));
+            });
+        });
+        updateGlobalPreview();
+
+
+        // Sync color picker <-> hex text input for text color
+        textColorPicker.addEventListener('input', () => {
+            textColorHexInput.value = textColorPicker.value;
+            textColorPreview.style.color = textColorPicker.value;
+        });
+        textColorHexInput.addEventListener('input', () => {
+            if (/^#[0-9A-F]{6}$/i.test(textColorHexInput.value)) {
+                textColorPicker.value = textColorHexInput.value;
+                textColorPreview.style.color = textColorHexInput.value;
+            }
+        });
+
+        // Sync color picker <-> hex text input for overlay color
+        if (overlayColorPicker && overlayColorHex) {
+            overlayColorPicker.addEventListener('input', () => { overlayColorHex.value = overlayColorPicker.value; });
+            overlayColorHex.addEventListener('input', () => {
+                if (/^#[0-9A-F]{6}$/i.test(overlayColorHex.value)) overlayColorPicker.value = overlayColorHex.value;
+            });
+        }
+
+
+        // Show a chip for any already-saved file, with a remove button
+        function refreshFilePreview(type) {
+            const savedFile  = getSavedFile(type);
+            const previewDiv = find(`rBG-${type}-file-preview`);
+            previewDiv.innerHTML = '';
+            if (!savedFile) return;
+            const chip = document.createElement('div');
+            chip.className = 'r-file-chip';
+            chip.innerHTML = `
+                <div class="r-file-chip-info">
+                    <span style="font-size:20px">${type === 'video' ? '📹' : '🖼️'}</span>
+                    <div style="min-width:0">
+                        <div class="r-file-chip-name"></div>
+                        <div style="font-size:10px;color:#666;margin-top:2px">${(savedFile.size / 1024 / 1024).toFixed(2)} MB</div>
+                    </div>
+                </div>
+                <button class="r-remove-btn">Remove</button>
+            `;
+            chip.querySelector('.r-file-chip-name').textContent = savedFile.name;
+            chip.querySelector('.r-remove-btn').addEventListener('click', () => {
+                deleteSavedFile(type);
+                find(`rBG-${type}-file-input`).value = '';
+                refreshFilePreview(type);
+            });
+            previewDiv.appendChild(chip);
+        }
+
+        // Wire up click-to-upload for a given media type
+        function setupFileUpload(type) {
+            const fileInput  = find(`rBG-${type}-file-input`);
+            const uploadZone = find(`rBG-${type}-upload-zone`);
+            uploadZone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', async event => {
+                const file = event.target.files[0];
+                if (!file) return;
+                try { await saveFile(type, file); refreshFilePreview(type); }
+                catch (err) { alert(err.message); fileInput.value = ''; }
+            });
+        }
+
+        // Init file upload and preview for both types
+        ['video', 'image'].forEach(t => { setupFileUpload(t); refreshFilePreview(t); });
+
+
+        // Color utility functions used across the advanced grid and presets
+        function parseColor(str) {
+            const rgba = str.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+            if (rgba) return { r: +rgba[1], g: +rgba[2], b: +rgba[3], a: rgba[4] !== undefined ? +rgba[4] : 1 };
+            const hex = str.match(/^#([0-9a-f]{6})$/i);
+            if (hex) {
+                const n = parseInt(hex[1], 16);
+                return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255, a: 1 };
+            }
+            return { r: 25, g: 25, b: 25, a: 0.9 }; // safe fallback
+        }
+        function toRgba(r, g, b, a)  { return `rgba(${r},${g},${b},${a})`; }
+        function rgbToHex(r, g, b)   { return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join(''); }
+        function hexToRgb(hex)       { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+
+
+        // Map of all element keys for the advanced grid.
+        // isText marks entries that are text color (no opacity slider).
+        // Omitting isText defaults to false (background color + opacity).
+        const advancedStyleMap = {
+            'header-bar':         { label: 'Header Bar',         default: 'rgba(25,25,25,0.92)' },
+            'left-sidebar':       { label: 'Left Sidebar',       default: 'rgba(22,22,22,0.90)' },
+            'sidebar-wrapper':    { label: 'Sidebar Wrapper',    default: 'rgba(22,22,22,0.90)' },
+            'main-content':       { label: 'Main Content',       default: 'rgba(28,28,28,0.85)' },
+            'footer':             { label: 'Footer',             default: 'rgba(20,20,20,0.92)' },
+            'profile-header':     { label: 'Profile Header',     default: 'rgba(24,24,24,0.88)' },
+            'avatar-mask':        { label: 'Avatar Container',   default: 'rgba(26,26,26,0.90)' },
+            'chat-body':          { label: 'Chat Body',          default: 'rgba(18,18,18,0.92)' },
+            'dropdown-menu':      { label: 'Dropdown',           default: 'rgba(22,22,22,0.95)' },
+            'filters-bar':        { label: 'Filters Bar',        default: 'rgba(22,22,22,0.90)' },
+            'avatar-overlays':    { label: 'Avatar Overlays',    default: 'rgba(20,20,20,0.85)' },
+            'avatar-toggle-btn':  { label: 'Avatar Toggle Btn',  default: 'rgba(30,30,30,0.95)' },
+            'server-list-empty':  { label: 'Server List Empty',  default: 'rgba(24,24,24,0.88)' },
+            'catalog-header':     { label: 'Catalog Header',     default: 'rgba(25,25,25,0.92)' },
+            'search-bar':         { label: 'Search Bar',         default: 'rgba(22,22,22,0.90)' },
+            'topic-chips':        { label: 'Topic Chips',        default: 'rgba(26,26,26,0.88)' },
+            'action-buttons':     { label: 'Action Buttons',     default: 'rgba(28,28,28,0.95)' },
+            'groups-sidebar':     { label: 'Groups Sidebar',     default: 'rgba(22,22,22,0.90)' },
+            'item-cards':         { label: 'Item Cards',         default: 'rgba(26,26,26,0.90)' },
+            'catalog-header-bar': { label: 'Catalog Header Bar', default: 'rgba(25,25,25,0.92)' },
+            'search-inputs':      { label: 'Search Inputs',      default: 'rgba(22,22,22,0.90)' },
+            'catalog-filters':    { label: 'Catalog Filters',    default: 'rgba(23,23,23,0.90)' },
+            'greeting-header':  { label: 'Greeting Header',     default: 'rgba(26,26,26,0.90)' },
+            'quicklaunch':      { label: 'Quick Launch Games',   default: 'rgba(26,28,35,0.90)' },
+            'friends-carousel': { label: 'Friends Carousel',     default: 'rgba(26,28,35,0.90)' },
+            'best-friends': { label: 'Best Friends', default: 'rgba(26,28,35,0.90)' },
+            'sidebar-items-text': { label: 'Sidebar Text Color', default: '#d0d0d0', isText: true },
+        };
+
+        // Build each element's color card in the advanced grid
+        Object.entries(advancedStyleMap).forEach(([key, meta]) => {
+            const savedValue = getSetting(`style_${key}`, meta.default);
+            const parsed     = parseColor(savedValue);
+
+            const item = document.createElement('div');
+            item.className = 'r-adv-item';
+            item.style.cssText = 'padding:12px;';
+            item.dataset.key = key;
+
+            if (meta.isText) {
+                // Text color entry: just a color picker, no opacity slider
+                const hexVal = rgbToHex(parsed.r, parsed.g, parsed.b);
+                item.innerHTML = `
+                    <label class="r-adv-item-label">${escapeHtmlnoxssattackvectors(meta.label)}</label>
+                    <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+                        <input type="color" class="r-color-swatch adv-color-pick" value="${hexVal}" style="width:36px;height:32px">
+                        <div class="adv-color-preview" style="flex:1;height:32px;border-radius:6px;background:${hexVal};border:1px solid #333"></div>
+                    </div>
+                `;
+                const picker  = item.querySelector('.adv-color-pick');
+                const preview = item.querySelector('.adv-color-preview');
+                picker.addEventListener('input', () => { preview.style.background = picker.value; });
+            } else {
+                // Background color entry: color picker + opacity slider
+                const hexVal = rgbToHex(parsed.r, parsed.g, parsed.b);
+                const opVal  = Math.round(parsed.a * 100);
+                item.innerHTML = `
+                    <label class="r-adv-item-label">${escapeHtmlnoxssattackvectors(meta.label)}</label>
+                    <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+                        <input type="color" class="r-color-swatch adv-color-pick" value="${hexVal}" style="width:36px;height:32px">
+                        <div class="adv-color-preview" style="flex:1;height:32px;border-radius:6px;border:1px solid #333;
+                            background:linear-gradient(90deg,${hexVal}${Math.round(opVal * 2.55).toString(16).padStart(2, '00')},${hexVal}${Math.round(opVal * 2.55).toString(16).padStart(2, '00')})"></div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+                        <span style="font-size:10px;color:#666;width:52px;flex-shrink:0">Opacity</span>
+                        <input type="range" class="r-range adv-opacity-range" min="0" max="100" step="1" value="${opVal}">
+                        <span class="adv-opacity-val" style="font-size:11px;color:#888;min-width:32px;text-align:right;font-family:Consolas,monospace">${opVal}%</span>
+                    </div>
+                `;
+                const picker  = item.querySelector('.adv-color-pick');
+                const preview = item.querySelector('.adv-color-preview');
+                const opRange = item.querySelector('.adv-opacity-range');
+                const opLabel = item.querySelector('.adv-opacity-val');
+
+                // Redraw the checkerboard-backed preview whenever color or opacity changes
+                function updatePreview() {
+                    const alpha = Math.round((opRange.value / 100) * 255).toString(16).padStart(2, '0');
+                    preview.style.background = `${picker.value}${alpha}`;
+                    preview.style.backgroundImage = `linear-gradient(${picker.value}${alpha},${picker.value}${alpha}),
+                        repeating-conic-gradient(#444 0% 25%,#2a2a2a 0% 50%)`;
+                    preview.style.backgroundSize = 'auto,8px 8px';
+                    opLabel.textContent = opRange.value + '%';
+                }
+                picker.addEventListener('input', updatePreview);
+                opRange.addEventListener('input', updatePreview);
+                updatePreview();
+            }
+
+            advancedGrid.appendChild(item);
+        });
+
+        // Read current values from all advanced grid items and return as a patch object
+        function readAdvancedValues() {
+            const result = {};
+            advancedGrid.querySelectorAll('[data-key]').forEach(item => {
+                const key    = item.dataset.key;
+                const meta   = advancedStyleMap[key];
+                const picker = item.querySelector('.adv-color-pick');
+                if (!picker) return;
+                if (meta.isText) {
+                    result[`style_${key}`] = picker.value;
+                } else {
+                    const opRange = item.querySelector('.adv-opacity-range');
+                    const [r, g, b] = hexToRgb(picker.value);
+                    const alpha = (opRange.value / 100).toFixed(2);
+                    result[`style_${key}`] = toRgba(r, g, b, alpha);
+                }
+            });
+            return result;
+        }
+
+
+        // Apply a preset: patch settings, update all UI controls to match
+        function applyPreset(preset) {
+            // Save non-protected keys immediately so they persist on next load
+            const patch = {};
+            Object.entries(preset.settings).forEach(([key, value]) => {
+                if (!PRESET_PROTECTED_KEYS.has(key)) patch[key] = value;
+            });
+            saveSettings(patch);
+
+            // Helper to update a range slider and fire its input event
+            function setRange(settingKey, val) {
+                const el = popup.querySelector(`.r-range[data-setting="${settingKey}"]`);
+                if (!el) return;
+                el.value = val;
+                el.dispatchEvent(new Event('input'));
+            }
+            setRange('blur',            preset.settings.blur            ?? '0');
+            setRange('opacity',         preset.settings.opacity         ?? '1');
+            setRange('brightness',      preset.settings.brightness      ?? '1');
+            setRange('overlay_opacity', preset.settings.overlay_opacity ?? '0');
+
+            // Update dropdowns and overlay color picker
+            if (scaleEl) scaleEl.value = preset.settings.scale      || 'cover';
+            if (blendEl) blendEl.value = preset.settings.blend_mode || 'normal';
+            if (overlayColorPicker) {
+                overlayColorPicker.value = preset.settings.overlay_color || '#000000';
+                if (overlayColorHex) overlayColorHex.value = overlayColorPicker.value;
+            }
+
+            // Push preset values into each advanced grid item
+            useAdvancedToggle.checked = preset.settings.use_advanced === 'true';
+            advancedGrid.querySelectorAll('[data-key]').forEach(item => {
+                const key = item.dataset.key;
+                const val = preset.settings[`style_${key}`];
+                if (!val) return;
+                const parsed = parseColor(val);
+                const picker = item.querySelector('.adv-color-pick');
+                if (!picker) return;
+                picker.value = rgbToHex(parsed.r, parsed.g, parsed.b);
+                const opRange = item.querySelector('.adv-opacity-range');
+                if (opRange) {
+                    opRange.value = Math.round(parsed.a * 100);
+                    opRange.dispatchEvent(new Event('input'));
+                } else {
+                    picker.dispatchEvent(new Event('input'));
+                }
+            });
+
+            updateVisibility();
+
+            // Highlight the selected preset card and show confirmation notice
+            presetGrid.querySelectorAll('.r-preset-card').forEach(card => card.classList.remove('selected'));
+            presetGrid.querySelector(`[data-preset-id="${preset.id}"]`)?.classList.add('selected');
+            const label = find('rBG-preset-active-label');
+            const name  = find('rBG-preset-active-name');
+            if (label && name) { name.textContent = preset.name; label.style.display = 'block'; }
+        }
+
+        // Render a card for each preset in the grid
+        PRESETS.forEach((preset, index) => {
+            const card = document.createElement('div');
+            card.className = 'r-preset-card';
+            card.dataset.presetId = preset.id;
+            card.style.animationDelay = `${index * 40}ms`;
+            card.innerHTML = `
+                <div class="r-preset-thumb" style="background:${preset.thumb}"></div>
+                <div class="r-preset-name">${preset.name}</div>
+            `;
+            card.addEventListener('click', () => applyPreset(preset));
+            presetGrid.appendChild(card);
+        });
+
+
+        // Gather all current UI values and write them to settings storage
+        function collectAndSave() {
+            const patch = {
+                use_animated:        String(useAnimatedToggle.checked),
+                video_url:           videoUrlInput.value.trim(),
+                override_text_color: String(overrideTextToggle.checked),
+                text_color:          textColorPicker.value,
+                use_advanced:        String(useAdvancedToggle.checked),
+            };
+            // Collect all range sliders that have a data-setting attribute
+            popup.querySelectorAll('.r-range[data-setting]').forEach(el => { patch[el.dataset.setting] = el.value; });
+            if (scaleEl) patch.scale          = scaleEl.value;
+            if (blendEl) patch.blend_mode     = blendEl.value;
+            if (overlayColorPicker) patch.overlay_color = overlayColorPicker.value;
+            if (useAdvancedToggle.checked) Object.assign(patch, readAdvancedValues());
+            saveSettings(patch);
+        }
+
+        // Save button: collect, apply, and show a brief confirmation state
+        saveButton.addEventListener('click', () => {
+            collectAndSave();
+            applycustombackgrounds();
+            const original = saveButton.textContent;
+            saveButton.textContent = '✓ Saved!';
+            saveButton.style.background = 'linear-gradient(135deg,#3d7a5c,#1e4030)';
+            setTimeout(() => {
+                saveButton.textContent = original;
+                saveButton.style.background = '';
+            }, 1500);
+        });
+
+        // Clicking the backdrop closes the popup
+        overlay.addEventListener('click', closePopup);
+
+
+        // Reset button: show a confirmation dialog before wiping everything
+        resetButton.addEventListener('click', () => {
+            const confirmDialog = document.createElement('div');
+            confirmDialog.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1e1e1e;border:1px solid #333;border-radius:11px;padding:24px;z-index:99999999;box-shadow:0 20px 50px rgba(0,0,0,.9);animation:rSlideIn .2s;min-width:300px;max-width:360px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;';
+            confirmDialog.innerHTML = `
+                <h3 style="margin:0 0 10px;color:#e0e0e0;font-size:15px;font-weight:600">⚠️ Reset everything?</h3>
+                <p style="margin:0 0 20px;color:#999;font-size:12px;line-height:1.6">All settings will be restored to defaults and uploaded files will be deleted. This cannot be undone.</p>
+                <div style="display:flex;gap:8px;justify-content:flex-end">
+                    <button id="rBG-cancel-reset" class="r-btn r-btn-ghost">Cancel</button>
+                    <button id="rBG-confirm-reset" style="padding:10px 20px;background:#5a2e2e;color:#ffaaaa;border:1px solid #6d3c3c;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:background .15s">Reset All</button>
+                </div>`;
+            document.body.appendChild(confirmDialog);
+            const cancelBtn  = confirmDialog.querySelector('#rBG-cancel-reset');
+            const confirmBtn = confirmDialog.querySelector('#rBG-confirm-reset');
+            cancelBtn.addEventListener('click', () => confirmDialog.remove());
+            confirmBtn.addEventListener('mouseover', () => confirmBtn.style.background = '#6d3c3c');
+            confirmBtn.addEventListener('mouseout',  () => confirmBtn.style.background = '#5a2e2e');
+            confirmBtn.addEventListener('click', () => {
+                resetSettings();
+                deleteSavedFile('video');
+                deleteSavedFile('image');
+                confirmDialog.remove();
+                location.reload();
+            });
+        });
     }
 
 
@@ -5320,169 +6185,707 @@ li a.about-link:hover::after {
         });
     }
 
-
-
     /***************************************************************
      *  name of function: showOldRobloxGreeting
      *  description: shows old roblox greeting if setting is turned on
      ****************************************************************/
     async function showOldRobloxGreeting() {
-        const implementation = async () => {
-            ConsoleLogEnabled("Function showOldRobloxGreeting() started.");
+        // guards
+        if (!/^https?:\/\/(www\.)?roblox\.com(\/[a-z]{2})?\/home\/?$/i.test(window.location.href)) return;
+        if (localStorage.getItem("ROLOCATE_ShowOldGreeting") !== "true") return;
 
-            // if we are on homepage
-            if (!/^https?:\/\/(www\.)?roblox\.com(\/[a-z]{2})?\/home\/?$/i.test(window.location.href)) {
-                ConsoleLogEnabled("Not on roblox.com/home. Exiting function.");
-                return;
-            }
+        // waits for the dom
+        const make = (tag, cls = '', props = {}) =>
+            Object.assign(document.createElement(tag), cls ? { className: cls, ...props } : props);
 
-            if (localStorage.getItem("ROLOCATE_ShowOldGreeting") !== "true") {
-                ConsoleLogEnabled("ShowOldGreeting is disabled. Exiting function.");
-                return;
-            }
-
-            // wait for apge to laod
-            await new Promise(r => setTimeout(r, 500));
-
-            // functions
-            const observeElement = (selector) => {
-                return new Promise((resolve) => {
-                    const element = document.querySelector(selector);
-                    if (element) {
-                        ConsoleLogEnabled(`Element found immediately: ${selector}`);
-                        return resolve(element);
-                    }
-
-                    ConsoleLogEnabled(`Observing for element: ${selector}`);
-                    const observer = new MutationObserver(() => {
-                        const element = document.querySelector(selector);
-                        if (element) {
-                            ConsoleLogEnabled(`Element found: ${selector}`);
-                            observer.disconnect();
-                            resolve(element);
-                        }
-                    });
-                    observer.observe(document.body, {
-                        childList: true,
-                        subtree: true
-                    });
-                });
-            };
-
-            const fetchAvatar = async (selector, fallbackImage) => {
-                ConsoleLogEnabled(`Fetching avatar from selector: ${selector}`);
-                for (let attempt = 0; attempt < 3; attempt++) {
-                    ConsoleLogEnabled(`Attempt ${attempt + 1} to fetch avatar.`);
-                    const imgElement = document.querySelector(selector);
-                    if (imgElement && imgElement.src !== fallbackImage) {
-                        ConsoleLogEnabled(`Avatar found: ${imgElement.src}`);
-                        return imgElement.src;
-                    }
-                    await new Promise(r => setTimeout(r, 1500));
-                }
-                ConsoleLogEnabled("Avatar not found, using fallback image.");
-                return fallbackImage;
-            };
-
-            const getTimeBasedGreeting = (username) => {
-                const hour = new Date().getHours();
-                if (hour < 12) return `Morning, ${username}!`;
-                if (hour < 18) return `Afternoon, ${username}!`;
-                return `Evening, ${username}!`;
-            };
-
-            try {
-                // elements needed
-                const homeContainer = await observeElement("#HomeContainer .section:first-child");
-                ConsoleLogEnabled("Home container located.");
-
-                const userNameElement = document.querySelector("#navigation.rbx-left-col > ul > li > a .font-header-2");
-                const rawUsername = userNameElement ? userNameElement.innerText : "Robloxian";
-                ConsoleLogEnabled(`User name found: ${rawUsername}`);
-
-                const styleId = 'rolocate-greeting-styles';
-                if (!document.getElementById(styleId)) {
-                    const styleTag = document.createElement("style");
-                    styleTag.id = styleId;
-                    styleTag.textContent = `
-                    .rolocate-greeting-header {
-                        display: flex;
-                        align-items: center;
-                        margin-bottom: 16px;
-                        padding: 30px;
-                        background: ${isDarkMode() ? '#1a1c23' : '#E0D8CC'};
-                        border-radius: 12px;
-                        border: 1px solid ${isDarkMode() ? '#2a2a30' : '#C1B19A'};
-                        min-height: 180px;
-                    }
-                    .rolocate-profile-frame {
-                        width: 140px;
-                        height: 140px;
-                        border-radius: 50%;
-                        overflow: hidden;
-                        border: 3px solid ${isDarkMode() ? '#2a2a30' : '#C1B19A'};
-                    }
-                    .rolocate-profile-img {
-                        width: 100%;
-                        height: 100%;
-                        object-fit: cover;
-                    }
-                    .rolocate-user-details {
-                        margin-left: 25px;
-                    }
-                    .rolocate-user-name {
-                        font-size: 2em;
-                        font-weight: 600;
-                        color: ${isDarkMode() ? '#ffffff' : 'black'};
-                        margin: 0;
-                        font-family: 'Segoe UI', Roboto, sans-serif;
-                    }
-                `;
-                    document.head.appendChild(styleTag);
-                }
-
-                // header creation
-                const headerContainer = document.createElement("div");
-                headerContainer.className = "rolocate-greeting-header";
-
-                // make profile
-                const profileFrame = document.createElement("div");
-                profileFrame.className = "rolocate-profile-frame";
-                const profileImage = document.createElement("img");
-                profileImage.className = "rolocate-profile-img";
-                profileImage.src = await fetchAvatar("#navigation.rbx-left-col > ul > li > a img",
-                    window.Base64Images?.image_place_holder || "https://www.roblox.com/Thumbs/Asset.ashx?width=100&height=100&assetId=0");
-                profileFrame.appendChild(profileImage);
-
-                // make greeting
-                const userDetails = document.createElement("div");
-                userDetails.className = "rolocate-user-details";
-                const userName = document.createElement("h1");
-                userName.className = "rolocate-user-name";
-                userName.textContent = getTimeBasedGreeting(rawUsername);
-                userDetails.appendChild(userName);
-
-                // mix them
-                headerContainer.appendChild(profileFrame);
-                headerContainer.appendChild(userDetails);
-
-                homeContainer.replaceWith(headerContainer);
-
-                ConsoleLogEnabled("Greeting header created successfully.");
-
-            } catch (error) {
-                ConsoleLogEnabled(`Error creating greeting: ${error.message}`);
-            }
+        // the two features
+        const FEATURES_KEY = "ROLOCATE_showoldgreeting_features";
+        const FEATURE_DEFS = {
+            showRoProMostPlayed: { label: "Show RoPro Most Played", default: true  },
+            featureTwo:          { label: "Weekly Playtime",         default: false },
         };
 
-        // add them
-        implementation().catch(error => {
-            ConsoleLogEnabled("Error in showOldRobloxGreeting:", error);
+        // loads from localstoaeg
+        const loadFeatures = () => {
+            try {
+                const stored = JSON.parse(localStorage.getItem(FEATURES_KEY) || "{}");
+                const defaults = Object.fromEntries(
+                    Object.entries(FEATURE_DEFS).map(([key, meta]) => [key, key in stored ? stored[key] : meta.default])
+                );
+                return { ...stored, ...defaults };
+            } catch {
+                return Object.fromEntries(Object.entries(FEATURE_DEFS).map(([key, meta]) => [key, meta.default]));
+            }
+        };
+        const saveFeatures = feat => localStorage.setItem(FEATURES_KEY, JSON.stringify(feat));
+
+        // again dom helpers
+        const waitForEl = selector => new Promise(resolve => {
+            const found = document.querySelector(selector);
+            if (found) return resolve(found);
+            const obs = new MutationObserver(() => {
+                const el = document.querySelector(selector);
+                if (el) { obs.disconnect(); resolve(el); }
+            });
+            obs.observe(document.body, { childList: true, subtree: true });
         });
+
+        // gets avatar
+        const fetchAvatar = async (selector, fallback) => {
+            const selectors = [
+                selector,
+                ".avatar.avatar-headshot-xs .thumbnail-2d-container.avatar-card-image img",
+            ];
+            for (let i = 0; i < 3; i++) {
+                for (const sel of selectors) {
+                    const img = document.querySelector(sel);
+                    if (img?.src && img.src !== fallback) return img.src;
+                }
+                await new Promise(res => setTimeout(res, 1500));
+            }
+            return fallback;
+        };
+
+        const timeGreeting = name => {
+            const hour = new Date().getHours();
+            if (hour < 12) return `Morning, ${name}!`;
+            if (hour < 18) return `Afternoon, ${name}!`;
+            return `Evening, ${name}!`;
+        };
+
+        // privacy
+        const PERM = {
+            AllUsers: 4, All: 4,
+            FriendsFollowingAndFollowers: 3, Followers: 3,
+            FriendsAndFollowing: 2, Following: 2,
+            Friends: 1, NoOne: 0,
+        };
+
+        const ONLINE_TO_JOIN = {
+            AllUsers: 'All', FriendsFollowingAndFollowers: 'Followers',
+            FriendsAndFollowing: 'Following', Friends: 'Friends', NoOne: 'NoOne',
+        };
+
+        const ONLINE_OPTS = [
+            { label: 'Everyone',                       value: 'AllUsers' },
+            { label: 'Friends, Following & Followers', value: 'FriendsFollowingAndFollowers' },
+            { label: 'Friends & Following',            value: 'FriendsAndFollowing' },
+            { label: 'Friends',                        value: 'Friends' },
+            { label: 'No One',                         value: 'NoOne' },
+        ];
+        const JOIN_OPTS = [
+            { label: 'Everyone',                       value: 'All' },
+            { label: 'Friends, Following & Followers', value: 'Followers' },
+            { label: 'Friends & Following',            value: 'Following' },
+            { label: 'Friends',                        value: 'Friends' },
+            { label: 'No One',                         value: 'NoOne' },
+        ];
+
+        const gmFetch = (url, opts = {}) => new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: opts.method || 'GET',
+                url,
+                headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...(opts.headers || {}) },
+                data: opts.body ? JSON.stringify(opts.body) : undefined,
+                onload: res => {
+                    if (res.status >= 200 && res.status < 300) {
+                        try { resolve(JSON.parse(res.responseText)); } catch { resolve({}); }
+                    } else {
+                        reject(new Error(`HTTP ${res.status}`));
+                    }
+                },
+                onerror: err => reject(err),
+            });
+        });
+
+        const postPrivacy = async (key, val) => {
+            const csrf = await getCsrfToken();
+            if (!csrf) { ConsoleLogEnabled(`Privacy update error: could not get CSRF token`); return; }
+            gmFetch('https://apis.roblox.com/user-settings-api/v1/user-settings', {
+                method: 'POST',
+                headers: { 'x-csrf-token': csrf },
+                body: { [key]: val },
+            }).catch(err => ConsoleLogEnabled(`Privacy update error: ${err.message}`));
+        };
+
+        // fetch current privacy on page load
+        let curOnline = 'AllUsers', curJoin = 'All';
+        try {
+            const data = await gmFetch('https://apis.roblox.com/user-settings-api/v1/user-settings/settings-and-options');
+            curOnline = data.whoCanSeeMyOnlineStatus?.currentValue   ?? 'AllUsers';
+            curJoin   = data.whoCanJoinMeInExperiences?.currentValue ?? 'All';
+        } catch (err) {
+            ConsoleLogEnabled(`Privacy fetch error: ${err.message}`);
+        }
+
+        const dotColor = () => {
+            if (curOnline === 'NoOne') return '#6b7280';
+            return '#22c55e';
+        };
+
+        // styles
+        const injectStyles = dark => {
+            if (document.getElementById("rolocate-greeting-styles")) return;
+            const style = make('style', '', { id: "rolocate-greeting-styles" });
+            style.textContent = `
+                .rolocate-greeting-header {
+                    display: flex; align-items: center; gap: 25px;
+                    margin-bottom: 16px; padding: 30px; min-height: 180px;
+                    background: ${dark ? "#1a1c23" : "#E0D8CC"};
+                    border-radius: 12px;
+                    border: 1px solid ${dark ? "#2a2a30" : "#C1B19A"};
+                    position: relative;
+                }
+                .rolocate-profile-wrap {
+                    position: relative; flex-shrink: 0;
+                    width: 140px; height: 140px;
+                }
+                .rolocate-profile-frame {
+                    width: 100%; height: 100%; overflow: hidden;
+                    border: 3px solid ${dark ? "#2a2a30" : "#C1B19A"};
+                    transition: border-color 0.3s;
+                    box-sizing: border-box;
+                }
+                .rolocate-profile-frame.rounded { border-radius: 50%; }
+                .rolocate-profile-img { width: 100%; height: 100%; object-fit: cover; }
+                .rolocate-user-name {
+                    font-size: 2em; font-weight: 600; margin: 0;
+                    color: ${dark ? "#fff" : "#000"};
+                    font-family: "Segoe UI", Roboto, sans-serif;
+                }
+                .rolocate-most-played-wrapper {
+                    margin-left: auto; flex-shrink: 0;
+                    width: 520px; height: 205px;
+                    overflow: hidden;
+                    position: relative;
+                }
+                .rolocate-most-played-wrapper > div { float: none !important; margin: 0 !important; position: static !important; }
+                .rolocate-settings-btn {
+                    position: absolute; top: 6px; right: 6px;
+                    background: transparent; border: 1.5px solid #3b82f6;
+                    color: #3b82f6; cursor: pointer;
+                    font-size: 13px; font-weight: 600;
+                    padding: 5px 13px; border-radius: 8px;
+                    font-family: "Segoe UI", Roboto, sans-serif;
+                    display: flex; align-items: center; gap: 6px;
+                    transition: background 0.15s;
+                }
+                .rolocate-settings-btn:hover { background: rgba(37,99,235,0.08); }
+                @keyframes rolocate-fade-in  { from{opacity:0} to{opacity:1} }
+                @keyframes rolocate-fade-out { from{opacity:1} to{opacity:0} }
+                @keyframes rolocate-popup-in  { from{opacity:0;transform:scale(.93) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
+                @keyframes rolocate-popup-out { from{opacity:1;transform:scale(1) translateY(0)} to{opacity:0;transform:scale(.93) translateY(8px)} }
+                @keyframes rolocate-dot-ping {
+                    0%   { box-shadow: 0 0 0 0   rgba(34,197,94,0.6); }
+                    70%  { box-shadow: 0 0 0 8px rgba(34,197,94,0);   }
+                    100% { box-shadow: 0 0 0 0   rgba(34,197,94,0);   }
+                }
+                .rolocate-popup-overlay {
+                    position: fixed; inset: 0; z-index: 99998;
+                    background: rgba(0,0,0,.45);
+                    display: flex; align-items: center; justify-content: center;
+                    animation: rolocate-fade-in 0.18s ease forwards;
+                }
+                .rolocate-popup-overlay.closing { animation: rolocate-fade-out 0.18s ease forwards; }
+                .rolocate-popup-overlay.closing .rolocate-popup { animation: rolocate-popup-out 0.18s ease forwards; }
+                .rolocate-popup {
+                    background: ${dark ? "#1a1c23" : "#f5f0e8"};
+                    border: 1px solid ${dark ? "#2a2a30" : "#C1B19A"};
+                    border-radius: 14px; padding: 24px 28px; width: 320px; z-index: 99999;
+                    font-family: "Segoe UI", Roboto, sans-serif;
+                    box-shadow: 0 8px 32px rgba(0,0,0,.35);
+                    animation: rolocate-popup-in 0.18s ease forwards;
+                }
+                .rolocate-popup h2 { margin: 0 0 6px; font-size: 1.1em; font-weight: 700; color: ${dark ? "#fff" : "#333"}; }
+                .rolocate-popup-sub { margin: 0 0 18px; font-size: .78em; color: ${dark ? "#888" : "#999"}; }
+                .rolocate-toggle-row {
+                    display: flex; align-items: center; justify-content: space-between;
+                    padding: 9px 0; border-bottom: 1px solid ${dark ? "#2a2a30" : "#ddd3c3"};
+                }
+                .rolocate-toggle-row:last-of-type { border-bottom: none; }
+                .rolocate-toggle-label { font-size: .9em; color: ${dark ? "#ddd" : "#444"}; }
+                .rolocate-toggle { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
+                .rolocate-toggle input { opacity: 0; width: 0; height: 0; }
+                .rolocate-toggle-track {
+                    position: absolute; inset: 0;
+                    background: ${dark ? "#3a3a42" : "#ccc"};
+                    border-radius: 22px; cursor: pointer; transition: background .2s;
+                }
+                .rolocate-toggle input:checked + .rolocate-toggle-track { background: #16a34a; }
+                .rolocate-toggle-track::after {
+                    content: ""; position: absolute; left: 3px; top: 3px;
+                    width: 16px; height: 16px; border-radius: 50%;
+                    background: #fff; transition: transform .2s;
+                }
+                .rolocate-toggle input:checked + .rolocate-toggle-track::after { transform: translateX(16px); }
+                .rolocate-popup-close {
+                    margin-top: 18px; width: 100%; padding: 8px; border: none;
+                    border-radius: 8px; cursor: pointer; font-size: .9em;
+                    background: ${dark ? "#2a2a30" : "#C1B19A"};
+                    color: ${dark ? "#fff" : "#333"};
+                    transition: opacity .15s;
+                }
+                .rolocate-popup-close:hover { opacity: .8; }
+                .rolocate-popup-watermark {
+                    margin-top: 14px; text-align: center;
+                    font-size: .72em; letter-spacing: .03em;
+                    color: ${dark ? "#444" : "#bbb"};
+                    font-family: "Segoe UI", Roboto, sans-serif;
+                }
+                .rolocate-toggle-row.disabled .rolocate-toggle-label { color: ${dark ? "#555" : "#bbb"}; }
+                .rolocate-toggle-row.disabled .rolocate-toggle-track { opacity: .35; cursor: not-allowed; }
+                .rolocate-toggle-row.disabled input { pointer-events: none; }
+                .rolocate-weekly-playtime {
+                    margin-left: auto; flex-shrink: 0;
+                    display: flex; flex-direction: column; justify-content: center;
+                }
+                .rolocate-weekly-playtime h3 {
+                    font-size: 1em; font-weight: 700; margin: 0 0 10px;
+                    color: ${dark ? "#fff" : "#333"};
+                    font-family: "Segoe UI", Roboto, sans-serif;
+                }
+                .rolocate-playtime-cards { display: flex; flex-wrap: wrap; gap: 10px; }
+                .rolocate-game-card {
+                    display: flex; flex-direction: column; align-items: center;
+                    width: 90px; cursor: pointer; text-decoration: none;
+                    border-radius: 10px; padding: 8px 6px 6px;
+                    background: ${dark ? "#24262e" : "#f0e9dd"};
+                    border: 1px solid ${dark ? "#2a2a30" : "#C1B19A"};
+                    transition: transform 0.15s, box-shadow 0.15s;
+                }
+                .rolocate-game-card:hover {
+                    transform: translateY(-3px);
+                    box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+                }
+                .rolocate-game-card img { width: 70px; height: 70px; border-radius: 8px; object-fit: cover; }
+                .rolocate-game-card-name {
+                    margin-top: 6px; font-size: 0.72em; text-align: center;
+                    color: ${dark ? "#ddd" : "#333"};
+                    font-family: "Segoe UI", Roboto, sans-serif;
+                    font-weight: 600;
+                    max-width: 80px;
+                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                }
+                .rolocate-game-card-time {
+                    margin-top: 3px; font-size: 0.68em; text-align: center;
+                    color: ${dark ? "#888" : "#888"};
+                    font-family: "Segoe UI", Roboto, sans-serif;
+                }
+                .rolocate-status-dot {
+                    position: absolute;
+                    bottom: 4px; right: 4px;
+                    width: 22px; height: 22px;
+                    border-radius: 50%;
+                    border: 3.5px solid ${dark ? "#1a1c23" : "#E0D8CC"};
+                    cursor: pointer; z-index: 2;
+                    transition: transform 0.18s, background 0.25s;
+                    box-shadow: 0 1px 5px rgba(0,0,0,0.45);
+                }
+                .rolocate-status-dot:hover { transform: scale(1.25); }
+                .rolocate-status-dot.ping  { animation: rolocate-dot-ping 0.55s ease-out; }
+                .rolocate-click-me {
+                    position: absolute;
+                    bottom: 8px; right: -72px;
+                    display: flex; align-items: center; gap: 3px;
+                    font-family: "Segoe UI", Roboto, sans-serif;
+                    font-size: 0.7em; font-weight: 700;
+                    color: #3b82f6;
+                    white-space: nowrap;
+                    pointer-events: none;
+                    animation: rolocate-fade-in 0.4s ease forwards;
+                }
+                .rolocate-click-me-dismiss {
+                    background: transparent;
+                    border: none;
+                    cursor: pointer;
+                    color: #3b82f6;
+                    font-size: 0.85em;
+                    font-weight: 700;
+                    line-height: 1;
+                    padding: 0 0 0 3px;
+                    pointer-events: all;
+                    opacity: 0.7;
+                    transition: opacity 0.15s;
+                }
+                .rolocate-click-me-dismiss:hover { opacity: 1; }
+                .rolocate-status-panel {
+                    position: absolute; z-index: 99999;
+                    background: ${dark ? "#1a1c23" : "#f5f0e8"};
+                    border: 1px solid ${dark ? "#2a2a30" : "#C1B19A"};
+                    border-radius: 12px; padding: 14px 12px 10px;
+                    width: 235px;
+                    box-shadow: 0 8px 28px rgba(0,0,0,0.35);
+                    font-family: "Segoe UI", Roboto, sans-serif;
+                    animation: rolocate-popup-in 0.16s ease forwards;
+                }
+                .rolocate-status-section-label {
+                    font-size: 0.67em; font-weight: 700;
+                    text-transform: uppercase; letter-spacing: 0.07em;
+                    color: ${dark ? "#666" : "#aaa"};
+                    margin: 0 0 3px 4px;
+                }
+                .rolocate-status-section + .rolocate-status-section { margin-top: 8px; }
+                .rolocate-status-opt {
+                    display: flex; align-items: center; gap: 7px;
+                    padding: 5px 8px; border-radius: 7px;
+                    cursor: pointer; font-size: 0.82em;
+                    color: ${dark ? "#ccc" : "#444"};
+                    border: none; background: transparent;
+                    width: 100%; text-align: left;
+                    transition: background 0.12s;
+                    font-family: "Segoe UI", Roboto, sans-serif;
+                }
+                .rolocate-status-opt:hover:not(:disabled) {
+                    background: ${dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"};
+                }
+                .rolocate-status-opt.active { color: #3b82f6; font-weight: 600; }
+                .rolocate-status-opt:disabled { opacity: 0.28; cursor: not-allowed; }
+                .rolocate-status-opt-check {
+                    width: 13px; height: 13px; flex-shrink: 0;
+                    font-size: 11px; color: #3b82f6;
+                    visibility: hidden;
+                    display: flex; align-items: center; justify-content: center;
+                }
+                .rolocate-status-opt.active .rolocate-status-opt-check { visibility: visible; }
+                .rolocate-status-divider {
+                    border: none;
+                    border-top: 1px solid ${dark ? "#2a2a30" : "#ddd3c3"};
+                    margin: 8px 0;
+                }
+            `;
+            document.head.appendChild(style);
+        };
+
+        // greeting header build
+        const buildHeader = (greeting, avatarSrc, features) => {
+            const header = make('div', 'rolocate-greeting-header');
+
+            const settingsBtn = make('button', 'rolocate-settings-btn', { innerHTML: `<span>⚙</span><span>Customize</span>` });
+            header.appendChild(settingsBtn);
+
+            const wrap  = make('div', 'rolocate-profile-wrap');
+            const frame = make('div', 'rolocate-profile-frame rounded');
+            frame.style.borderColor = dotColor();
+            frame.appendChild(make('img', 'rolocate-profile-img', { src: avatarSrc }));
+            wrap.appendChild(frame);
+
+            const dot = make('div', 'rolocate-status-dot');
+            dot.style.background = dotColor();
+            dot.title = "Click to manage Online Status & Join Privacy";
+            wrap.appendChild(dot);
+
+            if (!features.clickMeDismissed) {
+                const clickMe = make('div', 'rolocate-click-me');
+                const label = make('span', '', { textContent: '⮜ Click me!' });
+                const dismissBtn = make('button', 'rolocate-click-me-dismiss', { textContent: '✕' });
+                dismissBtn.title = "Don't show again";
+                dismissBtn.addEventListener('click', evt => {
+                    evt.stopPropagation();
+                    features.clickMeDismissed = true;
+                    saveFeatures(features);
+                    clickMe.remove();
+                });
+                clickMe.append(label, dismissBtn);
+                wrap.appendChild(clickMe);
+            }
+
+            header.appendChild(wrap);
+
+            const details = make('div');
+            details.appendChild(make('h1', 'rolocate-user-name', { textContent: greeting }));
+            header.appendChild(details);
+
+            return { header, settingsBtn, frame, dot };
+        };
+
+        // Status panel builder
+        const buildStatusPanel = (dark, frame, dot) => {
+            const panel = make('div', 'rolocate-status-panel');
+
+            const makeSection = (sectionLabel, opts, curVal, isOnline) => {
+                const sec = make('div', 'rolocate-status-section');
+                sec.appendChild(make('div', 'rolocate-status-section-label', { textContent: sectionLabel }));
+
+                for (const opt of opts) {
+                    const isActive   = opt.value === curVal;
+                    const isDisabled = !isOnline && PERM[opt.value] > PERM[curOnline];
+
+                    const btn = make('button', 'rolocate-status-opt' + (isActive ? ' active' : ''));
+                    if (isDisabled) btn.disabled = true;
+
+                    btn.append(
+                        make('span', 'rolocate-status-opt-check', { textContent: '✓' }),
+                        make('span', '', { textContent: opt.label })
+                    );
+
+                    btn.addEventListener('click', () => {
+                        if (isOnline) {
+                            curOnline = opt.value;
+                            postPrivacy('whoCanSeeMyOnlineStatus', curOnline);
+                            if (PERM[curJoin] > PERM[curOnline]) {
+                                curJoin = ONLINE_TO_JOIN[curOnline];
+                                postPrivacy('whoCanJoinMeInExperiences', curJoin);
+                            }
+                            const lbl = ONLINE_OPTS.find(o => o.value === curOnline)?.label ?? curOnline;
+                            notifications(`Saved! Only "${lbl}" will see you online.`, 'success', '', '5000');
+                        } else {
+                            if (PERM[opt.value] > PERM[curOnline]) return;
+                            curJoin = opt.value;
+                            postPrivacy('whoCanJoinMeInExperiences', curJoin);
+                            const lbl = JOIN_OPTS.find(o => o.value === curJoin)?.label ?? curJoin;
+                            notifications(`Saved! Only "${lbl}" can join you in experiences.`, 'success', '', '5000');
+                        }
+
+                        const col = dotColor();
+                        dot.style.background    = col;
+                        frame.style.borderColor = col;
+                        dot.classList.remove('ping');
+                        void dot.offsetWidth;
+                        dot.classList.add('ping');
+                        render();
+                    });
+
+                    sec.appendChild(btn);
+                }
+                return sec;
+            };
+
+            const render = () => {
+                panel.innerHTML = '';
+                panel.appendChild(makeSection('Online Status', ONLINE_OPTS, curOnline, true));
+                panel.appendChild(make('hr', 'rolocate-status-divider'));
+                panel.appendChild(makeSection('Who Can Join You In Games', JOIN_OPTS, curJoin, false));
+            };
+
+            render();
+            return panel;
+        };
+
+        // the settings popup buiulder
+        const buildPopup = dark => {
+            const overlay = make('div', 'rolocate-popup-overlay');
+            const popup   = make('div', 'rolocate-popup');
+
+            popup.append(
+                make('h2', '', { textContent: 'Show Old Greeting Settings' }),
+                make('p', 'rolocate-popup-sub', { textContent: 'Changes apply on next page load.' })
+            );
+
+            const features = loadFeatures();
+            const inputs   = {};
+
+            for (const [key, meta] of Object.entries(FEATURE_DEFS)) {
+                const disabled  = meta.disabled?.() ?? false;
+                const row       = make('div', 'rolocate-toggle-row' + (disabled ? ' disabled' : ''));
+                const lbl       = make('span', 'rolocate-toggle-label', { textContent: disabled ? `${meta.label} (None)` : meta.label });
+                const toggleWrap = make('label', 'rolocate-toggle');
+                const input     = make('input', '', { type: 'checkbox', checked: !disabled && features[key] });
+                const track     = make('span', 'rolocate-toggle-track');
+
+                if (disabled) input.disabled = true;
+
+                input.addEventListener('change', () => {
+                    if (input.checked) {
+                        Object.entries(inputs).forEach(([otherKey, inp]) => {
+                            if (otherKey !== key && inp.checked) { inp.checked = false; features[otherKey] = false; }
+                        });
+                    }
+                    features[key] = input.checked;
+                    saveFeatures(features);
+                });
+
+                toggleWrap.append(input, track);
+                row.append(lbl, toggleWrap);
+                popup.appendChild(row);
+                inputs[key] = input;
+            }
+
+            popup.append(
+                make('button', 'rolocate-popup-close', { textContent: 'Done' }),
+                make('div', 'rolocate-popup-watermark', { textContent: 'RoLocate by Oqarshi' })
+            );
+            overlay.appendChild(popup);
+
+            return { overlay, closeBtn: popup.querySelector('.rolocate-popup-close') };
+        };
+
+        // basically the main place it does it
+        try {
+            await new Promise(res => setTimeout(res, 500));
+
+            const homeContainer = await waitForEl("#HomeContainer .section:first-child");
+            const userNameEl    = document.querySelector("#navigation.rbx-left-col > ul > li > a .font-header-2");
+            const username      = userNameEl?.innerText ?? "Robloxian";
+            const avatarSrc     = await fetchAvatar(
+                "#navigation.rbx-left-col > ul > li > a img",
+                window.Base64Images?.image_place_holder ?? "https://www.roblox.com/Thumbs/Asset.ashx?width=100&height=100&assetId=0"
+            );
+
+            const features = loadFeatures();
+            const dark     = isDarkMode();
+
+            injectStyles(dark);
+            const { header, settingsBtn, frame, dot } = buildHeader(timeGreeting(username), avatarSrc, features);
+            homeContainer.replaceWith(header);
+
+            // status dot → privacy panel
+            dot.addEventListener('click', evt => {
+                evt.stopPropagation();
+                const existing = document.querySelector('.rolocate-status-panel');
+                if (existing) { existing.remove(); return; }
+
+                const panel = buildStatusPanel(dark, frame, dot);
+                document.body.appendChild(panel);
+
+                const rect = dot.getBoundingClientRect();
+                panel.style.top  = `${rect.bottom + window.scrollY + 6}px`;
+                panel.style.left = `${Math.max(8, Math.min(rect.left + window.scrollX, window.innerWidth - 235 - 8))}px`;
+
+                setTimeout(() => {
+                    const closePanel = ev => {
+                        if (!panel.contains(ev.target) && ev.target !== dot) {
+                            panel.remove();
+                            document.removeEventListener('click', closePanel);
+                        }
+                    };
+                    document.addEventListener('click', closePanel);
+                }, 0);
+            });
+
+            // feature: ropro most played
+            {
+                FEATURE_DEFS.showRoProMostPlayed.disabled = () => false;
+
+                if (features.showRoProMostPlayed) {
+                    const roProEl = await new Promise(resolve => {
+                        const existing = document.querySelector('#mostPlayedContainer');
+                        if (existing) return resolve(existing);
+                        let tries = 0;
+                        const obs = new MutationObserver(() => {
+                            const found = document.querySelector('#mostPlayedContainer');
+                            if (found || ++tries > 40) { obs.disconnect(); resolve(found ?? null); }
+                        });
+                        obs.observe(document.body, { childList: true, subtree: true });
+                        setTimeout(() => { obs.disconnect(); resolve(null); }, 750);
+                    });
+
+                    FEATURE_DEFS.showRoProMostPlayed.disabled = () => !roProEl;
+
+                    if (roProEl) {
+                        const widget =
+                            roProEl.closest("div[style*='width:520px']")   ||
+                            roProEl.closest("div[style*='width: 520px']")  ||
+                            roProEl.closest("div[style*='height:205px']")  ||
+                            roProEl.closest("div[style*='height: 205px']") ||
+                            roProEl.parentElement;
+
+                        widget.style.cssText += ";width:100%!important;height:205px!important;margin:0!important;position:relative!important;float:none!important;min-width:0!important;display:block!important;";
+
+                        widget.querySelectorAll('.scroller').forEach(arrow => {
+                            arrow.style.cssText += ";position:absolute!important;top:50%!important;transform:translateY(-50%)!important;margin:0!important;z-index:2;";
+                        });
+                        const leftArrow  = widget.querySelector('.scroller.prev');
+                        const rightArrow = widget.querySelector('.scroller.next');
+                        if (leftArrow)  leftArrow.style.left   = "0px";
+                        if (rightArrow) rightArrow.style.right = "0px";
+
+                        const cardsList = widget.querySelector('#mostPlayedContainer');
+                        if (cardsList) cardsList.style.cssText += ";padding-left:34px!important;padding-right:34px!important;box-sizing:border-box!important;";
+
+                        const wrapper = make('div', 'rolocate-most-played-wrapper');
+                        wrapper.appendChild(widget);
+                        header.appendChild(wrapper);
+                    }
+                } else {
+                    const removeWidget = () => {
+                        document.querySelectorAll('h3').forEach(heading => {
+                            if (heading.textContent.trim() === 'Your Most Played')
+                                heading.closest("div[style*='width:520px']")?.remove();
+                        });
+                    };
+                    removeWidget();
+                    new MutationObserver(removeWidget).observe(document.body, { childList: true, subtree: true });
+                }
+            }
+
+            // feature: weekly playtime
+            if (features.featureTwo) {
+                try {
+                    const screentimeData = await gmFetch('https://apis.roblox.com/parental-controls-api/v1/parental-controls/get-top-weekly-screentime-by-universe');
+                    const entries = screentimeData?.universeWeeklyScreentimes;
+                    if (!Array.isArray(entries) || entries.length === 0) return;
+
+                    const gameDetails = await gmFetch(`https://games.roblox.com/v1/games?universeIds=${entries.map(entry => entry.universeId).join(',')}`);
+
+                    const gameMap = {};
+                    for (const game of (gameDetails?.data ?? [])) {
+                        gameMap[game.id] = { name: game.name, placeId: game.rootPlaceId };
+                    }
+
+                    const iconMap = {};
+                    await Promise.all(entries.map(async entry => {
+                        try { iconMap[entry.universeId] = await getGameIconFromUniverseId(entry.universeId); }
+                        catch { iconMap[entry.universeId] = null; }
+                    }));
+
+                    const formatMinutes = mins => {
+                        if (mins < 60) return `${mins}m`;
+                        const hours = Math.floor(mins / 60);
+                        const rem   = mins % 60;
+                        return rem > 0 ? `${hours}h ${rem}m` : `${hours}h`;
+                    };
+
+                    const dateOpts = { month: 'short', day: 'numeric' };
+                    const section  = make('div', 'rolocate-weekly-playtime');
+                    const cardsRow = make('div', 'rolocate-playtime-cards');
+
+                    section.append(
+                        make('h3', '', {
+                            textContent: `This Week's Playtime (${new Date(Date.now() - 6 * 864e5).toLocaleDateString('en-US', dateOpts)} – ${new Date().toLocaleDateString('en-US', dateOpts)})`,
+                        }),
+                        cardsRow
+                    );
+
+                    for (const entry of entries) {
+                        const game = gameMap[entry.universeId];
+                        if (!game) continue;
+
+                        const card = make('a', 'rolocate-game-card', {
+                            href: `https://www.roblox.com/games/${game.placeId}`, target: '_self',
+                        });
+                        card.append(
+                            make('img', '', { src: iconMap[entry.universeId] ?? 'https://www.roblox.com/Thumbs/Asset.ashx?width=100&height=100&assetId=0', alt: game.name }),
+                            make('div', 'rolocate-game-card-name', { textContent: game.name, title: game.name }),
+                            make('div', 'rolocate-game-card-time', { textContent: formatMinutes(entry.weeklyMinutes) })
+                        );
+                        cardsRow.appendChild(card);
+                    }
+
+                    header.appendChild(section);
+                } catch (err) {
+                    ConsoleLogEnabled(`Weekly Playtime error (${err.message.includes('Screentime') ? 'Screentime API' : 'Games API'}): ${err.message}`);
+                }
+            }
+
+            // settings popup
+            const closeOverlay = overlay => {
+                overlay.classList.add('closing');
+                overlay.addEventListener('animationend', () => overlay.remove(), { once: true });
+            };
+            settingsBtn.addEventListener('click', () => {
+                if (document.querySelector('.rolocate-popup-overlay')) return;
+                const { overlay, closeBtn } = buildPopup(dark);
+                closeBtn.addEventListener('click', () => {
+                    closeOverlay(overlay);
+                    notifications('Settings Saved!', 'success', '', '3000');
+                });
+                document.body.appendChild(overlay);
+            });
+
+        } catch (err) {
+            ConsoleLogEnabled(`showOldRobloxGreeting error: ${err.message}`);
+        }
     }
-
-
-
     /*******************************************************
     name of function: observeURLChanges
     description: observes url changes for the old old greeting,
@@ -5604,693 +7007,572 @@ li a.about-link:hover::after {
 
 
     /*******************************************************
-    name of function: loadmutualfriends
-    description: shows mutual friends. optimized version with minimal API calls.
+    name of function: loadbetterprofileinfo
+    description: "Better Profile Info" stats and mutkla frineds
+    Stats: Joined Date, Account Age, Friend Count, Mutual Friends, Followers, Following
     *******************************************************/
-    async function loadmutualfriends() {
-        // check if mutualfriends is enabled in localStorage and double check if url is the correct one.
-        if (localStorage.getItem("ROLOCATE_mutualfriends") !== "true" || !/^\/(?:[a-z]{2}\/)?users\/\d+\/profile$/.test(window.location.pathname)) return;
-        // store for spedup
-        let localAvatarCache = {};
+    async function loadbetterprofileinfo() {
+        if (localStorage.getItem("ROLOCATE_loadbetterprofileinfo") !== "true" || !/^\/(?:[a-z]{2}\/)?users\/\d+\/profile$/.test(window.location.pathname)) return;
 
-        // function to fetch user details in batch (up to 100 at once)
-        const fetchUserDetailsBatch = (userIds) => {
-            if (userIds.length === 0) return Promise.resolve([]);
+        let avatarCache = {};
 
-            const url = `https://users.roblox.com/v1/users`;
-            return new Promise((resolve) => {
-                GM_xmlhttpRequest({
-                    method: "POST",
-                    url,
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    data: JSON.stringify({ userIds: userIds.slice(0, 100) }),
-                    onload: function(response) {
-                        if (response.status === 429) {
-                            ConsoleLogEnabled(`[fetchUserDetailsBatch] Rate limited - stopping requests`);
-                            resolve(null);
-                            return;
-                        }
-                        if (response.status >= 200 && response.status < 300) {
-                            try {
-                                const data = JSON.parse(response.responseText);
-                                resolve(data.data || []);
-                            } catch (e) {
-                                ConsoleLogEnabled(`[fetchUserDetailsBatch] Failed to parse response`, e);
-                                resolve([]);
-                            }
-                        } else {
-                            ConsoleLogEnabled(`[fetchUserDetailsBatch] Request failed with status ${response.status}`);
-                            resolve([]);
-                        }
-                    },
-                    onerror: function(err) {
-                        ConsoleLogEnabled(`[fetchUserDetailsBatch] Network error`, err);
-                        resolve([]);
-                    }
-                });
+        // -- api helpers --
+
+        const postJson = (url, body) => new Promise(resolve => {
+            GM_xmlhttpRequest({
+                method: "POST", url,
+                headers: { "Content-Type": "application/json" },
+                data: JSON.stringify(body),
+                onload: res => {
+                    if (res.status === 429) { resolve(null); return; }
+                    try { resolve(res.status < 300 ? JSON.parse(res.responseText) : null); }
+                    catch { resolve(null); }
+                },
+                onerror: () => resolve(null)
             });
-        };
+        });
 
-        // function to fetch friends
-        const gmFetchFriends = async (userId) => {
-            const url = `https://friends.roblox.com/v1/users/${userId}/friends`;
-            return new Promise((resolve) => {
-                GM_xmlhttpRequest({
-                    method: "GET",
-                    url,
-                    onload: function(response) {
-                        if (response.status === 429) {
-                            ConsoleLogEnabled(`[gmFetchFriends] Rate limited for user ${userId}`);
-                            resolve(null);
-                            return;
-                        }
-                        if (response.status >= 200 && response.status < 300) {
-                            try {
-                                const data = JSON.parse(response.responseText);
-                                resolve(data.data);
-                            } catch (e) {
-                                ConsoleLogEnabled(`[gmFetchFriends] Failed to parse response for user ${userId}`, e);
-                                resolve(null);
-                            }
-                        } else {
-                            ConsoleLogEnabled(`[gmFetchFriends] Request failed for user ${userId} with status ${response.status}`);
-                            resolve(null);
-                        }
-                    },
-                    onerror: function(err) {
-                        ConsoleLogEnabled(`[gmFetchFriends] Network error for user ${userId}`, err);
-                        resolve(null);
-                    }
-                });
+        const getJson = url => new Promise(resolve => {
+            GM_xmlhttpRequest({
+                method: "GET", url,
+                onload: res => {
+                    if (res.status === 429) { resolve(null); return; }
+                    try { resolve(res.status < 300 ? JSON.parse(res.responseText) : null); }
+                    catch { resolve(null); }
+                },
+                onerror: () => resolve(null)
             });
+        });
+
+        const fetchUser         = id  => getJson(`https://users.roblox.com/v1/users/${id}`);
+        const fetchUsersBatch   = ids => ids.length
+            ? postJson("https://users.roblox.com/v1/users", { userIds: ids.slice(0, 100) }).then(r => r?.data || [])
+            : Promise.resolve([]);
+        const fetchFriends      = id  => getJson(`https://friends.roblox.com/v1/users/${id}/friends`).then(r => r?.data || null);
+
+        // -- formatting utils --
+
+        const formatAccountAge = created => {
+            const days = Math.floor((Date.now() - new Date(created)) / 86400000);
+            if (days < 30)  return `${days} day${days !== 1 ? 's' : ''}`;
+            if (days < 365) { const months = Math.floor(days / 30); return `${months} month${months !== 1 ? 's' : ''}`; }
+            const years = Math.floor(days / 365), months = Math.floor((days % 365) / 30);
+            return months ? `${years}y ${months}mo` : `${years} year${years !== 1 ? 's' : ''}`;
         };
 
-        // function to fetch user avatars in batches
-        const fetchUserAvatars = (userIds) => {
-            return new Promise((resolve) => {
-                const requests = userIds.slice(0, 100).map(userId => ({
-                    requestId: userId.toString(),
-                    targetId: userId,
-                    type: "AvatarHeadShot",
-                    size: "150x150",
-                    format: "Png",
-                    isCircular: false
-                }));
+        const formatJoinDate = created =>
+            new Date(created).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 
-                GM_xmlhttpRequest({
-                    method: "POST",
-                    url: "https://thumbnails.roblox.com/v1/batch",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    data: JSON.stringify(requests),
-                    onload: function(response) {
-                        if (response.status >= 200 && response.status < 300) {
-                            try {
-                                const data = JSON.parse(response.responseText);
-                                const avatarMap = {};
-                                data.data.forEach(item => {
-                                    if (item.state === "Completed" && item.imageUrl) {
-                                        avatarMap[item.targetId] = item.imageUrl;
-                                    }
-                                });
-                                resolve(avatarMap);
-                            } catch (e) {
-                                ConsoleLogEnabled("[fetchUserAvatars] Failed to parse response", e);
-                                resolve({});
-                            }
-                        } else {
-                            ConsoleLogEnabled(`[fetchUserAvatars] Request failed with status ${response.status}`);
-                            resolve({});
-                        }
-                    },
-                    onerror: function(err) {
-                        ConsoleLogEnabled("[fetchUserAvatars] Network error", err);
-                        resolve({});
-                    }
-                });
-            });
+        const formatNum = n => n === null || n === undefined ? '—' : Number(n).toLocaleString();
+
+        // -- styles --
+
+        const injectStyles = () => {
+            if (document.querySelector('#bpi-styles')) return;
+            const styleEl = document.createElement('style');
+            styleEl.id = 'bpi-styles';
+            styleEl.textContent = `
+          /* section wrapper */
+          .bpi-section {
+              margin: 24px 0;
+              display: flex;
+              flex-direction: column;
+              gap: 12px;
+          }
+          .bpi-section-label {
+              font: 700 11px "Source Sans Pro", Arial, sans-serif;
+              text-transform: uppercase;
+              letter-spacing: 1px;
+              color: #6b6b75;
+          }
+
+          /* stat card row */
+          .bpi-stat-row {
+              display: grid;
+              grid-template-columns: repeat(6, 1fr);
+              gap: 10px;
+          }
+          @media (max-width: 700px) { .bpi-stat-row { grid-template-columns: repeat(3, 1fr); } }
+          @media (max-width: 420px) { .bpi-stat-row { grid-template-columns: repeat(2, 1fr); } }
+
+          /* individual stat card */
+          .bpi-card {
+              background: #1a1a1e;
+              border: 1px solid #26262c;
+              border-radius: 20px;
+              padding: 14px 16px;
+              display: flex;
+              flex-direction: column;
+              gap: 5px;
+              animation: bpi-up .25s cubic-bezier(.34,1.56,.64,1) backwards;
+              transition: border-color .15s, background .15s, transform .15s, box-shadow .15s;
+              min-width: 0;
+          }
+          .bpi-card.clickable {
+              cursor: pointer;
+          }
+          .bpi-card.clickable:hover {
+              border-color: #3a5ea3;
+              background: #1d1d23;
+              transform: translateY(-2px) scale(1.03);
+              box-shadow: 0 6px 18px rgba(58, 94, 163, .18);
+          }
+          .bpi-card.clickable:active {
+              transform: scale(.97);
+              box-shadow: none;
+          }
+          .bpi-card-label {
+              font: 600 10px "Source Sans Pro", Arial, sans-serif;
+              text-transform: uppercase;
+              letter-spacing: .7px;
+              color: #6b6b75;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+          }
+          .bpi-card-value {
+              font: 700 17px "Source Sans Pro", Arial, sans-serif;
+              color: #e8e8ec;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              line-height: 1.3;
+          }
+
+          /* mutual friends block */
+          .bpi-mf-block {
+              background: #1a1a1e;
+              border: 1px solid #26262c;
+              border-radius: 20px;
+              overflow: hidden;
+              animation: bpi-up .25s cubic-bezier(.34,1.56,.64,1) backwards;
+              animation-delay: .1s;
+          }
+          .bpi-mf-header {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              padding: 12px 16px;
+              border-bottom: 1px solid #26262c;
+          }
+          .bpi-mf-title {
+              font: 700 13px "Source Sans Pro", Arial, sans-serif;
+              text-transform: uppercase;
+              letter-spacing: 1px;
+              color: #6b6b75;
+          }
+          .bpi-mf-count {
+              font: 700 13px "Source Sans Pro", Arial, sans-serif;
+              color: #3a5ea3;
+              background: rgba(58, 94, 163, .12);
+              border-radius: 999px;
+              padding: 2px 10px;
+          }
+
+          .bpi-mf-grid {
+              display: grid;
+              grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+              gap: 1px;
+              background: #26262c;
+          }
+          .bpi-mf-row {
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              padding: 13px 16px;
+              background: #1a1a1e;
+              cursor: pointer;
+              transition: background .12s, transform .12s;
+              animation: bpi-fade .18s ease-out backwards;
+          }
+          .bpi-mf-row:hover {
+              background: #1d1d23;
+          }
+          .bpi-mf-row:active {
+              transform: scale(.97);
+          }
+
+          .bpi-mf-thumb {
+              width: 38px;
+              height: 38px;
+              border-radius: 50%;
+              border: 2px solid #26262c;
+              overflow: hidden;
+              flex-shrink: 0;
+              background: #121215;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 15px;
+              transition: border-color .15s, transform .15s;
+          }
+          .bpi-mf-row:hover .bpi-mf-thumb {
+              border-color: #3a5ea3;
+              transform: scale(1.08);
+          }
+          .bpi-mf-thumb img {
+              width: 100%;
+              height: 100%;
+              object-fit: cover;
+          }
+          .bpi-mf-info {
+              overflow: hidden;
+              flex: 1;
+          }
+          .bpi-mf-name {
+              font: 600 14px "Source Sans Pro", Arial, sans-serif;
+              color: #d8d8de;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+          }
+          .bpi-mf-age {
+              font: 400 12px "Source Sans Pro", Arial, sans-serif;
+              color: #6b6b75;
+          }
+          .bpi-mf-arrow {
+              color: #3a5ea3;
+              font-size: 16px;
+              flex-shrink: 0;
+              transition: transform .15s;
+          }
+          .bpi-mf-row:hover .bpi-mf-arrow {
+              transform: translateX(3px);
+          }
+
+          /* "view all" cell */
+          .bpi-mf-viewall .bpi-mf-name { color: #3a5ea3; }
+          .bpi-mf-viewall:hover .bpi-mf-name { color: #6b9de8; }
+          .bpi-mf-viewall-icon {
+              background: #121215;
+              border: 1px solid rgba(58, 94, 163, .4);
+              border-radius: 50%;
+              color: #3a5ea3;
+              font: 700 11px "Source Sans Pro", Arial, sans-serif;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+          }
+
+          /* empty / loading states */
+          .bpi-mf-empty {
+              padding: 20px 16px;
+              color: #6b6b75;
+              font: 400 13px "Source Sans Pro", Arial, sans-serif;
+              font-style: italic;
+          }
+          .bpi-loading {
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              color: #6b6b75;
+              font: 400 12px "Source Sans Pro", Arial, sans-serif;
+              padding: 4px 0;
+          }
+          .bpi-spinner {
+              width: 13px;
+              height: 13px;
+              border: 2px solid #26262c;
+              border-top-color: #3a5ea3;
+              border-radius: 50%;
+              animation: bpi-spin .7s linear infinite;
+              flex-shrink: 0;
+          }
+
+          /* popup overlay */
+          .bpi-overlay {
+              position: fixed;
+              inset: 0;
+              background: rgba(0, 0, 0, .6);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              z-index: 10000;
+              animation: bpi-fadein .15s ease-out;
+          }
+          .bpi-popup {
+              background: #1a1a1e;
+              border: 1px solid #26262c;
+              border-radius: 22px;
+              width: 90%;
+              max-width: 720px;
+              max-height: 82vh;
+              display: flex;
+              flex-direction: column;
+              overflow: hidden;
+              box-shadow: 0 16px 48px rgba(0, 0, 0, .5);
+              animation: bpi-pop .22s cubic-bezier(.34,1.45,.64,1);
+          }
+          .bpi-popup-head {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              padding: 18px 22px;
+              border-bottom: 1px solid #26262c;
+          }
+          .bpi-popup-title {
+              color: #e8e8ec;
+              font: 700 16px "Source Sans Pro", Arial, sans-serif;
+          }
+          .bpi-popup-close {
+              background: #121215;
+              border: 1px solid #26262c;
+              color: #9b9b9b;
+              width: 30px;
+              height: 30px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              border-radius: 50%;
+              cursor: pointer;
+              font-size: 18px;
+              line-height: 1;
+              transition: border-color .12s, color .12s, transform .15s;
+          }
+          .bpi-popup-close:hover {
+              border-color: #3a5ea3;
+              color: #e8e8ec;
+              transform: rotate(90deg) scale(1.1);
+          }
+          .bpi-popup-grid {
+              padding: 16px 22px;
+              overflow-y: auto;
+              display: grid;
+              grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+              gap: 10px;
+          }
+          .bpi-popup-grid::-webkit-scrollbar { width: 4px; }
+          .bpi-popup-grid::-webkit-scrollbar-track { background: transparent; }
+          .bpi-popup-grid::-webkit-scrollbar-thumb { background: rgba(58, 94, 163, .5); border-radius: 2px; }
+          .bpi-popup-item {
+              display: flex;
+              align-items: center;
+              gap: 12px;
+              padding: 13px 14px;
+              background: #121215;
+              border: 1px solid #26262c;
+              border-radius: 16px;
+              cursor: pointer;
+              transition: border-color .12s, background .12s, transform .15s, box-shadow .15s;
+              animation: bpi-slide .15s ease-out backwards;
+          }
+          .bpi-popup-item:hover {
+              background: #1d1d23;
+              border-color: #3a5ea3;
+              transform: translateY(-2px) scale(1.02);
+              box-shadow: 0 4px 14px rgba(58, 94, 163, .15);
+          }
+          .bpi-popup-item:active {
+              transform: scale(.97);
+              box-shadow: none;
+          }
+          .bpi-popup-avatar {
+              width: 42px;
+              height: 42px;
+              border-radius: 50%;
+              border: 2px solid #26262c;
+              overflow: hidden;
+              flex-shrink: 0;
+              background: #1a1a1e;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 16px;
+              transition: border-color .15s, transform .15s;
+          }
+          .bpi-popup-item:hover .bpi-popup-avatar {
+              border-color: #3a5ea3;
+              transform: scale(1.08);
+          }
+          .bpi-popup-avatar img {
+              width: 100%;
+              height: 100%;
+              object-fit: cover;
+          }
+          .bpi-popup-name {
+              font: 600 15px "Source Sans Pro", Arial, sans-serif;
+              color: #e8e8ec;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+          }
+          .bpi-popup-meta {
+              font: 400 12px "Source Sans Pro", Arial, sans-serif;
+              color: #6b6b75;
+          }
+
+          /* keyframes */
+          @keyframes bpi-up    { from { opacity: 0; transform: translateY(8px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+          @keyframes bpi-fade  { from { opacity: 0; }                               to { opacity: 1; } }
+          @keyframes bpi-spin  { to   { transform: rotate(360deg); } }
+          @keyframes bpi-fadein{ from { opacity: 0; }                               to { opacity: 1; } }
+          @keyframes bpi-fadeout{from { opacity: 1; }                               to { opacity: 0; } }
+          @keyframes bpi-pop   { from { opacity: 0; transform: scale(.94); }        to { opacity: 1; transform: scale(1); } }
+          @keyframes bpi-slide { from { opacity: 0; transform: translateX(-8px); }  to { opacity: 1; transform: translateX(0); } }
+            `;
+            document.head.appendChild(styleEl);
         };
 
-        // function to fetch and cache all avatars at once
-        const fetchAllAvatars = async (mutualFriends) => {
-            if (mutualFriends.length === 0) return {};
+        // mutal friuends popuyp
 
-            ConsoleLogEnabled(`[fetchAllAvatars] Fetching avatars for ${mutualFriends.length} mutual friends`);
-
-            const allIds = mutualFriends.map(f => f.id);
-            const batches = [];
-
-            for (let i = 0; i < allIds.length; i += 100) {
-                batches.push(allIds.slice(i, i + 100));
-            }
-
-            const avatarResults = await Promise.all(batches.map(batch => fetchUserAvatars(batch)));
-            const combinedAvatars = Object.assign({}, ...avatarResults);
-
-            ConsoleLogEnabled(`[fetchAllAvatars] Cached ${Object.keys(combinedAvatars).length} avatars`);
-            return combinedAvatars;
-        };
-
-        // function to create the mutual friends element with all styles
-        const createMutualFriendsElement = () => {
-            if (!document.querySelector('#mutual-friends-styles')) { // css stuff
-                const style = document.createElement('style');
-                style.id = 'mutual-friends-styles';
-                style.textContent = `
-                    .mutual-friends-container {
-                      background: ${isDarkMode() ? 'linear-gradient(135deg, #111114 0%, #1a1a1d 100%)' : '#E0D8CC'};
-                      border: 1px solid rgba(255, 255, 255, 0.1);
-                      border-radius: 12px;
-                      padding: 20px;
-                      margin: 20px 0;
-                      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-                      transition: all 0.2s ease;
-                      position: relative;
-                      overflow: hidden;
-                      animation: slideInUp 0.3s ease-out;
-                    }
-                    .mutual-friends-container:hover {
-                      background: ${isDarkMode() ? 'linear-gradient(135deg, #1a1a1d 0%, #222226 100%);' : '#E0D8CC'};
-                      box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
-                      transform: translateY(-1px);
-                      border-color: rgba(255, 255, 255, 0.2);
-                    }
-                    @keyframes slideInUp {
-                      from {
-                        opacity: 0;
-                        transform: translateY(20px);
-                      }
-                      to {
-                        opacity: 1;
-                        transform: translateY(0);
-                      }
-                    }
-                    .mutual-friends-header {
-                      display: flex;
-                      align-items: center;
-                      margin-bottom: 16px;
-                      color: ${isDarkMode() ? 'white' : 'black'};
-                      font-size: 18px;
-                      font-weight: 700;
-                      font-family: "Source Sans Pro", Arial, sans-serif;
-                      position: relative;
-                      z-index: 1;
-                    }
-                    .mutual-friends-icon {
-                      width: 24px;
-                      height: 24px;
-                      margin-right: 12px;
-                      fill: url(#iconGradient);
-                      flex-shrink: 0;
-                    }
-                    .mutual-friends-count {
-                      background: linear-gradient(45deg, #4a90e2, #357abd);
-                      color: white;
-                      padding: 8px 14px;
-                      border-radius: 20px;
-                      font-size: 14px;
-                      font-weight: 800;
-                      margin-left: 12px;
-                      box-shadow: 0 4px 15px rgba(74, 144, 226, 0.3);
-                      animation: bounceIn 0.3s ease-out;
-                      min-width: 40px;
-                      text-align: center;
-                      border: 2px solid rgba(255, 255, 255, 0.2);
-                    }
-                    @keyframes bounceIn {
-                      0% {
-                        transform: scale(0.5);
-                        opacity: 0;
-                      }
-                      60% {
-                        transform: scale(1.05);
-                      }
-                      100% {
-                        transform: scale(1);
-                        opacity: 1;
-                      }
-                    }
-                    .mutual-friends-list {
-                      display: flex;
-                      flex-wrap: wrap;
-                      gap: 12px;
-                    }
-                    .mutual-friend-tag {
-                      background: ${isDarkMode() ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.1)'};
-                      color: #ffffff;
-                      padding: 8px 16px;
-                      border-radius: 25px;
-                      font-size: 14px;
-                      font-weight: 600;
-                      border: 1px solid rgba(255, 255, 255, 0.15);
-                      transition: all 0.15s ease;
-                      cursor: pointer;
-                      font-family: "Source Sans Pro", Arial, sans-serif;
-                      white-space: nowrap;
-                      position: relative;
-                      overflow: hidden;
-                      animation: fadeInScale 0.2s ease-out backwards;
-                    }
-                    .mutual-friend-tag:nth-child(1) {
-                      animation-delay: 0.05s;
-                    }
-                    .mutual-friend-tag:nth-child(2) {
-                      animation-delay: 0.1s;
-                    }
-                    .mutual-friend-tag:nth-child(3) {
-                      animation-delay: 0.15s;
-                    }
-                    .mutual-friend-tag:nth-child(4) {
-                      animation-delay: 0.2s;
-                    }
-                    .mutual-friend-tag:nth-child(5) {
-                      animation-delay: 0.25s;
-                    }
-                    .mutual-friend-tag:nth-child(6) {
-                      animation-delay: 0.3s;
-                    }
-                    @keyframes fadeInScale {
-                      from {
-                        opacity: 0;
-                        transform: scale(0.9) translateY(10px);
-                      }
-                      to {
-                        opacity: 1;
-                        transform: scale(1) translateY(0);
-                      }
-                    }
-                    .mutual-friend-tag:hover {
-                      background: linear-gradient(
-                        45deg,
-                        rgba(255, 255, 255, 0.15),
-                        rgba(255, 255, 255, 0.12)
-                      );
-                      border-color: rgba(255, 255, 255, 0.3);
-                      transform: translateY(-2px) scale(1.02);
-                      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-                    }
-                    .mutual-friends-more {
-                      background: linear-gradient(45deg, #ff6b35, #f7931e) !important;
-                      border-color: rgba(255, 255, 255, 0.3) !important;
-                      color: white !important;
-                      font-weight: 700 !important;
-                      padding-top: 13.5px;
-                      box-shadow: 0 4px 15px rgba(255, 107, 53, 0.2) !important;
-                    }
-                    .mutual-friends-more:hover {
-                      background: linear-gradient(45deg, #ff5722, #e68900) !important;
-                      border-color: rgba(255, 255, 255, 0.5) !important;
-                      box-shadow: 0 6px 20px rgba(255, 107, 53, 0.4) !important;
-                    }
-                    .mutual-friends-overlay {
-                      position: fixed;
-                      top: 0;
-                      left: 0;
-                      width: 100%;
-                      height: 100%;
-                      background: rgba(0, 0, 0, 0.3);
-                      display: flex;
-                      align-items: center;
-                      justify-content: center;
-                      z-index: 10000;
-                      animation: fadeIn 0.2s ease-out;
-                    }
-                    @keyframes fadeIn {
-                      from {
-                        opacity: 0;
-                      }
-                      to {
-                        opacity: 1;
-                      }
-                    }
-                    .mutual-friends-popup {
-                      background: linear-gradient(135deg, #111114 0%, #1a1a1d 100%);
-                      border: 1px solid rgba(255, 255, 255, 0.15);
-                      border-radius: 16px;
-                      width: 90%;
-                      max-width: 700px;
-                      max-height: 80vh;
-                      overflow: hidden;
-                      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
-                      animation: popupSlideIn 0.2s ease-out;
-                    }
-                    @keyframes popupSlideIn {
-                      from {
-                        opacity: 0;
-                        transform: scale(0.95) translateY(20px);
-                      }
-                      to {
-                        opacity: 1;
-                        transform: scale(1) translateY(0);
-                      }
-                    }
-                    .mutual-friends-popup-header {
-                      display: flex;
-                      justify-content: space-between;
-                      align-items: center;
-                      padding: 24px;
-                      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-                      background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
-                    }
-                    .mutual-friends-popup-header h3 {
-                      color: #ffffff;
-                      margin: 0;
-                      font-family: "Source Sans Pro", Arial, sans-serif;
-                      font-size: 20px;
-                      font-weight: 700;
-                    }
-                    .mutual-friends-close {
-                      background: rgba(255, 255, 255, 0.1);
-                      border: 1px solid rgba(255, 255, 255, 0.2);
-                      color: #ffffff;
-                      font-size: 20px;
-                      cursor: pointer;
-                      padding: 8px;
-                      width: 36px;
-                      height: 36px;
-                      display: flex;
-                      align-items: center;
-                      justify-content: center;
-                      border-radius: 50%;
-                      transition: all 0.15s ease;
-                    }
-                    .mutual-friends-close:hover {
-                      background: rgba(255, 59, 59, 0.2);
-                      border-color: rgba(255, 59, 59, 0.4);
-                      transform: rotate(90deg);
-                    }
-                    .mutual-friends-popup-grid {
-                      padding: 24px;
-                      max-height: 60vh;
-                      overflow-y: auto;
-                      display: grid;
-                      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-                      gap: 16px;
-                    }
-                    .mutual-friends-popup-item {
-                      display: flex;
-                      align-items: center;
-                      padding: 16px;
-                      background: rgba(255, 255, 255, 0.05);
-                      border: 1px solid rgba(255, 255, 255, 0.1);
-                      border-radius: 12px;
-                      cursor: pointer;
-                      transition: all 0.15s ease;
-                      animation: itemSlideIn 0.2s ease-out backwards;
-                    }
-                    .mutual-friends-popup-item:nth-child(odd) {
-                      animation-delay: 0.05s;
-                    }
-                    .mutual-friends-popup-item:nth-child(even) {
-                      animation-delay: 0.1s;
-                    }
-                    @keyframes itemSlideIn {
-                      from {
-                        opacity: 0;
-                        transform: translateX(-20px);
-                      }
-                      to {
-                        opacity: 1;
-                        transform: translateX(0);
-                      }
-                    }
-                    .mutual-friends-popup-item:hover {
-                      background: linear-gradient(
-                        45deg,
-                        rgba(255, 255, 255, 0.1),
-                        rgba(255, 255, 255, 0.08)
-                      );
-                      border-color: rgba(255, 255, 255, 0.25);
-                      transform: translateY(-2px) scale(1.01);
-                      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
-                    }
-                    .mutual-friend-avatar {
-                      width: 48px;
-                      height: 48px;
-                      background: linear-gradient(
-                        45deg,
-                        rgba(255, 255, 255, 0.1),
-                        rgba(255, 255, 255, 0.08)
-                      );
-                      border: 2px solid rgba(255, 255, 255, 0.15);
-                      border-radius: 50%;
-                      display: flex;
-                      align-items: center;
-                      justify-content: center;
-                      margin-right: 16px;
-                      font-size: 20px;
-                      flex-shrink: 0;
-                      overflow: hidden;
-                      transition: all 0.15s ease;
-                    }
-                    .mutual-friend-avatar img {
-                      width: 100%;
-                      height: 100%;
-                      object-fit: cover;
-                      border-radius: 50%;
-                    }
-                    .mutual-friends-popup-item:hover .mutual-friend-avatar {
-                      transform: scale(1.05);
-                      border-color: rgba(255, 255, 255, 0.3);
-                    }
-                    .mutual-friend-name {
-                      color: #ffffff;
-                      font-family: "Source Sans Pro", Arial, sans-serif;
-                      font-size: 16px;
-                      font-weight: 600;
-                      overflow: hidden;
-                      text-overflow: ellipsis;
-                      white-space: nowrap;
-                    }
-                    .mutual-friends-loading {
-                      display: flex;
-                      align-items: center;
-                      color: rgba(255, 255, 255, 0.8);
-                      font-size: 16px;
-                      font-family: "Source Sans Pro", Arial, sans-serif;
-                      font-weight: 500;
-                    }
-                    .loading-spinner {
-                      width: 20px;
-                      height: 20px;
-                      border: 3px solid rgba(255, 255, 255, 0.2);
-                      border-top: 3px solid #ffffff;
-                      border-radius: 50%;
-                      animation: spin 0.8s linear infinite;
-                      margin-right: 12px;
-                    }
-                    @keyframes spin {
-                      0% {
-                        transform: rotate(0deg);
-                      }
-                      100% {
-                        transform: rotate(360deg);
-                      }
-                    }
-                    .no-mutual-friends {
-                      color: rgba(255, 255, 255, 0.6);
-                      font-style: italic;
-                      font-size: 16px;
-                      font-family: "Source Sans Pro", Arial, sans-serif;
-                      text-align: center;
-                      padding: 20px;
-                    }
-                    .mutual-friends-popup-grid::-webkit-scrollbar {
-                      width: 8px;
-                    }
-                    .mutual-friends-popup-grid::-webkit-scrollbar-track {
-                      background: rgba(255, 255, 255, 0.1);
-                      border-radius: 4px;
-                    }
-                    .mutual-friends-popup-grid::-webkit-scrollbar-thumb {
-                      background: linear-gradient(45deg, #555555, #666666);
-                      border-radius: 4px;
-                    }
-                    .mutual-friends-popup-grid::-webkit-scrollbar-thumb:hover {
-                      background: linear-gradient(45deg, #666666, #777777);
-                    }
-                    @keyframes fadeOut {
-                      from {
-                        opacity: 1;
-                      }
-                      to {
-                        opacity: 0;
-                      }
-                    }
-                `;
-                document.head.appendChild(style);
-
-                const svgDefs = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-                svgDefs.style.width = '0';
-                svgDefs.style.height = '0';
-                svgDefs.style.position = 'absolute';
-                svgDefs.innerHTML = `<defs><linearGradient id="iconGradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#cccccc;stop-opacity:1" /><stop offset="100%" style="stop-color:#999999;stop-opacity:1" /></linearGradient></defs>`;
-                document.body.appendChild(svgDefs);
-            }
-
-            const container = document.createElement('div');
-            container.className = 'mutual-friends-container';
-            container.style.display = 'none';
-
-            const header = document.createElement('div');
-            header.className = 'mutual-friends-header';
-            header.innerHTML = `<svg class="mutual-friends-icon" viewBox="0 0 24 24"><path transform="translate(0,-5)" d="M17.25 20.5c1.281 0.719 2 1.906 1.875 3.125-0.063 0.75-0.031 0.75-1 0.875-0.594 0.063-4.375 0.094-8.219 0.094-4.375 0-8.938-0.031-9.281-0.125-1.281-0.344-0.531-2.719 1.156-3.844 1.344-0.844 4.063-2.156 4.813-2.313 1.031-0.219 1.156-0.875 0-2.844-0.25-0.469-0.531-1.813-0.563-3.25-0.031-2.313 0.375-3.875 2.406-4.656 0.375-0.125 0.813-0.188 1.219-0.188 1.344 0 2.594 0.75 3.125 1.844 0.719 1.469 0.375 5.313-0.375 6.719-0.906 1.594-0.813 2.094 0.188 2.344 0.625 0.156 2.688 1.125 4.656 2.219zM24.094 18.531c1 0.531 1.563 1.5 1.469 2.438-0.031 0.563-0.031 0.594-0.781 0.688-0.375 0.063-2.344 0.094-4.656 0.094-0.406-0.969-1.188-1.844-2.25-2.406-1.219-0.688-2.656-1.406-3.75-1.875 0.719-0.344 1.344-0.625 1.625-0.688 0.781-0.188 0.875-0.625 0-2.188-0.219-0.375-0.469-1.438-0.5-2.563-0.031-1.813 0.375-3.063 1.938-3.656 0.313-0.094 0.656-0.156 0.969-0.156 1.031 0 2 0.563 2.406 1.438 0.531 1.156 0.281 4.156-0.281 5.281-0.688 1.25-0.625 1.625 0.156 1.813 0.5 0.125 2.094 0.906 3.656 1.781z"/></svg>Mutual Friends`;
-
-            const content = document.createElement('div');
-            content.className = 'mutual-friends-content';
-
-            container.appendChild(header);
-            container.appendChild(content);
-            return container;
-        };
-
-        // function to show loading state
-        const showMutualFriendsLoading = (contentElement) => {
-            contentElement.innerHTML = `<div class="mutual-friends-loading"><div class="loading-spinner"></div>Finding mutual friends...</div>`;
-        };
-
-        // make popup for mutual frineds
-        const createMutualFriendsPopup = async (mutualFriends) => {
+         const openMutualFriendsPopup = friends => {
             const overlay = document.createElement('div');
-            overlay.className = 'mutual-friends-overlay';
+            overlay.className = 'bpi-overlay';
 
-            const popup = document.createElement('div');
-            popup.className = 'mutual-friends-popup';
+            let closing = false;
+            const closePopup = () => {
+                if (closing) return;
+                closing = true;
+                overlay.style.animation = 'bpi-fadeout .15s ease-out forwards';
+                overlay.style.pointerEvents = 'none'; // immediately stop blocking clicks
+                const tid = setTimeout(() => overlay.remove(), 160);
+                overlay.addEventListener('animationend', () => {
+                    clearTimeout(tid);
+                    overlay.remove();
+                }, { once: true });
+            };
 
-            const header = document.createElement('div');
-            header.className = 'mutual-friends-popup-header';
-            header.innerHTML = `<h3>All Mutual Friends (${mutualFriends.length})</h3><button class="mutual-friends-close">×</button>`;
+            overlay.innerHTML = `
+                <div class="bpi-popup">
+                    <div class="bpi-popup-head">
+                        <span class="bpi-popup-title">All Mutual Friends (${friends.length})</span>
+                        <button class="bpi-popup-close">×</button>
+                    </div>
+                    <div class="bpi-popup-grid"></div>
+                </div>`;
 
-            const grid = document.createElement('div');
-            grid.className = 'mutual-friends-popup-grid';
+            const grid = overlay.querySelector('.bpi-popup-grid');
 
-            const avatarMap = localAvatarCache;
+            friends.forEach((friend, idx) => {
+                const item = document.createElement('div');
+                item.className = 'bpi-popup-item';
+                item.style.animationDelay = `${Math.min(idx * 0.025, 0.2)}s`;
 
-            mutualFriends.forEach(friend => {
-                const friendItem = document.createElement('div');
-                friendItem.className = 'mutual-friends-popup-item';
+                const avatarUrl = avatarCache[friend.id];
+                item.innerHTML = `
+                    <div class="bpi-popup-avatar">${avatarUrl ? `<img src="${avatarUrl}">` : '👤'}</div>
+                    <div style="overflow:hidden">
+                        <div class="bpi-popup-name"></div>
+                        <div class="bpi-popup-meta"></div>
+                    </div>`;
 
-                const avatarUrl = avatarMap[friend.id];
-                const avatarContent = avatarUrl ? `<img src="${avatarUrl}" alt="${friend.displayName || friend.name}">` : '👤';
-                const displayName = friend.displayName || friend.name || `User${friend.id}`;
+                item.querySelector('.bpi-popup-name').textContent = friend.displayName || friend.name || `User${friend.id}`;
+                item.querySelector('.bpi-popup-meta').textContent = friend.created
+                    ? `${formatAccountAge(friend.created)} · ${formatJoinDate(friend.created)}`
+                    : '';
+                item.onclick = () => window.open(`https://www.roblox.com/users/${sanitizeUserId(friend.id)}/profile`, '_blank');
 
-                friendItem.innerHTML = `
-                  <div class="mutual-friend-avatar">
-                    ${avatarUrl ? `<img src="${avatarUrl}">` : '👤'}
-                  </div>
-                  <span class="mutual-friend-name"></span>
-                `;
-                friendItem.lastElementChild.textContent = displayName;
-
-                friendItem.onclick = () => { // i dont even know how hackers and inject js in a url but whatever
-                    window.open(`https://www.roblox.com/users/${sanitizeUserId(friend.id)}/profile`, '_blank'); // yo ik this isnt really neccessary but better safe than sorry.
-                };
-                grid.appendChild(friendItem);
+                grid.appendChild(item);
             });
 
-            popup.appendChild(header);
-            popup.appendChild(grid);
-            overlay.appendChild(popup);
-
-            header.querySelector('.mutual-friends-close').onclick = () => {
-                overlay.style.animation = 'fadeOut 0.2s ease-out forwards';
-                setTimeout(() => overlay.remove(), 200);
-            };
-
-            overlay.onclick = (randomvariableineed) => {
-                if (randomvariableineed.target === overlay) {
-                    overlay.style.animation = 'fadeOut 0.2s ease-out forwards';
-                    setTimeout(() => overlay.remove(), 200);
-                }
-            };
+            overlay.querySelector('.bpi-popup-close').onclick = closePopup;
 
             return overlay;
         };
 
-        // show mutal frinds
-        const displayMutualFriends = async (contentElement, mutualFriends) => {
-            contentElement.innerHTML = '';
+        // -- render --
 
-            if (mutualFriends.length === 0) {
-                contentElement.innerHTML = '<div class="no-mutual-friends">No mutual friends found. RoLocate by Oqarshi</div>';
+        const renderWidget = (section, { profile, friendCount, followerCount, followingCount, mutualFriends, otherUserId }) => {
+            section.innerHTML = '';
+
+            // stat cards
+            const sectionLabel = document.createElement('div');
+            sectionLabel.className = 'bpi-section-label';
+            sectionLabel.textContent = 'Better Profile Info (RoLocate by Oqarshi)';
+            section.appendChild(sectionLabel);
+
+            const statRow = document.createElement('div');
+            statRow.className = 'bpi-stat-row';
+            section.appendChild(statRow);
+
+            const statCards = [
+                { label: 'Joined',         value: profile?.created ? formatJoinDate(profile.created)   : '—', href: null },
+                { label: 'Account Age',    value: profile?.created ? formatAccountAge(profile.created) : '—', href: null },
+                { label: 'Friends',        value: formatNum(friendCount),         href: `https://www.roblox.com/users/${otherUserId}/friends` },
+                // clicking mutual friends card opens the popup
+                { label: 'Mutual Friends', value: formatNum(mutualFriends.length), href: null, onClick: mutualFriends.length ? () => document.body.appendChild(openMutualFriendsPopup(mutualFriends)) : null },
+                { label: 'Followers',      value: formatNum(followerCount),       href: `https://www.roblox.com/users/${otherUserId}/friends#!/followers` },
+                { label: 'Following',      value: formatNum(followingCount),      href: `https://www.roblox.com/users/${otherUserId}/friends#!/following` },
+            ];
+
+            statCards.forEach(({ label, value, href, onClick }, idx) => {
+                const card = document.createElement('div');
+                const isClickable = href || onClick;
+                card.className = `bpi-card${isClickable ? ' clickable' : ''}`;
+                card.style.animationDelay = `${idx * 0.04}s`;
+                card.innerHTML = `<div class="bpi-card-label"></div><div class="bpi-card-value"></div>`;
+                card.querySelector('.bpi-card-label').textContent = label;
+                card.querySelector('.bpi-card-value').textContent = value;
+                if (onClick) card.onclick = onClick;
+                else if (href) card.onclick = () => window.open(href, '_blank');
+                statRow.appendChild(card);
+            });
+
+            // mutual friends list below the stat cards
+            const mfBlock = document.createElement('div');
+            mfBlock.className = 'bpi-mf-block';
+            section.appendChild(mfBlock);
+
+            const mfHeader = document.createElement('div');
+            mfHeader.className = 'bpi-mf-header';
+            mfHeader.innerHTML = `
+                <span class="bpi-mf-title">Mutual Friends</span>
+                ${mutualFriends.length ? `<span class="bpi-mf-count">${mutualFriends.length}</span>` : ''}`;
+            mfBlock.appendChild(mfHeader);
+
+            if (!mutualFriends.length) {
+                const emptyMsg = document.createElement('div');
+                emptyMsg.className = 'bpi-mf-empty';
+                emptyMsg.textContent = 'No mutual friends. RoLocate by Oqarshi.';
+                mfBlock.appendChild(emptyMsg);
                 return;
             }
 
-            const header = contentElement.parentElement.querySelector('.mutual-friends-header');
-            const countBadge = document.createElement('span');
-            countBadge.className = 'mutual-friends-count';
-            countBadge.textContent = mutualFriends.length;
-            header.appendChild(countBadge);
+            const MAX_PREVIEW = 3;
+            const grid = document.createElement('div');
+            grid.className = 'bpi-mf-grid';
+            mfBlock.appendChild(grid);
 
-            const friendsList = document.createElement('div');
-            friendsList.className = 'mutual-friends-list';
+            mutualFriends.slice(0, MAX_PREVIEW).forEach((friend, idx) => {
+                const row = document.createElement('div');
+                row.className = 'bpi-mf-row';
+                row.style.animationDelay = `${0.12 + idx * 0.03}s`;
 
-            const maxVisible = 4;
-            const friendsToShow = mutualFriends.slice(0, maxVisible);
+                const avatarUrl = avatarCache[friend.id];
+                row.innerHTML = `
+                    <div class="bpi-mf-thumb">${avatarUrl ? `<img src="${avatarUrl}">` : '👤'}</div>
+                    <div class="bpi-mf-info">
+                        <div class="bpi-mf-name"></div>
+                        ${friend.created ? `<div class="bpi-mf-age"></div>` : ''}
+                    </div>
+                    <span class="bpi-mf-arrow">›</span>`;
 
-            // get avatar fromcm cache
-            const avatarMap = localAvatarCache;
+                row.querySelector('.bpi-mf-name').textContent = friend.displayName || friend.name || `User${friend.id}`;
+                if (friend.created) row.querySelector('.bpi-mf-age').textContent = `${formatJoinDate(friend.created)} · ${formatAccountAge(friend.created)}`;
+                row.onclick = () => window.open(`https://www.roblox.com/users/${friend.id}/profile`, '_blank');
 
-            friendsToShow.forEach(friend => {
-                const friendTag = document.createElement('div');
-                friendTag.className = 'mutual-friend-tag';
-
-                // add it to tag
-                const avatarUrl = avatarMap[friend.id];
-                const displayName = friend.displayName || friend.name || `User${friend.id}`;
-
-               // no attacks
-                if (avatarUrl) {
-                    const avatarDiv = document.createElement('div');
-                    avatarDiv.className = 'mutual-friend-avatar';
-                    avatarDiv.style.cssText = 'width: 32px; height: 32px; margin-right: 10px; display: inline-block; vertical-align: middle;';
-
-                    const img = document.createElement('img');
-                    img.src = avatarUrl;
-                    img.alt = '';
-                    img.style.cssText = 'width: 100%; height: 100%; border-radius: 50%; object-fit: cover;';
-
-                    avatarDiv.appendChild(img);
-
-                    const nameSpan = document.createElement('span');
-                    nameSpan.style.verticalAlign = 'middle';
-                    nameSpan.textContent = escapeHtmlnoxssattackvectors(displayName);
-
-                    friendTag.appendChild(avatarDiv);
-                    friendTag.appendChild(nameSpan);
-                } else {
-                    friendTag.textContent = escapeHtmlnoxssattackvectors(displayName); // no attacks
-                }
-
-                friendTag.onclick = () => {
-                    window.open(`https://www.roblox.com/users/${friend.id}/profile`, '_blank');
-                };
-                friendsList.appendChild(friendTag);
+                grid.appendChild(row);
             });
 
-            if (mutualFriends.length > maxVisible) {
-                const moreButton = document.createElement('div');
-                moreButton.className = 'mutual-friend-tag mutual-friends-more';
-                moreButton.textContent = `+${mutualFriends.length - maxVisible} more`;
-                moreButton.onclick = async () => {
-                    const popup = await createMutualFriendsPopup(mutualFriends);
-                    document.body.appendChild(popup);
-                };
-                friendsList.appendChild(moreButton);
+            // show a "view all" button if there are more than 3 mutual friends
+            if (mutualFriends.length > MAX_PREVIEW) {
+                const viewAllRow = document.createElement('div');
+                viewAllRow.className = 'bpi-mf-row bpi-mf-viewall';
+                viewAllRow.style.animationDelay = `${0.12 + MAX_PREVIEW * 0.03}s`;
+                viewAllRow.innerHTML = `
+                    <div class="bpi-mf-thumb bpi-mf-viewall-icon">+${mutualFriends.length - MAX_PREVIEW}</div>
+                    <div class="bpi-mf-info">
+                        <div class="bpi-mf-name">View All</div>
+                        <div class="bpi-mf-age">${mutualFriends.length} mutual friends</div>
+                    </div>
+                    <span class="bpi-mf-arrow">›</span>`;
+                viewAllRow.onclick = () => document.body.appendChild(openMutualFriendsPopup(mutualFriends));
+                grid.appendChild(viewAllRow);
             }
-
-            contentElement.appendChild(friendsList);
         };
 
-        // function to find profile insertion point
-        const findProfileInsertionPoint = () => {
-            return document.querySelector('ul.profile-tabs.flex');
-        };
+        // -- main --
 
-        // main code
         try {
             const currentUserId = getCurrentUserId();
             if (!currentUserId) return;
@@ -6299,90 +7581,75 @@ li a.about-link:hover::after {
             if (!urlMatch) return;
 
             const otherUserId = urlMatch[1];
-            if (otherUserId === String(currentUserId)) return;
+            if (otherUserId === String(currentUserId)) return; // don't show on your own profile
 
-            // clear local cache for new page visit
-            localAvatarCache = {};
+            avatarCache = {};
+            injectStyles();
 
-            const mutualFriendsElement = createMutualFriendsElement();
-            const insertionPoint = findProfileInsertionPoint();
+            const insertionPoint = document.querySelector('ul.profile-tabs.flex');
+            if (!insertionPoint) { ConsoleLogEnabled('[BPI] no insertion point'); return; }
 
-            if (!insertionPoint) {
-                ConsoleLogEnabled('[Mutual Friends] Could not find suitable insertion point');
-                return;
-            }
+            // placeholder while we load
+            const section = document.createElement('div');
+            section.className = 'bpi-section';
+            section.innerHTML = `<div class="bpi-loading"><div class="bpi-spinner"></div>Loading...</div>`;
+            insertionPoint.insertAdjacentElement('afterend', section);
 
-            insertionPoint.insertAdjacentElement('afterend', mutualFriendsElement);
-            mutualFriendsElement.style.display = 'block';
-
-            const contentElement = mutualFriendsElement.querySelector('.mutual-friends-content');
-            showMutualFriendsLoading(contentElement);
-
-            // Step 1: fetch both friend lists
-            const [currentUserFriends, otherUserFriends] = await Promise.all([
-                gmFetchFriends(currentUserId),
-                gmFetchFriends(otherUserId),
+            const [myFriends, theirFriends, stats] = await Promise.all([
+                fetchFriends(currentUserId),
+                fetchFriends(otherUserId),
+                fetchUserStatsBatch(otherUserId)
             ]);
+            const { userInfo: theirProfile, friendCount, followerCount, followingCount } = stats;
 
-            if (!currentUserFriends || !otherUserFriends) {
-                contentElement.innerHTML = '<div class="no-mutual-friends">Failed to load friend data</div>';
+            if (!myFriends || !theirFriends) {
+                section.innerHTML = '<div class="bpi-loading" style="color:#c06060">Failed to load data.</div>';
                 return;
             }
 
-            ConsoleLogEnabled(`[Mutual Friends] Current user has ${currentUserFriends.length} friends`);
-            ConsoleLogEnabled(`[Mutual Friends] Other user has ${otherUserFriends.length} friends`);
+            // find mutual friends by intersecting friend id sets
+            const theirFriendIds = new Set(theirFriends.map(f => f.id));
+            let mutualFriends = myFriends.filter(f => theirFriendIds.has(f.id));
+            ConsoleLogEnabled(`[BPI] mutual friends: ${mutualFriends.length}`);
 
-            // Step 2: find mutual friends via comparison of id
-            const otherFriendIds = new Set(otherUserFriends.map(f => f.id));
-            let mutualFriends = currentUserFriends.filter(f => otherFriendIds.has(f.id));
+            if (mutualFriends.length) {
+                // fetch display names + join dates for anyone missing them
+                const missingNames = mutualFriends.filter(f => !f.name?.trim() || !f.displayName?.trim());
+                const mutualIds    = mutualFriends.map(f => f.id);
 
-            ConsoleLogEnabled(`[Mutual Friends] Found ${mutualFriends.length} mutual friends`);
+                const [nameBatch, ageBatch] = await Promise.all([
+                    fetchUsersBatch(missingNames.map(f => f.id)),
+                    Promise.all(mutualIds.map(id => fetchUser(id)))
+                ]);
 
-            if (mutualFriends.length === 0) {
-                await displayMutualFriends(contentElement, mutualFriends);
-                return;
+                const nameMap = new Map((nameBatch || []).map(u => [u.id, u]));
+                const ageMap  = new Map();
+                ageBatch.forEach((res, idx) => { if (res?.created) ageMap.set(mutualIds[idx], res.created); });
+
+                mutualFriends = mutualFriends.map(f => {
+                    const nameData = nameMap.get(f.id);
+                    return {
+                        ...f,
+                        name:        f.name?.trim()        || nameData?.name        || `User${f.id}`,
+                        displayName: f.displayName?.trim() || nameData?.displayName || nameData?.name || `User${f.id}`,
+                        created:     ageMap.get(f.id) || null
+                    };
+                });
+
+                // make it cfdompatable with the now global function
+                const thumbData = await fetchPlayerThumbnailsBatch(mutualFriends.map(f => f.id));
+                avatarCache = Object.fromEntries(
+                    (thumbData || [])
+                        .filter(t => t.state === "Completed" && t.imageUrl)
+                        .map(t => [t.targetId, t.imageUrl])
+                );
             }
 
-            // Step 3: check if they need display anmes
-            const friendsNeedingData = mutualFriends.filter(f =>
-                !f.name || f.name.trim() === '' ||
-                !f.displayName || f.displayName.trim() === ''
-            );
+            renderWidget(section, { profile: theirProfile, friendCount, followerCount, followingCount, mutualFriends, otherUserId });
+            ConsoleLogEnabled('[BPI] loaded ok');
 
-            ConsoleLogEnabled(`[Mutual Friends] ${friendsNeedingData.length} mutual friends need data fixes`);
-
-            // Step 4: fetch details of the friends that are mutual friends. find dispolayname
-            if (friendsNeedingData.length > 0) {
-                const userIds = friendsNeedingData.map(f => f.id);
-                const userDetails = await fetchUserDetailsBatch(userIds);
-
-                if (userDetails && userDetails.length > 0) {
-                    const detailsMap = new Map(userDetails.map(u => [u.id, u]));
-
-                    mutualFriends = mutualFriends.map(friend => {
-                        if (friend.name && friend.displayName) return friend;
-                        const details = detailsMap.get(friend.id);
-                        return {
-                            ...friend,
-                            name: details?.name || `User${friend.id}`,
-                            displayName: details?.displayName || details?.name || `User${friend.id}`
-                        };
-                    });
-
-                    ConsoleLogEnabled(`[Mutual Friends] Successfully enriched ${userDetails.length} friend details`);
-                }
-            }
-
-            // Step 5: fetch the avatars
-            localAvatarCache = await fetchAllAvatars(mutualFriends);
-
-            // Step 6: show it to the user
-            await displayMutualFriends(contentElement, mutualFriends);
-
-            ConsoleLogEnabled('[Mutual Friends] Feature loaded successfully');
-
-        } catch (error) {
-            ConsoleLogEnabled('[loadmutualfriends] Error occurred:', error);
+        } catch (err) {
+            ConsoleLogEnabled('[BPI] error:', err);
         }
     }
 
@@ -6639,177 +7906,6 @@ li a.about-link:hover::after {
             return date.toLocaleDateString('en-US', options);
         }
 
-
-        // find game icons in a batch
-        async function fetchGameIconsBatch(universeIds) {
-            if (!universeIds.length) return [];
-            const apiUrl = `https://thumbnails.roblox.com/v1/games/icons?universeIds=${universeIds.join(',')}&size=512x512&format=Png&isCircular=false`;
-            return new Promise((resolve) => {
-                GM_xmlhttpRequest({
-                    method: "GET", url: apiUrl, headers: {"Accept": "application/json"},
-                    onload: function(response) {
-                        if (response.status === 200) {
-                            try { resolve(JSON.parse(response.responseText).data || []); }
-                            catch (error) { resolve([]); }
-                        } else resolve([]);
-                    },
-                    onerror: function() { resolve([]); }
-                });
-            });
-        }
-
-        // find the playerth8mbnbs in a batch
-        async function fetchPlayerThumbnailsBatch(userIds) {
-            if (!userIds.length) return [];
-            const params = new URLSearchParams({userIds: userIds.join(","), size: "150x150", format: "Png", isCircular: "false"});
-            const url = `https://thumbnails.roblox.com/v1/users/avatar-headshot?${params.toString()}`;
-            return new Promise((resolve) => {
-                GM_xmlhttpRequest({
-                    method: "GET", url: url, headers: {"Accept": "application/json"},
-                    onload: function(response) {
-                        try {
-                            if (response.status === 200) resolve(JSON.parse(response.responseText).data || []);
-                            else resolve([]);
-                        } catch (error) { resolve([]); }
-                    },
-                    onerror: function() { resolve([]); }
-                });
-            });
-        }
-
-        // find group icons in a batch
-        async function fetchGroupIconsBatch(groupIds) {
-            if (!groupIds.length) return [];
-            const params = new URLSearchParams({groupIds: groupIds.join(","), size: "150x150", format: "Png", isCircular: "false"});
-            const url = `https://thumbnails.roblox.com/v1/groups/icons?${params.toString()}`;
-            return new Promise((resolve) => {
-                GM_xmlhttpRequest({
-                    method: "GET", url: url, headers: {"Accept": "application/json"},
-                    onload: function(response) {
-                        try {
-                            if (response.status === 200) resolve(JSON.parse(response.responseText).data || []);
-                            else resolve([]);
-                        } catch (error) { resolve([]); }
-                    },
-                    onerror: function() { resolve([]); }
-                });
-            });
-        }
-
-        // fubd yser fruiebd for the likie smtartseafch
-        async function fetchUserFriendCount(userId) {
-            return new Promise((resolve) => {
-                GM_xmlhttpRequest({
-                    method: "GET",
-                    url: `https://friends.roblox.com/v1/users/${userId}/friends/count`,
-                    headers: {"Accept": "application/json"},
-                    onload: function(response) {
-                        if (response.status === 200) {
-                            try {
-                                const data = JSON.parse(response.responseText);
-                                resolve(data.count || 0);
-                            }
-                            catch (e) { resolve(0); }
-                        } else resolve(0);
-                    },
-                    onerror: function() { resolve(0); }
-                });
-            });
-        }
-
-        // find user follower count in a batch ig
-        async function fetchUserFollowerCount(userId) {
-            return new Promise((resolve) => {
-                GM_xmlhttpRequest({
-                    method: "GET",
-                    url: `https://friends.roblox.com/v1/users/${userId}/followers/count`,
-                    headers: {"Accept": "application/json"},
-                    onload: function(response) {
-                        if (response.status === 200) {
-                            try {
-                                const data = JSON.parse(response.responseText);
-                                resolve(data.count || 0);
-                            }
-                            catch (e) { resolve(0); }
-                        } else resolve(0);
-                    },
-                    onerror: function() { resolve(0); }
-                });
-            });
-        }
-
-        // get user stats like friends and followers in a bathc. calls 2 functuions
-        async function fetchUserStatsBatch(userIds) {
-            const statsPromises = userIds.map(async (userId) => {
-                const [friendCount, followerCount] = await Promise.all([
-                    fetchUserFriendCount(userId),
-                    fetchUserFollowerCount(userId)
-                ]);
-                return {
-                    userId,
-                    friendCount,
-                    followerCount
-                };
-            });
-            return Promise.all(statsPromises);
-        }
-
-        // find the liike stats for the items
-        async function fetchCatalogItemDetails(assetId) {
-            return new Promise((resolve) => {
-                GM_xmlhttpRequest({
-                    method: "GET",
-                    url: `https://catalog.roblox.com/v1/catalog/items/${assetId}/details?itemType=Asset`,
-                    headers: {"Accept": "application/json"},
-                    onload: function(response) {
-                        if (response.status === 200) {
-                            try { resolve(JSON.parse(response.responseText)); }
-                            catch (e) { resolve(null); }
-                        } else resolve(null);
-                    },
-                    onerror: function() { resolve(null); }
-                });
-            });
-        }
-
-        // find thumbnail for items in batch
-        async function fetchCatalogThumbnailsBatch(assetIds) {
-            if (!assetIds.length) return [];
-            const params = new URLSearchParams({assetIds: assetIds.join(","), size: "150x150", format: "png", isCircular: "false"});
-            const url = `https://thumbnails.roblox.com/v1/assets?${params.toString()}`;
-            return new Promise((resolve) => {
-                GM_xmlhttpRequest({
-                    method: "GET", url: url, headers: {"Accept": "application/json"},
-                    onload: function(response) {
-                        try {
-                            if (response.status === 200) resolve(JSON.parse(response.responseText).data || []);
-                            else resolve([]);
-                        } catch (error) { resolve([]); }
-                    },
-                    onerror: function() { resolve([]); }
-                });
-            });
-        }
-
-        // find thumbnails in a batch
-        async function fetchBundleThumbnailsBatch(bundleIds) {
-            if (!bundleIds.length) return [];
-            const params = new URLSearchParams({bundleIds: bundleIds.join(","), size: "150x150", format: "png", isCircular: "false"});
-            const url = `https://thumbnails.roblox.com/v1/bundles/thumbnails?${params.toString()}`;
-            return new Promise((resolve) => {
-                GM_xmlhttpRequest({
-                    method: "GET", url: url, headers: {"Accept": "application/json"},
-                    onload: function(response) {
-                        try {
-                            if (response.status === 200) resolve(JSON.parse(response.responseText).data || []);
-                            else resolve([]);
-                        } catch (error) { resolve([]); }
-                    },
-                    onerror: function() { resolve([]); }
-                });
-            });
-        }
-
         /*******************************************************
         search fucntionssnsnsn
         *******************************************************/
@@ -6943,11 +8039,11 @@ li a.about-link:hover::after {
                     const thumbnailBatches = chunkArray(universeIds, 10);
                     for (const batch of thumbnailBatches) {
                         try {
-                            const thumbnails = await fetchGameIconsBatch(batch);
-                            thumbnails.forEach(thumb => {
-                                const loadingElement = document.querySelector(`.ROLOCATE_SMARTSEARCH_thumbnail-loading[data-universe-id="${thumb.targetId}"]`);
+                            const thumbnailMap = await getGameIconFromUniverseId(batch);
+                            Object.entries(thumbnailMap).forEach(([targetId, imageUrl]) => {
+                                const loadingElement = document.querySelector(`.ROLOCATE_SMARTSEARCH_thumbnail-loading[data-universe-id="${targetId}"]`);
                                 if (loadingElement) {
-                                    loadingElement.outerHTML = `<img src="${thumb.imageUrl}" alt="${games.find(g => g.universeId == thumb.targetId)?.name || 'Game'}" class="ROLOCATE_SMARTSEARCH_game-thumbnail">`;
+                                    loadingElement.outerHTML = `<img src="${imageUrl}" alt="${games.find(g => g.universeId == targetId)?.name || 'Game'}" class="ROLOCATE_SMARTSEARCH_game-thumbnail">`;
                                 }
                             });
                         } catch (error) { ConsoleLogEnabled('Error fetching game thumbnails:', error); }
@@ -6972,6 +8068,47 @@ li a.about-link:hover::after {
                     const data = JSON.parse(response.responseText);
                     const userGroup = data.searchResults?.find(group => group.contentGroupType === "User");
                     const apiUsers = userGroup?.contents || [];
+                    // exact username lookup - always show as first result
+                    let exactMatchUser = null;
+                    try {
+                        const exactLookupResponse = await new Promise((resolve, reject) => {
+                            GM_xmlhttpRequest({
+                                method: "POST",
+                                url: 'https://users.roblox.com/v1/usernames/users',
+                                headers: {"Accept": "application/json", "Content-Type": "application/json"},
+                                data: JSON.stringify({ usernames: [query], excludeBannedUsers: false }),
+                                onload: resolve,
+                                onerror: reject
+                            });
+                        });
+                        if (exactLookupResponse.status === 200) {
+                            const exactData = JSON.parse(exactLookupResponse.responseText);
+                            const exactUser = exactData.data?.[0];
+                            if (exactUser) {
+                                const detailResponse = await new Promise((resolve, reject) => {
+                                    GM_xmlhttpRequest({
+                                        method: "GET",
+                                        url: `https://users.roblox.com/v1/users/${exactUser.id}`,
+                                        headers: {"Accept": "application/json"},
+                                        onload: resolve,
+                                        onerror: reject
+                                    });
+                                });
+                                if (detailResponse.status === 200) {
+                                    const detailData = JSON.parse(detailResponse.responseText);
+                                    exactMatchUser = {
+                                        contentId: detailData.id,
+                                        username: detailData.name,
+                                        displayName: detailData.displayName,
+                                        hasVerifiedBadge: detailData.hasVerifiedBadge,
+                                        isBanned: detailData.isBanned,
+                                        isExactMatch: true,
+                                        isFriend: false
+                                    };
+                                }
+                            }
+                        }
+                    } catch (e) { ConsoleLogEnabled('Exact username lookup failed:', e); }
                     const currentUserId = getCurrentUserId();
                     if (currentUserId && !friendListFetched && !friendListFetching) {
                         friendListFetching = true;
@@ -6997,10 +8134,15 @@ li a.about-link:hover::after {
                         });
                     }
                     // wow cool programming donehere
+                    if (exactMatchUser) exactMatchUser.isFriend = friendIdSet.has(exactMatchUser.contentId);
                     let combinedResults = [
                         ...apiUsers.map(user => ({...user, isFriend: friendIdSet.has(user.contentId)})),
                         ...matchedFriends.filter(friend => !apiUsers.some(u => u.contentId === friend.contentId))
                     ];
+                    if (exactMatchUser) {
+                        combinedResults = combinedResults.filter(u => u.contentId !== exactMatchUser.contentId);
+                        combinedResults.unshift(exactMatchUser);
+                    }
                     combinedResults.sort((a, b) => {
                         if (a.isFriend && !b.isFriend) return -1;
                         if (!a.isFriend && b.isFriend) return 1;
@@ -7013,8 +8155,9 @@ li a.about-link:hover::after {
                     }
 
                     // whats in the user cards like name, follors, verify badge, friends, and the loading stats text for stats
+                    // yes ik i used my profile :)
                     contentArea.innerHTML = users.map(user => `
-                        <a href="https://www.roblox.com/users/${user.contentId}/profile" class="ROLOCATE_SMARTSEARCH_user-card-link" target="_self">
+                        <a href="${user.isBanned ? `https://www.roblox.com/users/545334824/profile#ROLOCATE_BANNED_USER_${user.contentId}` : `https://www.roblox.com/users/${user.contentId}/profile`}" class="ROLOCATE_SMARTSEARCH_user-card-link" target="_self">
                             <div class="ROLOCATE_SMARTSEARCH_user-card">
                                 <div class="ROLOCATE_SMARTSEARCH_thumbnail-loading" data-user-id="${user.contentId}"></div>
                                 <div class="ROLOCATE_SMARTSEARCH_user-info">
@@ -7025,6 +8168,7 @@ li a.about-link:hover::after {
                                     <p class="ROLOCATE_SMARTSEARCH_user-username">
                                         @${user.username}
                                         ${user.isFriend ? '<span class="ROLOCATE_SMARTSEARCH_friend-badge">Friend</span>' : ''}
+                                        ${user.isBanned ? '<span class="ROLOCATE_SMARTSEARCH_banned-badge">Banned</span>' : ''}
                                     </p>
                                     <p class="ROLOCATE_SMARTSEARCH_user-stats" data-user-id="${user.contentId}">
                                         <span class="ROLOCATE_SMARTSEARCH_stats-loading">Loading stats...</span>
@@ -7049,24 +8193,30 @@ li a.about-link:hover::after {
                         } catch (error) { ConsoleLogEnabled('Error fetching user thumbnails:', error); }
                     }
 
+                    // edited to fit new global functions
                     const statsBatches = chunkArray(userIds, 10);
                     for (const batch of statsBatches) {
                         try {
-                            const stats = await fetchUserStatsBatch(batch);
+                            const stats = await Promise.all(batch.map(async userId => {
+                                // here we send smartsearch to only get 2 requests
+                                const [friendCount, followerCount] = await fetchUserStatsBatch(userId, "smartsearch");
+                                // yea get the userid griend count and followercouint
+                                return { userId, friendCount: friendCount?.count ?? 0, followerCount: followerCount?.count ?? 0 };
+                            }));
                             stats.forEach(stat => {
-                            const statsElement = document.querySelector(`.ROLOCATE_SMARTSEARCH_user-stats[data-user-id="${stat.userId}"]`);
-                            if (statsElement) { // ok so basically this is the place for thge svg for the users friends and folowoers yea
-                                statsElement.innerHTML = `
-                                    <span class="ROLOCATE_SMARTSEARCH_stat-item">
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:4px"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M23 21v-2a4 4 0 0 0-3-3.87m-4-12a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                                        ${formatNumberCount(stat.friendCount)} Friends
-                                    </span>&nbsp|&nbsp
-                                    <span class="ROLOCATE_SMARTSEARCH_stat-item">
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:4px"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 8v6m3-3h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                                        ${formatNumberCount(stat.followerCount)} Followers
-                                    </span>
-                                `;
-                            }
+                                const statsElement = document.querySelector(`.ROLOCATE_SMARTSEARCH_user-stats[data-user-id="${stat.userId}"]`);
+                                if (statsElement) {
+                                    statsElement.innerHTML = `
+                                        <span class="ROLOCATE_SMARTSEARCH_stat-item">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:4px"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M23 21v-2a4 4 0 0 0-3-3.87m-4-12a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                            ${formatNumberCount(stat.friendCount)} Friends
+                                        </span>&nbsp|&nbsp
+                                        <span class="ROLOCATE_SMARTSEARCH_stat-item">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:4px"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 8v6m3-3h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                            ${formatNumberCount(stat.followerCount)} Followers
+                                        </span>
+                                    `;
+                                }
                             });
                         } catch (error) { ConsoleLogEnabled('Error fetching user stats:', error); }
                     }
@@ -7409,7 +8559,7 @@ li a.about-link:hover::after {
         const style = document.createElement('style');
         // one day i gotta clean this up cause ik some of these styles arnt needed
         style.textContent = `
-        .ROLOCATE_SMARTSEARCH_form-has-feedback {
+.ROLOCATE_SMARTSEARCH_form-has-feedback {
             position: relative !important;
             display: flex !important;
             align-items: center !important;
@@ -7538,7 +8688,6 @@ li a.about-link:hover::after {
             z-index: 1001 !important;
             position: relative !important;
         }
-        /* Game card styles with play button */
         .ROLOCATE_SMARTSEARCH_game-card-container {
             position: relative;
             margin: 6px 0;
@@ -7594,7 +8743,6 @@ li a.about-link:hover::after {
             overflow: hidden;
             padding-right: 90px !important;
         }
-        /*QuickLaunchGames styles on smart search*/
         .ROLOCATE_SMARTSEARCH_quicklaunch-button {
             position: absolute;
             right: 54px;
@@ -7613,45 +8761,35 @@ li a.about-link:hover::after {
             z-index: 2;
             color: #5d78ff;
         }
-
         .ROLOCATE_SMARTSEARCH_quicklaunch-button:hover {
             background: rgba(93, 120, 255, 0.3);
             transform: translateY(-50%) scale(1.05);
         }
-
         .ROLOCATE_SMARTSEARCH_quicklaunch-button.added {
             background: rgba(76, 175, 80, 0.2);
             color: #4CAF50;
         }
-
         .ROLOCATE_SMARTSEARCH_quicklaunch-button.added:hover {
             background: rgba(244, 67, 54, 0.3);
             color: #f44336;
         }
-
         .ROLOCATE_SMARTSEARCH_quicklaunch-button svg {
             width: 20px;
             height: 20px;
         }
-
-        /* svg switching on smartsearch quicklaunch wow ik so cool */
         .ROLOCATE_SMARTSEARCH_quicklaunch-button .x-mark {
             display: none;
             position: absolute;
         }
-
         .ROLOCATE_SMARTSEARCH_quicklaunch-button .checkmark {
             display: block;
         }
-
         .ROLOCATE_SMARTSEARCH_quicklaunch-button.added:hover .checkmark {
             display: none;
         }
-
         .ROLOCATE_SMARTSEARCH_quicklaunch-button.added:hover .x-mark {
             display: block;
         }
-        /* sisabled state oif thew quicklauncha dd buttons */
         .ROLOCATE_SMARTSEARCH_quicklaunch-button.disabled,
         .ROLOCATE_SMARTSEARCH_quicklaunch-button:disabled {
             background: rgba(128, 128, 128, 0.2);
@@ -7664,17 +8802,14 @@ li a.about-link:hover::after {
             transform: translateY(-50%) scale(1.05);
             color: #6a6e7d;
         }
-
         .ROLOCATE_SMARTSEARCH_quicklaunch-button.disabled .checkmark,
         .ROLOCATE_SMARTSEARCH_quicklaunch-button:disabled .checkmark {
             display: block;
         }
-
         .ROLOCATE_SMARTSEARCH_quicklaunch-button.disabled .x-mark,
         .ROLOCATE_SMARTSEARCH_quicklaunch-button:disabled .x-mark {
             display: none;
         }
-        /* game name stuff */
         .ROLOCATE_SMARTSEARCH_game-name {
             font-size: 16px;
             color: #ffffff;
@@ -7720,7 +8855,6 @@ li a.about-link:hover::after {
             width: 18px;
             height: 18px;
         }
-        /* User card styles */
         .ROLOCATE_SMARTSEARCH_user-card-link {
             display: block;
             text-decoration: none;
@@ -7762,9 +8896,6 @@ li a.about-link:hover::after {
             font-size: 16px;
             color: #8a8d93;
             margin: 0;
-            white-space: nowrap;
-            overflow: visible;
-            text-overflow: ellipsis;
             display: flex;
             align-items: center;
         }
@@ -7784,7 +8915,6 @@ li a.about-link:hover::after {
             font-style: italic;
             font-size: 13px;
         }
-        /* Group card styles */
         .ROLOCATE_SMARTSEARCH_group-card-link {
             display: block;
             text-decoration: none;
@@ -7832,7 +8962,6 @@ li a.about-link:hover::after {
             color: #6d717a;
             margin: 0;
         }
-        /* Catalog card styles */
         .ROLOCATE_SMARTSEARCH_catalog-card-link {
             display: block;
             text-decoration: none;
@@ -7879,7 +9008,6 @@ li a.about-link:hover::after {
             color: #6d717a;
             margin: 0;
         }
-        /* Status messages */
         .ROLOCATE_SMARTSEARCH_loading,
         .ROLOCATE_SMARTSEARCH_no-results,
         .ROLOCATE_SMARTSEARCH_error {
@@ -7888,7 +9016,6 @@ li a.about-link:hover::after {
             padding: 20px;
             font-size: 16px;
         }
-        /* Friend badge styles */
         .ROLOCATE_SMARTSEARCH_friend-badge {
             display: inline-block;
             background-color: #6b7280;
@@ -7903,6 +9030,21 @@ li a.about-link:hover::after {
             letter-spacing: 0.025em;
             transform: translateY(-1px);
             border: 1px solid #d1d5db;
+        }
+        .ROLOCATE_SMARTSEARCH_banned-badge {
+            display: inline-block;
+            background-color: #3d1a1a;
+            color: #cd6e6e;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 8px;
+            vertical-align: middle;
+            line-height: 1.2;
+            letter-spacing: 0.025em;
+            transform: translateY(-1px);
+            border: 1px solid #7a3535;
         }
         `;
         document.head.appendChild(style);
@@ -7931,76 +9073,7 @@ li a.about-link:hover::after {
         }
         return true;
     }
-
-    //fetch Universe ID from Place ID using GM_xmlhttpRequest
-    function getUniverseIdFromPlaceId(placeId) {
-        return new Promise((resolve, reject) => {
-            GM_xmlhttpRequest({
-                method: "GET",
-                url: `https://games.roblox.com/v1/games/multiget-place-details?placeIds=${placeId}`,
-                headers: {
-                    "Accept": "application/json"
-                },
-                onload: function(response) {
-                    if (response.status === 200) {
-                        try {
-                            const data = JSON.parse(response.responseText);
-                            if (Array.isArray(data) && data.length > 0 && data[0].universeId) {
-                                // Console log inside the function
-                                ConsoleLogEnabled(`Universe ID for place ${placeId}: ${data[0].universeId}`);
-                                resolve(data[0].universeId);
-                            } else {
-                                reject(new Error("Universe ID not found in response."));
-                            }
-                        } catch (e) {
-                            reject(e);
-                        }
-                    } else {
-                        reject(new Error(`HTTP error! Status: ${response.status}`));
-                    }
-                },
-                onerror: function(err) {
-                    reject(err);
-                }
-            });
-        });
-    }
-
-    // Fetches the game icon thumbnail URL using universeId via GM_xmlhttpRequest
-    function getGameIconFromUniverseId(universeId) {
-        const apiUrl = `https://thumbnails.roblox.com/v1/games/icons?universeIds=${universeId}&size=512x512&format=Png&isCircular=false&returnPolicy=PlaceHolder`;
-        return new Promise((resolve, reject) => {
-            GM_xmlhttpRequest({
-                method: "GET",
-                url: apiUrl,
-                headers: {
-                    "Accept": "application/json"
-                },
-                onload: function(response) {
-                    if (response.status === 200) {
-                        try {
-                            const data = JSON.parse(response.responseText);
-                            if (Array.isArray(data.data) && data.data.length > 0 && data.data[0].imageUrl) {
-                                ConsoleLogEnabled(`Game icon URL for universe ${universeId}: ${data.data[0].imageUrl}`);
-                                resolve(data.data[0].imageUrl);
-                            } else {
-                                reject(new Error("Image URL not found in response."));
-                            }
-                        } catch (err) {
-                            reject(err);
-                        }
-                    } else {
-                        reject(new Error(`HTTP error! Status: ${response.status}`));
-                    }
-                },
-                onerror: function(err) {
-                    reject(err);
-                }
-            });
-        });
-    }
-
-    /*******************************************************
+/*******************************************************
     name of function: quicklaunchgamesfunction
     description: adds quick launch
     *******************************************************/
@@ -8184,9 +9257,10 @@ li a.about-link:hover::after {
                         border-radius: 14px;
                         overflow: hidden;
                         transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease;
-                        cursor: pointer;
+                        cursor: grab;
                         position: relative;
                         border: 1px solid rgba(255, 255, 255, 0.05);
+                        animation: tileAppear 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
                     }
 
                     .ROLOCATE_QUICKLAUNCHGAMES_game-tile:hover {
@@ -8262,10 +9336,6 @@ li a.about-link:hover::after {
                         filter: drop-shadow(0 1px 1px rgba(0,0,0,0.3));
                     }
 
-                    .ROLOCATE_QUICKLAUNCHGAMES_game-tile {
-                        cursor: grab;
-                    }
-
                     .ROLOCATE_QUICKLAUNCHGAMES_game-tile.dragging {
                         border: 2px dashed #5d78ff !important;
                         background: rgba(93, 120, 255, 0.1) !important;
@@ -8276,6 +9346,7 @@ li a.about-link:hover::after {
                     .ROLOCATE_QUICKLAUNCHGAMES_game-tile.drag-over {
                         border: 1px solid rgba(255, 255, 255, 0.05);
                     }
+
                     .ROLOCATE_QUICKLAUNCHGAMES_remove-button {
                         position: absolute;
                         top: 10px;
@@ -8343,10 +9414,6 @@ li a.about-link:hover::after {
                         0% { transform: translateY(0); }
                         50% { transform: translateY(-8px); }
                         100% { transform: translateY(0); }
-                    }
-
-                    .ROLOCATE_QUICKLAUNCHGAMES_game-tile {
-                        animation: tileAppear 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
                     }
 
                     .ROLOCATE_QUICKLAUNCHGAMES_game-tile.removing {
@@ -8515,32 +9582,6 @@ li a.about-link:hover::after {
 
                 friendsSection.parentNode.insertBefore(newGamesContainer, friendsSection.nextSibling);
 
-                // dumb functions
-                async function getGameDetails(universeId) {
-                    return new Promise((resolve, reject) => {
-                        GM_xmlhttpRequest({
-                            method: "GET",
-                            url: `https://games.roblox.com/v1/games?universeIds=${universeId}`,
-                            headers: { "Accept": "application/json" },
-                            onload: function(response) {
-                                if (response.status === 200) {
-                                    try {
-                                        const data = JSON.parse(response.responseText);
-                                        resolve(data.data && data.data.length > 0 ? data.data[0] : null);
-                                    } catch (e) {
-                                        reject(e);
-                                    }
-                                } else {
-                                    reject(new Error(`HTTP ${response.status}`));
-                                }
-                            },
-                            onerror: function(err) {
-                                reject(err);
-                            }
-                        });
-                    });
-                }
-
                 function formatNumber(num) {
                     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
                     if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
@@ -8553,7 +9594,8 @@ li a.about-link:hover::after {
                     localStorage.setItem('ROLOCATE_quicklaunch_games_storage', JSON.stringify(order));
                 }
 
-                function addGameTile(gameId, gameDetails = null) {
+                // voteData param added so loadSavedGames can pass in pre-fetched votes and avoid a double API call
+                function addGameTile(gameId, gameDetails = null, voteData = null) {
                     const gameGrid = document.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_game-grid');
                     if (!gameGrid) return;
 
@@ -8585,7 +9627,7 @@ li a.about-link:hover::after {
 
                     gameGrid.insertBefore(gameTile, gameGrid.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_add-tile'));
 
-                    // remove button for tyhe quaklcjahcgyhin gmasjerhbvsajmn
+                    // remove button
                     const removeBtn = gameTile.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_remove-button');
                     removeBtn.addEventListener('click', function(e) {
                         e.preventDefault();
@@ -8609,11 +9651,12 @@ li a.about-link:hover::after {
                         e.dataTransfer.setData('text/html', gameTile.innerHTML);
                     });
 
-                    gameTile.addEventListener('dragend', (e) => {
+                    gameTile.addEventListener('dragend', () => {
                         gameTile.classList.remove('dragging');
                         document.querySelectorAll('.ROLOCATE_QUICKLAUNCHGAMES_game-tile').forEach(tile => {
                             tile.classList.remove('drag-over');
                         });
+                        saveCurrentOrder();
                     });
 
                     gameTile.addEventListener('dragover', (e) => {
@@ -8632,7 +9675,7 @@ li a.about-link:hover::after {
                             const draggingIndex = allTiles.indexOf(draggingTile);
                             const targetIndex = allTiles.indexOf(gameTile);
 
-                            // Ooly swap if we've actually moved past the center to prevent like a dumb flicker. this took too long to figure out a solution to
+                            // Only swap if we've actually moved past the center to prevent like a dumb flicker. this took too long to figure out a solution to
                             if (draggingIndex < targetIndex && isPastMidpoint) {
                                 gameGrid.insertBefore(draggingTile, gameTile.nextSibling);
                             } else if (draggingIndex > targetIndex && !isPastMidpoint) {
@@ -8641,7 +9684,7 @@ li a.about-link:hover::after {
                         }
                     });
 
-                    gameTile.addEventListener('dragleave', (e) => {
+                    gameTile.addEventListener('dragleave', () => {
                         gameTile.classList.remove('drag-over');
                     });
 
@@ -8649,16 +9692,18 @@ li a.about-link:hover::after {
                         e.preventDefault();
                         e.stopPropagation();
                         gameTile.classList.remove('drag-over');
-                        saveCurrentOrder();
                     });
 
-                    // load detials of the gmae
+                    // load details of the game
                     (async () => {
                         try {
                             const universeId = await getUniverseIdFromPlaceId(gameId);
-                            const [iconUrl, details] = await Promise.all([
+
+                            // fetch icon, details, and votes in parallel — only call what wasnt pre-fetched
+                            const [iconUrl, details, votes] = await Promise.all([
                                 getGameIconFromUniverseId(universeId),
-                                gameDetails || getGameDetails(universeId)
+                                gameDetails || getGameDetailsBatch(universeId),
+                                voteData || getGameVotesFromUniverseId(universeId)
                             ]);
 
                             const thumbContainer = gameTile.querySelector('.thumbnail-container');
@@ -8671,9 +9716,14 @@ li a.about-link:hover::after {
                             const likeRatio = gameTile.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_like-ratio');
 
                             playerCount.textContent = formatNumber(details?.playing || 0);
-                            const ratio = details?.favoritedCount > 0 ?
-                                Math.min(100, Math.round((details.favoritedCount / (details.favoritedCount + details.favoritedCount * 0.1)) * 100)) : 0;
+
+                            // calculate like ratio from real upvote/downvote data
+                            const upVotes = votes?.upVotes || 0;
+                            const downVotes = votes?.downVotes || 0;
+                            const total = upVotes + downVotes;
+                            const ratio = total > 0 ? Math.floor((upVotes / total) * 100) : 0; // roblox rounds down for some reason idk why
                             likeRatio.innerHTML = `<span class="thumb">👍</span> ${ratio}%`;
+
                         } catch (err) {
                             ConsoleLogEnabled('Game load err:', err);
                             const gameName = gameTile.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_game-name');
@@ -8748,10 +9798,16 @@ li a.about-link:hover::after {
 
                         try {
                             const universeId = await getUniverseIdFromPlaceId(gameId);
-                            const gameDetails = await getGameDetails(universeId);
+
+                            // fetch details and votes in parallel before closing the popup
+                            const [gameDetails, voteData] = await Promise.all([
+                                getGameDetailsBatch(universeId),
+                                getGameVotesFromUniverseId(universeId)
+                            ]);
+
                             games.push(gameId);
                             localStorage.setItem('ROLOCATE_quicklaunch_games_storage', JSON.stringify(games));
-                            addGameTile(gameId, gameDetails);
+                            addGameTile(gameId, gameDetails, voteData);
 
                             overlay.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_popup').classList.add('fade-out');
                             setTimeout(() => overlay.remove(), 300);
@@ -8763,10 +9819,23 @@ li a.about-link:hover::after {
                     };
                 }
 
-                function loadSavedGames() {
+                async function loadSavedGames() {
                     const savedGames = JSON.parse(localStorage.getItem('ROLOCATE_quicklaunch_games_storage') || '[]');
-                    savedGames.forEach(gameId => {
-                        addGameTile(gameId);
+                    if (savedGames.length === 0) return;
+
+                    // resolve all placeIds -> universeIds in parallel
+                    const universeIds = await Promise.all(savedGames.map(id => getUniverseIdFromPlaceId(id)));
+
+                    // single batched request for all game details and votes
+                    const [detailsMap, votesMap] = await Promise.all([
+                        getGameDetailsBatch(universeIds),
+                        getGameVotesFromUniverseId(universeIds)
+                    ]);
+
+                    // add tiles with pre-fetched details and votes so addGameTile never has to re-fetch
+                    savedGames.forEach((gameId, i) => {
+                        const universeId = universeIds[i];
+                        addGameTile(gameId, detailsMap[universeId] || null, votesMap[universeId] || null);
                     });
                 }
 
@@ -8775,18 +9844,19 @@ li a.about-link:hover::after {
                 addButton.addEventListener('click', showAddGamePopup);
 
                 setTimeout(loadSavedGames, 100);
-                // listen for updates from SmartSearch and then uopdate quicklaunch
+
+                // listen for updates from SmartSearch and then update quicklaunch
                 window.addEventListener('quicklaunch-update', function(e) {
                     const { placeId, action } = e.detail;
 
                     if (action === 'add') {
-                        // Check if already exists
+                        // check if already exists
                         const existingTile = document.querySelector(`.ROLOCATE_QUICKLAUNCHGAMES_game-tile[data-game-id="${placeId}"]`);
                         if (!existingTile) {
                             addGameTile(placeId);
                         }
                     } else if (action === 'remove') {
-                        // Find and remove the tile
+                        // find and remove the tile
                         const tileToRemove = document.querySelector(`.ROLOCATE_QUICKLAUNCHGAMES_game-tile[data-game-id="${placeId}"]`);
                         if (tileToRemove) {
                             tileToRemove.classList.add('removing');
@@ -8809,32 +9879,47 @@ li a.about-link:hover::after {
         }, 5000);
     }
 
-
-    /*******************************************************
+/*******************************************************
     name of function: betterfriends
     description: betterfriends and yea
     *******************************************************/
-    // make sure to remove ROLOCATE_checkBestFriendsStatus();
     // WARNING: Do not republish this script. Licensed for personal use only.
     function betterfriends() {
 
-        // check if in right url
+        // out if we're not on the home page
         if (!/^https?:\/\/(www\.)?roblox\.com(\/[a-z]{2})?\/home\/?$/i.test(window.location.href)) return;
-        // check localStorage
+        // also out if the user didn't enable this feature
         if (localStorage.getItem('ROLOCATE_betterfriends') !== 'true') {
             return;
         }
 
-        // variables
+        // all the observers and flags we need to track
         let dropdownObserver = null;
         let avatarObserver = null;
         let mainObserver = null;
         let observerTimeout = null;
-        let isStylesAdded = false;
+        let stylesAdded = false;
         let bestFriendsButtonObserver = null;
         let localAvatarCache = {};
 
-        // class names for styling
+        // reverse compatability
+        const toAvatarMap = (arr) => {
+            const map = {};
+            (arr || []).forEach(entry => {
+                if (entry.targetId && entry.imageUrl) map[entry.targetId] = entry.imageUrl;
+            });
+            return map;
+        };
+
+        // these get populated once we fetch presence data so dropdowns can read them later
+        let sharedOnlineStatusMap = {};
+        let sharedFriendsDataMap = {};
+
+        // tooltip stuff, not really used much but keeping it around
+        let activeTooltip = null;
+        let tooltipHideTimeout = null;
+
+        // just a bunch of class name strings so we dont have to type them out everywhere
         const CLASSES = {
             STYLES_ID: 'ROLOCATE_friend-status-styles',
             STATUS_ONLINE: 'ROLOCATE_friend-status-online',
@@ -8844,14 +9929,16 @@ li a.about-link:hover::after {
             DROPDOWN_STYLED: 'ROLOCATE_dropdown-styled',
             TILE_STYLED: 'ROLOCATE_tile-styled',
             BEST_FRIENDS_BUTTON: 'ROLOCATE_best-friends-button',
-            BEST_FRIEND_STAR: 'ROLOCATE-best-friend-star'
+            BEST_FRIEND_STAR: 'ROLOCATE-best-friend-star',
+            STATUS_TOOLTIP: 'ROLOCATE_status-tooltip'
         };
 
+        // injects all our css into the page, only runs once
         const addStatusStyles = () => {
-            if (isStylesAdded || document.getElementById(CLASSES.STYLES_ID)) return;
+            if (stylesAdded || document.getElementById(CLASSES.STYLES_ID)) return;
 
             const styleSheet = document.createElement('style');
-            styleSheet.id = CLASSES.STYLES_ID; // save space
+            styleSheet.id = CLASSES.STYLES_ID;
             styleSheet.textContent = `
             .${CLASSES.STATUS_ONLINE},
             .${CLASSES.STATUS_GAME},
@@ -8865,16 +9952,12 @@ li a.about-link:hover::after {
             .${CLASSES.STATUS_OFFLINE}{ border-color: #6b7280 !important; }
             .${CLASSES.STATUS_OTHER}  { border-color: #f68802 !important; }
 
-
             .friend-tile-dropdown {
                 background: ${isDarkMode() ? '#1a1c23' : '#C1B19A'} !important;
                 border: 1px solid rgba(148, 163, 184, 0.2) !important;
                 border-radius: 8px !important;
                 box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
                 overflow: hidden !important;
-            }
-
-            .friend-tile-dropdown {
                 transition: opacity 0.15s ease, transform 0.15s ease !important;
             }
 
@@ -8951,7 +10034,7 @@ li a.about-link:hover::after {
                 flex-shrink: 0 !important;
             }
 
-            /* BEST FRIENDS POPUP STYLES */
+            /* best friends popup styles */
             .best-friends-overlay {
                 position: fixed;
                 top: 0;
@@ -8966,12 +10049,8 @@ li a.about-link:hover::after {
                 animation: fadeIn 0.2s ease-out;
             }
             @keyframes fadeIn {
-                from {
-                    opacity: 0;
-                }
-                to {
-                    opacity: 1;
-                }
+                from { opacity: 0; }
+                to   { opacity: 1; }
             }
             .best-friends-popup {
                 background: linear-gradient(135deg, #111114 0%, #1a1a1d 100%);
@@ -8985,14 +10064,8 @@ li a.about-link:hover::after {
                 animation: popupSlideIn 0.2s ease-out;
             }
             @keyframes popupSlideIn {
-                from {
-                    opacity: 0;
-                    transform: scale(0.95) translateY(20px);
-                }
-                to {
-                    opacity: 1;
-                    transform: scale(1) translateY(0);
-                }
+                from { opacity: 0; transform: scale(0.95) translateY(20px); }
+                to   { opacity: 1; transform: scale(1)    translateY(0);    }
             }
             .best-friends-popup-header {
                 display: flex;
@@ -9049,21 +10122,11 @@ li a.about-link:hover::after {
                 position: relative;
             }
             @keyframes itemSlideIn {
-                from {
-                    opacity: 0;
-                    transform: translateX(-20px);
-                }
-                to {
-                    opacity: 1;
-                    transform: translateX(0);
-                }
+                from { opacity: 0; transform: translateX(-20px); }
+                to   { opacity: 1; transform: translateX(0);     }
             }
             .best-friends-popup-item:hover {
-                background: linear-gradient(
-                    45deg,
-                    rgba(255, 255, 255, 0.1),
-                    rgba(255, 255, 255, 0.08)
-                );
+                background: linear-gradient(45deg, rgba(255,255,255,0.1), rgba(255,255,255,0.08));
                 border-color: rgba(255, 255, 255, 0.25);
                 transform: translateY(-2px) scale(1.01);
                 box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
@@ -9110,39 +10173,28 @@ li a.about-link:hover::after {
                 height: 26px;
                 color: #ffd700;
                 fill: currentColor;
-                filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.6))
-                        drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
+                filter: drop-shadow(0 0 8px rgba(255,215,0,0.6)) drop-shadow(0 2px 4px rgba(0,0,0,0.8));
                 animation: starGlow 2s ease-in-out infinite alternate;
                 opacity: 0;
                 transform: scale(0.8);
                 transition: opacity 0.3s ease, transform 0.3s ease;
             }
-
             .${CLASSES.BEST_FRIEND_STAR}.star-visible {
                 opacity: 1;
                 transform: scale(1);
             }
-
             .${CLASSES.BEST_FRIEND_STAR}:hover {
                 transform: scale(1.1);
-                filter: drop-shadow(0 0 12px rgba(255, 215, 0, 0.8))
-                        drop-shadow(0 2px 6px rgba(0, 0, 0, 0.9));
+                filter: drop-shadow(0 0 12px rgba(255,215,0,0.8)) drop-shadow(0 2px 6px rgba(0,0,0,0.9));
             }
-
             @keyframes starGlow {
-                0% {
-                    filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.6))
-                            drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
-                }
-                100% {
-                    filter: drop-shadow(0 0 15px rgba(255, 215, 0, 0.9))
-                            drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
-                }
+                0%   { filter: drop-shadow(0 0 8px  rgba(255,215,0,0.6)) drop-shadow(0 2px 4px rgba(0,0,0,0.8)); }
+                100% { filter: drop-shadow(0 0 15px rgba(255,215,0,0.9)) drop-shadow(0 2px 4px rgba(0,0,0,0.8)); }
             }
             .best-friends-loading {
                 display: flex;
                 align-items: center;
-                color: rgba(255, 255, 255, 0.8);
+                color: rgba(255,255,255,0.8);
                 font-size: 16px;
                 font-family: "Source Sans Pro", Arial, sans-serif;
                 font-weight: 500;
@@ -9150,49 +10202,31 @@ li a.about-link:hover::after {
             .loading-spinner {
                 width: 20px;
                 height: 20px;
-                border: 3px solid rgba(255, 255, 255, 0.2);
+                border: 3px solid rgba(255,255,255,0.2);
                 border-top: 3px solid #ffffff;
                 border-radius: 50%;
                 animation: spin 0.8s linear infinite;
                 margin-right: 12px;
             }
             @keyframes spin {
-                0% {
-                    transform: rotate(0deg);
-                }
-                100% {
-                    transform: rotate(360deg);
-                }
+                0%   { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
             }
             .no-best-friends {
-                color: rgba(255, 255, 255, 0.6);
+                color: rgba(255,255,255,0.6);
                 font-style: italic;
                 font-size: 16px;
                 font-family: "Source Sans Pro", Arial, sans-serif;
                 text-align: center;
                 padding: 20px;
             }
-            .best-friends-popup-grid::-webkit-scrollbar {
-                width: 8px;
-            }
-            .best-friends-popup-grid::-webkit-scrollbar-track {
-                background: rgba(255, 255, 255, 0.1);
-                border-radius: 4px;
-            }
-            .best-friends-popup-grid::-webkit-scrollbar-thumb {
-                background: linear-gradient(45deg, #555555, #666666);
-                border-radius: 4px;
-            }
-            .best-friends-popup-grid::-webkit-scrollbar-thumb:hover {
-                background: linear-gradient(45deg, #666666, #777777);
-            }
+            .best-friends-popup-grid::-webkit-scrollbar       { width: 8px; }
+            .best-friends-popup-grid::-webkit-scrollbar-track  { background: rgba(255,255,255,0.1); border-radius: 4px; }
+            .best-friends-popup-grid::-webkit-scrollbar-thumb  { background: linear-gradient(45deg,#555,#666); border-radius: 4px; }
+            .best-friends-popup-grid::-webkit-scrollbar-thumb:hover { background: linear-gradient(45deg,#666,#777); }
             @keyframes fadeOut {
-                from {
-                    opacity: 1;
-                }
-                to {
-                    opacity: 0;
-                }
+                from { opacity: 1; }
+                to   { opacity: 0; }
             }
             .best-friends-search-container {
                 border: 2px solid #2563eb;
@@ -9203,7 +10237,7 @@ li a.about-link:hover::after {
             .best-friends-search {
                 width: 100%;
                 padding: 10px 15px;
-                background: rgba(255, 255, 255, 0.1);
+                background: rgba(255,255,255,0.1);
                 border-radius: 8px;
                 color: white;
                 font-size: 14px;
@@ -9211,21 +10245,222 @@ li a.about-link:hover::after {
             }
         `;
             document.head.appendChild(styleSheet);
-            isStylesAdded = true;
+            stylesAdded = true;
         };
 
-        // create best friends section
+        // the dropdown that pops up when you hover a best friend tile
+        // basically we like make the html but not the css since its already made in the page
+
+        let activeDropdown = null;
+        let dropdownHideTimeout = null;
+
+        // kills the current dropdown if there is one
+        const removeActiveDropdown = () => {
+            if (activeDropdown) {
+                activeDropdown.remove();
+                activeDropdown = null;
+            }
+            if (dropdownHideTimeout) {
+                clearTimeout(dropdownHideTimeout);
+                dropdownHideTimeout = null;
+            }
+        };
+
+        const showFriendDropdown = async (tile, friendId, displayName) => {
+            removeActiveDropdown();
+
+            const status = sharedOnlineStatusMap[friendId] || 'offline';
+            const friendData = sharedFriendsDataMap[friendId] || {};
+
+            // need the section to be a positioned ancestor so our absolute dropdown lands in the right spot
+            const bestFriendsSection = document.querySelector('.best-friends-section');
+            if (!bestFriendsSection) return;
+            if (getComputedStyle(bestFriendsSection).position === 'static') bestFriendsSection.style.position = 'relative';
+
+            const dropdownWrapper = document.createElement('div');
+            dropdownWrapper.style.cssText = `position: absolute; z-index: 1002; width: 315px;`;
+
+            const dropdown = document.createElement('div');
+            dropdown.className = 'friend-tile-dropdown';
+            dropdown.setAttribute('data-friend-status', status);
+
+            // keep it alive if the mouse moves onto the dropdown itself
+            dropdown.addEventListener('mouseenter', () => {
+                if (dropdownHideTimeout) { clearTimeout(dropdownHideTimeout); dropdownHideTimeout = null; }
+            });
+            dropdown.addEventListener('mouseleave', () => {
+                dropdownHideTimeout = setTimeout(removeActiveDropdown, 120);
+            });
+
+            // show the in-game card at the top if theyre actually in a game or studio
+            if ((status === 'game' || status === 'other') && (friendData.lastLocation || friendData.placeId)) {
+                const gameCard = document.createElement('div');
+                gameCard.className = 'in-game-friend-card';
+
+                const thumbnailButton = document.createElement('button');
+                thumbnailButton.type = 'button';
+                thumbnailButton.className = 'friend-tile-non-styled-button';
+
+                const thumbnailSpan = document.createElement('span');
+                thumbnailSpan.className = 'thumbnail-2d-container friend-tile-game-card';
+                thumbnailSpan.style.cssText = 'background-color: #1a1c23;'; // uggly gray square gone. outline still here bruh i give up
+
+                const thumbnailImg = document.createElement('img');
+                thumbnailImg.className = 'game-card-thumb';
+                thumbnailImg.src = '';
+                thumbnailImg.alt = '';
+                thumbnailImg.title = '';
+
+                // fetch the game icon async so it doesnt block the dropdown from showing
+                if (friendData.placeId) {
+                    (async () => {
+                        try {
+                            const universeId = await getUniverseIdFromPlaceId(friendData.placeId);
+                            if (universeId) {
+                                const iconUrl = await getGameIconFromUniverseId(universeId);
+                                if (iconUrl) thumbnailImg.src = iconUrl;
+                            }
+                        } catch (err) {
+                            ConsoleLogEnabled('[showFriendDropdown] icon fetch error', err);
+                        }
+                    })();
+                }
+
+                thumbnailSpan.appendChild(thumbnailImg);
+                thumbnailButton.appendChild(thumbnailSpan);
+                gameCard.appendChild(thumbnailButton);
+
+                const presenceInfo = document.createElement('div');
+                presenceInfo.className = 'friend-presence-info';
+
+                const gameNameButton = document.createElement('button');
+                gameNameButton.type = 'button';
+                gameNameButton.className = 'friend-tile-non-styled-button';
+                gameNameButton.textContent = friendData.lastLocation || (status === 'game' ? 'In Game' : 'In Studio');
+                presenceInfo.appendChild(gameNameButton);
+
+                // clicking the thumbnail or the game name both open the game page
+                const gameUrl = `https://www.roblox.com/games/${friendData.placeId}`;
+                thumbnailButton.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    window.open(gameUrl, '_blank');
+                });
+                gameNameButton.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    window.open(gameUrl, '_blank');
+                });
+                gameNameButton.style.cursor = 'pointer';
+
+                // only show join button if we have everything we need for it to actually work
+                // took forever to figure out the string thing btw, passing numbers just broke it cause im dumb
+                if (status === 'game' && friendData.rootPlaceId && friendData.gameInstanceId) {
+                    const joinButton = document.createElement('button');
+                    joinButton.type = 'button';
+                    joinButton.className = 'btn-growth-sm btn-full-width';
+                    joinButton.textContent = 'Join';
+                    joinButton.addEventListener('click', (event) => {
+                        event.stopPropagation();
+                        JoinServer(String(friendData.rootPlaceId), String(friendData.gameInstanceId));
+                    });
+                    presenceInfo.appendChild(joinButton);
+                }
+
+                gameCard.appendChild(presenceInfo);
+                dropdown.appendChild(gameCard);
+            }
+
+            // the action buttons at the bottom (chat, view profile)
+            const actionList = document.createElement('ul');
+
+            // this is for the view profile button. we find the core script to open the chat also
+            const actions = [
+                {
+                    icon: 'icon-chat-gray', label: `Chat with ${displayName}`, action: () => {
+                        runInPageContext((uid) => {
+                            window.Roblox?.['core-scripts']?.util?.chat?.startDesktopAndMobileWebChat({ userId: uid });
+                        }, [friendId]);
+                    }
+                },
+                { icon: 'icon-viewdetails', label: 'View Profile', href: `https://www.roblox.com/users/${friendId}/profile` }
+            ];
+
+            actions.forEach(({ icon, label, href, action }) => {
+                const listItem = document.createElement('li');
+                const actionButton = document.createElement('button');
+                actionButton.type = 'button';
+                actionButton.className = 'friend-tile-dropdown-button';
+
+                const iconSpan = document.createElement('span');
+                iconSpan.className = icon;
+                actionButton.appendChild(iconSpan);
+                actionButton.appendChild(document.createTextNode(` ${label}`));
+
+                actionButton.addEventListener('click', () => {
+                    if (href) window.open(href, '_blank');
+                    else if (action) action();
+                    removeActiveDropdown();
+                });
+
+                listItem.appendChild(actionButton);
+                actionList.appendChild(listItem);
+            });
+
+            dropdown.appendChild(actionList);
+            dropdownWrapper.appendChild(dropdown);
+
+            // figure out where to place the dropdown so it doesnt fly off screen
+            bestFriendsSection.appendChild(dropdownWrapper);
+
+            const dropdownWidth = dropdownWrapper.offsetWidth;
+            const dropdownHeight = dropdownWrapper.offsetHeight;
+            const DROPDOWN_MARGIN = 6;
+            const sectionRect = bestFriendsSection.getBoundingClientRect();
+            const tileRect = tile.getBoundingClientRect();
+
+            // default is centered below the tile
+            let leftPos = (tileRect.left - sectionRect.left) + (tileRect.width / 2) - (dropdownWidth / 2);
+            let topPos = (tileRect.bottom - sectionRect.top) + bestFriendsSection.scrollTop + DROPDOWN_MARGIN;
+
+            // flip it above the tile if it would go off the bottom of the screen
+            const dropdownBottomOnScreen = tileRect.bottom + DROPDOWN_MARGIN + dropdownHeight;
+            if (dropdownBottomOnScreen > window.innerHeight - DROPDOWN_MARGIN) {
+                topPos = (tileRect.top - sectionRect.top) + bestFriendsSection.scrollTop - dropdownHeight - DROPDOWN_MARGIN;
+            }
+
+            // clamp so it never pokes out the sides of the section
+            leftPos = Math.max(0, Math.min(leftPos, sectionRect.width - dropdownWidth));
+
+            dropdownWrapper.style.top = `${topPos}px`;
+            dropdownWrapper.style.left = `${leftPos}px`;
+
+            activeDropdown = dropdownWrapper;
+        };
+
+        // wire up hover events on a tile so it shows the dropdown
+        const attachTileTooltip = (tile, friendId, displayName) => {
+            tile.addEventListener('mouseenter', () => {
+                if (dropdownHideTimeout) { clearTimeout(dropdownHideTimeout); dropdownHideTimeout = null; }
+                showFriendDropdown(tile, friendId, displayName);
+            });
+
+            tile.addEventListener('mouseleave', () => {
+                dropdownHideTimeout = setTimeout(removeActiveDropdown, 120);
+            });
+        };
+
+        // builds the whole best friends section above the normal friends list
         const createBestFriendsSection = () => {
-            const existingBestFriendsSection = document.querySelector('.best-friends-section');
-            if (existingBestFriendsSection) return;
+            // dont create it if its already there
+            const existingSection = document.querySelector('.best-friends-section');
+            if (existingSection) return;
 
             const friendsContainer = document.querySelector('.friend-carousel-container');
             if (!friendsContainer) return;
 
+            // if you have no best friends set, dont show an empty section so just yea
             const bestFriends = getBestFriends();
             if (bestFriends.size === 0) return;
 
-            // create best friends section
             const bestFriendsSection = document.createElement('div');
             bestFriendsSection.className = 'best-friends-section';
             bestFriendsSection.style.cssText = `
@@ -9237,14 +10472,9 @@ li a.about-link:hover::after {
         margin: 0 0 16px 0;
     `;
 
-            // create header
             const headerDiv = document.createElement('div');
             headerDiv.className = 'container-header people-list-header';
-            headerDiv.style.cssText = `
-        display: flex;
-        align-items: center;
-        margin-bottom: 12px;
-    `;
+            headerDiv.style.cssText = `display: flex; align-items: center; margin-bottom: 12px;`;
 
             const headerTitle = document.createElement('h2');
             headerTitle.textContent = 'Best Friends';
@@ -9258,38 +10488,25 @@ li a.about-link:hover::after {
 
             headerDiv.appendChild(headerTitle);
 
-            // caroskulecontioner for the frinds
             const carouselContainer = document.createElement('div');
             carouselContainer.className = 'friends-carousel-container';
-            carouselContainer.style.cssText = `
-        background: transparent;
-        border: none;
-        padding: 0;
-        margin: 0;
-    `;
+            carouselContainer.style.cssText = `background: transparent; border: none; padding: 0; margin: 0;`;
 
-            // create another
             const carousel = document.createElement('div');
             carousel.className = 'friends-carousel';
-            carousel.style.cssText = `
-        display: flex;
-        gap: 12px;
-        overflow-x: auto;
-        padding: 4px;
-    `;
+            carousel.style.cssText = `display: flex; gap: 12px; overflow-x: auto; padding: 4px;`;
 
             bestFriendsSection.appendChild(headerDiv);
             carouselContainer.appendChild(carousel);
             bestFriendsSection.appendChild(carouselContainer);
 
-            // add before friends section so ontop of the frineds section
+            // insert it right above the normal friends section
             friendsContainer.parentNode.insertBefore(bestFriendsSection, friendsContainer);
 
-            // populat
             populateBestFriendsSection();
         };
 
-        //add best frinds
+        // what the functiojns name says
         const populateBestFriendsSection = async () => {
             const bestFriendsCarousel = document.querySelector('.best-friends-section .friends-carousel');
             if (!bestFriendsCarousel) return;
@@ -9300,100 +10517,92 @@ li a.about-link:hover::after {
             bestFriendsCarousel.innerHTML = '';
 
             try {
-                const currentUserId = Roblox?.CurrentUser?.userId;
+                const currentUserId = getCurrentUserId();
                 if (!currentUserId) return;
 
                 const allFriends = await gmFetchFriends(currentUserId);
                 if (!allFriends) return;
 
-                const onlineFriends = await ROLOCATE_fetchOnlineFriends(currentUserId);
-                const onlineStatusMap = {};
+                const onlineFriends = await fetchOnlineFriends(currentUserId);
+
+                // build the shared status maps so the dropdown can read them later without fetching again
                 onlineFriends.forEach(friend => {
                     const presence = friend.userPresence;
+                    let status;
                     if (presence.UserPresenceType === 'Online') {
-                        onlineStatusMap[friend.id] = 'online';
+                        status = 'online';
                     } else if (presence.UserPresenceType === 'InGame') {
-                        onlineStatusMap[friend.id] = 'game';
+                        status = 'game';
                     } else {
-                        onlineStatusMap[friend.id] = 'other';
+                        status = 'other';
                     }
+                    sharedOnlineStatusMap[friend.id] = status;
+                    sharedFriendsDataMap[friend.id] = {
+                        lastLocation:   presence.lastLocation   || null,
+                        placeId:        presence.placeId        || null,
+                        rootPlaceId:    presence.rootPlaceId    || null,
+                        gameInstanceId: presence.gameInstanceId || null,
+                        universeId:     presence.universeId     || null
+                    };
                 });
 
-                // friends ingame are frist
+                // in game > in studio > online > offline, so the active ones show up first
+                const statusPriority = { game: 3, other: 2, online: 1, offline: 0 };
+
                 const bestFriendsList = allFriends
                     .filter(friend => bestFriends.has(friend.id))
-                    .sort((a, b) => {
-                        const aStatus = onlineStatusMap[a.id] || 'offline';
-                        const bStatus = onlineStatusMap[b.id] || 'offline';
-
-                        // priority: game > online > other (studio) > offline
-                        const priority = {
-                            'game': 3,
-                            'other': 2,
-                            'online': 1,
-                            'offline': 0
-                        };
-
-                        return priority[bStatus] - priority[aStatus];
+                    .sort((friendA, friendB) => {
+                        const statusA = sharedOnlineStatusMap[friendA.id] || 'offline';
+                        const statusB = sharedOnlineStatusMap[friendB.id] || 'offline';
+                        return statusPriority[statusB] - statusPriority[statusA];
                     });
 
                 if (bestFriendsList.length === 0) return;
 
                 const friendIds = bestFriendsList.map(friend => friend.id);
-                const avatarMap = await fetchUserAvatars(friendIds);
+                const avatarMap = toAvatarMap(await fetchPlayerThumbnailsBatch(friendIds));
 
                 bestFriendsList.forEach(friend => {
                     const tile = createBestFriendTile(friend, avatarMap[friend.id]);
-                    const status = onlineStatusMap[friend.id] || 'offline';
+                    const status = sharedOnlineStatusMap[friend.id] || 'offline';
 
-                    // Add hover functionality only if online/offline (not ingame)
                     if (status === 'online' || status === 'offline') {
                         tile.classList.add('ROLOCATE_hover-enabled');
                     }
 
+                    // update the little status dot on the avatar
                     const statusIcon = tile.querySelector('[data-testid="presence-icon"]');
                     if (statusIcon) {
                         statusIcon.className = '';
                         statusIcon.classList.add(`icon-${status}`);
 
-                        const statusTitles = {
-                            'online': 'Online',
-                            'other': 'In Studio', // other is studio
-                            'game': 'In Game',
-                            'offline': 'Offline'
-                        };
+                        const statusTitles = { online: 'Online', other: 'In Studio', game: 'In Game', offline: 'Offline' };
+                        const statusColors = { online: '#00a2ff', other: '#f68802', game: '#02b757', offline: '#6b7280' };
                         statusIcon.setAttribute('title', statusTitles[status]);
-
-                        const statusColors = {
-                            'online': '#00a2ff',
-                            'other': '#f68802',
-                            'game': '#02b757',
-                            'offline': '#6b7280'
-                        };
                         statusIcon.style.background = statusColors[status];
                     }
+
+                    const displayName = friend.displayName || friend.name;
+                    attachTileTooltip(tile, friend.id, displayName);
 
                     bestFriendsCarousel.appendChild(tile);
                 });
 
+                // slight delay so the dom has settled before we try styling
                 setTimeout(() => applyFriendStatusStyling(), 100);
             } catch (error) {
                 ConsoleLogEnabled('[populateBestFriendsSection] Error:', error);
             }
         };
 
-        // remove best friends from regular friends section
+        // hides best friends from the normal list so they dont show up twice
         const removeBestFriendsFromRegularSection = () => {
             const bestFriends = getBestFriends();
             if (bestFriends.size === 0) return;
 
-            const regularFriendsTiles = document.querySelectorAll('.friend-carousel-container:not(.best-friends-section .friends-carousel-container) .friends-carousel-tile');
+            const regularFriendTiles = document.querySelectorAll('.friend-carousel-container:not(.best-friends-section .friends-carousel-container) .friends-carousel-tile');
 
-            regularFriendsTiles.forEach(tile => {
-                const nameElement = tile.querySelector('.friend-name');
-                if (!nameElement) return;
-
-                // try to find friend id from the firned ssection
+            regularFriendTiles.forEach(tile => {
                 const profileLink = tile.querySelector('a[href*="/users/"]');
                 if (profileLink) {
                     const match = profileLink.href.match(/\/users\/(\d+)/);
@@ -9407,7 +10616,7 @@ li a.about-link:hover::after {
             });
         };
 
-        // create individual best friend tile
+        // builds a single friend tile element for the best friends carousel
         const createBestFriendTile = (friend, avatarUrl) => {
             const tile = document.createElement('div');
             tile.className = 'friends-carousel-tile';
@@ -9421,37 +10630,23 @@ li a.about-link:hover::after {
         transition: background-color 0.2s ease;
     `;
 
-            // create avatar card
             const avatarCard = document.createElement('div');
             avatarCard.className = 'avatar-card';
-            avatarCard.style.cssText = `
-        position: relative;
-        margin-bottom: 8px;
-    `;
+            avatarCard.style.cssText = `position: relative; margin-bottom: 8px;`;
 
             const avatarCardImage = document.createElement('div');
             avatarCardImage.className = 'avatar-card-image';
-            avatarCardImage.style.cssText = `
-        position: relative;
-        width: 84px;
-        height: 84px;
-        margin: 0 auto;
-    `;
+            avatarCardImage.style.cssText = `position: relative; width: 84px; height: 84px; margin: 0 auto;`;
 
             const avatarImg = document.createElement('img');
-            avatarImg.src = avatarUrl || window.Base64Images.builderman_avatar; // default to builderman if thumbnails fail for some reason
+            // fall back to builderman if we didnt get an avatar for some reason
+            avatarImg.src = avatarUrl || window.Base64Images.builderman_avatar;
             avatarImg.alt = friend.displayName || friend.name;
-            avatarImg.style.cssText = `
-        width: 100%;
-        height: 100%;
-        border-radius: 50%;
-        object-fit: cover;
-    `;
+            avatarImg.style.cssText = `width: 100%; height: 100%; border-radius: 50%; object-fit: cover;`;
 
-            // status circle thing
-            const avatarStatus = document.createElement('div');
-            avatarStatus.className = 'avatar-status';
-            avatarStatus.style.cssText = `
+            const avatarStatusWrapper = document.createElement('div');
+            avatarStatusWrapper.className = 'avatar-status';
+            avatarStatusWrapper.style.cssText = `
         position: absolute;
         bottom: 2px;
         right: 2px;
@@ -9465,24 +10660,18 @@ li a.about-link:hover::after {
         border: 2px solid #1a1c23;
     `;
 
+            // starts as offline, gets updated later once we have presence data
             const statusIcon = document.createElement('span');
             statusIcon.setAttribute('data-testid', 'presence-icon');
-            statusIcon.className = 'icon-offline'; // default to offline
+            statusIcon.className = 'icon-offline';
             statusIcon.setAttribute('title', 'Offline');
-            statusIcon.style.cssText = `
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        background: #6b7280;
-        display: block;
-    `;
+            statusIcon.style.cssText = `width: 16px; height: 16px; border-radius: 50%; background: #6b7280; display: block;`;
 
-            avatarStatus.appendChild(statusIcon);
+            avatarStatusWrapper.appendChild(statusIcon);
             avatarCardImage.appendChild(avatarImg);
-            avatarCardImage.appendChild(avatarStatus);
+            avatarCardImage.appendChild(avatarStatusWrapper);
             avatarCard.appendChild(avatarCardImage);
 
-            // create name label
             const nameLabel = document.createElement('div');
             nameLabel.className = 'friend-name';
             nameLabel.textContent = friend.displayName || friend.name;
@@ -9499,383 +10688,202 @@ li a.about-link:hover::after {
             tile.appendChild(avatarCard);
             tile.appendChild(nameLabel);
 
-            // add click handler to go to profile
+            // clicking the tile opens their profile but on the same page cause roblox like that
             tile.addEventListener('click', () => {
-                window.open(`https://www.roblox.com/users/${friend.id}/profile`, '_blank');
+                window.location.href = `https://www.roblox.com/users/${friend.id}/profile`;
             });
 
             return tile;
         };
 
-        // get friend status from tile element
+        // reads the status dot on a tile and returns a string like 'online', 'game', etc
         const getFriendStatusFromTile = (tile) => {
             const avatarStatusElement = tile.querySelector('.avatar-status');
-
-            if (!avatarStatusElement) {
-                return 'offline';
-            }
+            if (!avatarStatusElement) return 'offline';
 
             const statusIconElement = avatarStatusElement.querySelector('span[data-testid="presence-icon"]');
-            if (!statusIconElement) {
-                return 'offline';
-            }
+            if (!statusIconElement) return 'offline';
 
-            const statusClassList = statusIconElement.className || '';
-            const statusTitleAttribute = statusIconElement.getAttribute('title') || '';
+            const className = statusIconElement.className || '';
+            const titleAttr = statusIconElement.getAttribute('title') || '';
 
-            // status detection stuff for friends
-            if (statusClassList.includes('icon-game') ||
-                statusClassList.includes('game') ||
-                statusTitleAttribute.toLowerCase().includes('game') ||
-                statusTitleAttribute.toLowerCase().includes('playing')) {
-                return 'game';
-            }
+            if (className.includes('icon-game')    || className.includes('game')    || titleAttr.toLowerCase().includes('game')    || titleAttr.toLowerCase().includes('playing')) return 'game';
+            if (className.includes('icon-online')  || className.includes('online')  || titleAttr.toLowerCase().includes('website') || titleAttr.toLowerCase().includes('active'))  return 'online';
+            if (className.includes('icon-offline') || className.includes('offline') || titleAttr.toLowerCase().includes('offline'))                                                return 'offline';
 
-            if (statusClassList.includes('icon-online') ||
-                statusClassList.includes('online') ||
-                statusTitleAttribute.toLowerCase().includes('website') ||
-                statusTitleAttribute.toLowerCase().includes('active')) {
-                return 'online';
-            }
-
-            if (statusClassList.includes('icon-offline') ||
-                statusClassList.includes('offline') ||
-                statusTitleAttribute.toLowerCase().includes('offline')) {
-                return 'offline';
-            }
-
-            // if status exists but doesnt match known patterns, its "other" (studio)
-            return statusClassList.trim() ? 'other' : 'offline';
+            return className.trim() ? 'other' : 'offline';
         };
 
-        // apply status outline styling to avatars
+        // goes through all tiles and adds the colored border class based on their status
         const applyFriendStatusStyling = () => {
-            const friendTileElements = document.querySelectorAll('.friends-carousel-tile');
+            document.querySelectorAll('.friends-carousel-tile').forEach(tileElement => {
+                const avatarImage = tileElement.querySelector('.avatar-card-image img');
+                if (!avatarImage) return;
 
-            friendTileElements.forEach(tileElement => {
-                const avatarImageElement = tileElement.querySelector('.avatar-card-image img');
-                if (!avatarImageElement) return;
-
-                // remove existing status classes
+                // clear old status classes before adding the new one
                 Object.values(CLASSES).forEach(className => {
-                    if (className.startsWith('ROLOCATE_friend-status-')) {
-                        avatarImageElement.classList.remove(className);
-                    }
+                    if (className.startsWith('ROLOCATE_friend-status-')) avatarImage.classList.remove(className);
                 });
 
-                const currentFriendStatus = getFriendStatusFromTile(tileElement);
-                const statusClassToApply = CLASSES[`STATUS_${currentFriendStatus.toUpperCase()}`];
-
-                if (statusClassToApply) {
-                    avatarImageElement.classList.add(statusClassToApply);
-                }
+                const status = getFriendStatusFromTile(tileElement);
+                const statusClass = CLASSES[`STATUS_${status.toUpperCase()}`];
+                if (statusClass) avatarImage.classList.add(statusClass);
 
                 tileElement.setAttribute(`data-${CLASSES.TILE_STYLED}`, 'true');
             });
         };
 
-        // style dropdown menu stuff
+        // applies some extra styling to roblox's native dropdowns so they dont look out of place
         const styleDropdownMenus = () => {
-            const dropdownElements = document.querySelectorAll(`.friend-tile-dropdown:not([data-${CLASSES.DROPDOWN_STYLED}])`);
-
-            dropdownElements.forEach(dropdownElement => {
-                const parentTileElement = dropdownElement.closest('.friends-carousel-tile');
-                let friendStatusForDropdown = 'offline';
-
-                if (parentTileElement) {
-                    friendStatusForDropdown = getFriendStatusFromTile(parentTileElement);
-                }
-
-                dropdownElement.setAttribute('data-friend-status', friendStatusForDropdown);
-                dropdownElement.setAttribute(`data-${CLASSES.DROPDOWN_STYLED}`, 'true');
-
-                // icon styling for dropdown buttons
-                const iconElements = dropdownElement.querySelectorAll('.friend-tile-dropdown-button .icon');
-                iconElements.forEach(iconElement => {
-                    iconElement.style.transition = 'opacity 0.2s ease';
-                    iconElement.style.flexShrink = '0';
+            document.querySelectorAll(`.friend-tile-dropdown:not([data-${CLASSES.DROPDOWN_STYLED}])`).forEach(dropdown => {
+                const parentTile = dropdown.closest('.friends-carousel-tile');
+                dropdown.setAttribute('data-friend-status', parentTile ? getFriendStatusFromTile(parentTile) : 'offline');
+                dropdown.setAttribute(`data-${CLASSES.DROPDOWN_STYLED}`, 'true');
+                dropdown.querySelectorAll('.friend-tile-dropdown-button .icon').forEach(icon => {
+                    icon.style.transition = 'opacity 0.2s ease';
+                    icon.style.flexShrink = '0';
                 });
             });
         };
 
-        // function to fetch friends with fallback for missing names
+        // api stuff
+
+        // fetches the full friends list for a user, also patches any missing names
         const gmFetchFriends = async (userId) => {
             const url = `https://friends.roblox.com/v1/users/${userId}/friends`;
-
             return new Promise((resolve) => {
                 GM_xmlhttpRequest({
-                    method: "GET",
-                    url,
-                    onload: async function(response) {
+                    method: "GET", url,
+                    onload: async (response) => {
                         if (response.status >= 200 && response.status < 300) {
                             try {
                                 const data = JSON.parse(response.responseText);
-                                let friends = data.data;
-
-                                // check if any friends have missing names/displayNames
-                                const friendsWithMissingData = friends.filter(friend =>
-                                    !friend.name || !friend.displayName ||
-                                    friend.name === "" || friend.displayName === ""
-                                );
-
-                                if (friendsWithMissingData.length > 0) {
-                                    ConsoleLogEnabled(`[gmFetchFriends] Found ${friendsWithMissingData.length} friends with missing name data, fetching individual user data...`);
-
-                                    // fetchj user data
-                                    const userDataResults = await fetchUserDataWithRateLimit(friendsWithMissingData);
-
-                                    try {
-
-                                        // create a map for the user data
-                                        const userDataMap = {};
-                                        userDataResults.forEach((userData, index) => {
-                                            if (userData) {
-                                                userDataMap[friendsWithMissingData[index].id] = userData;
-                                            }
-                                        });
-
-                                        // update the friends array with suer data
-                                        friends = friends.map(friend => {
-                                            if (userDataMap[friend.id]) {
-                                                return {
-                                                    ...friend,
-                                                    name: userDataMap[friend.id].name,
-                                                    displayName: userDataMap[friend.id].displayName
-                                                };
-                                            }
-                                            return friend;
-                                        });
-
-                                        ConsoleLogEnabled(`[gmFetchFriends] Successfully updated ${Object.keys(userDataMap).length} friends with user data`);
-                                    } catch (fallbackError) {
-                                        ConsoleLogEnabled(`[gmFetchFriends] Failed to fetch some individual user data:`, fallbackError);
-                                        // continue with user data
-                                    }
+                                let friendsList = data.data;
+                                // roblox sometimes returns friends with blank names, fix those
+                                const friendsMissingNames = friendsList.filter(friend => !friend.name || !friend.displayName || friend.name === "" || friend.displayName === "");
+                                if (friendsMissingNames.length > 0) {
+                                    ConsoleLogEnabled(`[gmFetchFriends] Found ${friendsMissingNames.length} friends with missing name data, fetching...`);
+                                    const fetchedData = await fetchUserDataWithRateLimit(friendsMissingNames);
+                                    const fetchedDataMap = {};
+                                    fetchedData.forEach((userData, index) => { if (userData) fetchedDataMap[friendsMissingNames[index].id] = userData; });
+                                    friendsList = friendsList.map(friend => fetchedDataMap[friend.id] ? { ...friend, name: fetchedDataMap[friend.id].name, displayName: fetchedDataMap[friend.id].displayName } : friend);
                                 }
-
-                                resolve(friends);
-                            } catch (e) {
-                                ConsoleLogEnabled(`[gmFetchFriends] Failed to parse response for user ${userId}`, e);
-                                resolve(null);
-                            }
-                        } else {
-                            ConsoleLogEnabled(`[gmFetchFriends] Request failed for user ${userId} with status ${response.status}`);
-                            resolve(null);
-                        }
+                                resolve(friendsList);
+                            } catch (parseError) { ConsoleLogEnabled(`[gmFetchFriends] Parse error`, parseError); resolve(null); }
+                        } else { ConsoleLogEnabled(`[gmFetchFriends] Status ${response.status}`); resolve(null); }
                     },
-                    onerror: function(err) {
-                        ConsoleLogEnabled(`[gmFetchFriends] Network error for user ${userId}`, err);
-                        resolve(null);
-                    }
+                    onerror: (err) => { ConsoleLogEnabled(`[gmFetchFriends] Network error`, err); resolve(null); }
                 });
             });
         };
 
-        // function to fetch user data with rate limiting
-        const fetchUserDataWithRateLimit = async (friendsWithMissingData) => {
+        // fetches user data in small batches so we dont get rate limited
+        const fetchUserDataWithRateLimit = async (friends) => {
             const results = [];
-            const DELAY_MS = 100; // 100ms delay between requests
-            const BATCH_SIZE = 5; // do 5 requests at a time
-
-            for (let i = 0; i < friendsWithMissingData.length; i += BATCH_SIZE) {
-                const batch = friendsWithMissingData.slice(i, i + BATCH_SIZE);
-
-                // batch concurrently
-                const batchPromises = batch.map(friend => fetchIndividualUserData(friend.id));
-                const batchResults = await Promise.all(batchPromises);
-
-                results.push(...batchResults);
-
-                // add the delay between batches except for the last batch cause like, its the end lol
-                if (i + BATCH_SIZE < friendsWithMissingData.length) {
-                    await new Promise(resolve => setTimeout(resolve, DELAY_MS));
-                }
+            const RATE_LIMIT_DELAY = 100;
+            const BATCH_SIZE = 5;
+            for (let offset = 0; offset < friends.length; offset += BATCH_SIZE) {
+                const batch = friends.slice(offset, offset + BATCH_SIZE);
+                results.push(...await Promise.all(batch.map(friend => fetchIndividualUserData(friend.id))));
+                if (offset + BATCH_SIZE < friends.length) await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY));
             }
-
             return results;
         };
 
-        // function to fetch individual user data
+        // fetches a single user's name/displayname, retries on 429
         const fetchIndividualUserData = (userId) => {
-            const url = `https://users.roblox.com/v1/users/${userId}`;
-
             return new Promise((resolve) => {
                 GM_xmlhttpRequest({
-                    method: "GET",
-                    url,
-                    onload: function(response) {
-                        if (response.status >= 200 && response.status < 300) {
-                            try {
-                                const userData = JSON.parse(response.responseText);
-                                resolve({
-                                    id: userData.id,
-                                    name: userData.name,
-                                    displayName: userData.displayName
-                                });
-                            } catch (e) {
-                                ConsoleLogEnabled(`[fetchIndividualUserData] Failed to parse response for user ${userId}`, e);
-                                resolve(null);
-                            }
-                        } else if (response.status === 429) {
-                            ConsoleLogEnabled(`[fetchIndividualUserData] Rate limited for user ${userId}, retrying after delay...`);
-                            // retry after a longer delay for rate limiting
-                            setTimeout(() => {
-                                fetchIndividualUserData(userId).then(resolve);
-                            }, 1000);
-                        } else {
-                            ConsoleLogEnabled(`[fetchIndividualUserData] Request failed for user ${userId} with status ${response.status}`);
-                            resolve(null);
-                        }
-                    },
-                    onerror: function(err) {
-                        ConsoleLogEnabled(`[fetchIndividualUserData] Network error for user ${userId}`, err);
-                        resolve(null);
-                    }
-                });
-            });
-        };
-
-        // function to fetch user avatars
-        const fetchUserAvatars = (userIds) => {
-            return new Promise((resolve) => {
-                const requests = userIds.map(userId => ({
-                    requestId: userId.toString(),
-                    targetId: userId,
-                    type: "AvatarHeadShot",
-                    size: "150x150",
-                    format: "Png",
-                    isCircular: false
-                }));
-
-                GM_xmlhttpRequest({
-                    method: "POST",
-                    url: "https://thumbnails.roblox.com/v1/batch",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    data: JSON.stringify(requests),
-                    onload: function(response) {
+                    method: "GET", url: `https://users.roblox.com/v1/users/${userId}`,
+                    onload: (response) => {
                         if (response.status >= 200 && response.status < 300) {
                             try {
                                 const data = JSON.parse(response.responseText);
-                                const avatarMap = {};
-                                data.data.forEach(item => {
-                                    if (item.state === "Completed" && item.imageUrl) {
-                                        avatarMap[item.targetId] = item.imageUrl;
-                                    }
-                                });
-                                resolve(avatarMap);
-                            } catch (e) {
-                                ConsoleLogEnabled("[fetchUserAvatars] Failed to parse response", e);
-                                resolve({});
-                            }
-                        } else {
-                            ConsoleLogEnabled(`[fetchUserAvatars] Request failed with status ${response.status}`);
-                            resolve({});
-                        }
+                                resolve({ id: data.id, name: data.name, displayName: data.displayName });
+                            } catch (parseError) { resolve(null); }
+                        } else if (response.status === 429) {
+                            // got rate limited, wait a sec and try again
+                            setTimeout(() => fetchIndividualUserData(userId).then(resolve), 1000);
+                        } else { resolve(null); }
                     },
-                    onerror: function(err) {
-                        ConsoleLogEnabled("[fetchUserAvatars] Network error", err);
-                        resolve({});
-                    }
+                    onerror: () => resolve(null)
                 });
             });
         };
 
-        // create star icon for best friends
+        // creates the little gold star svg that shows on best friend items
         const createStarIcon = () => {
             const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             svg.setAttribute('class', CLASSES.BEST_FRIEND_STAR);
             svg.setAttribute('viewBox', '0 0 24 24');
             svg.setAttribute('fill', 'currentColor');
             svg.setAttribute('stroke', 'none');
-            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            path.setAttribute('d', 'M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z');
-            svg.appendChild(path);
-
-            // fade in animation
-            setTimeout(() => {
-                svg.classList.add('star-visible');
-            }, 50);
-
+            const starPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            starPath.setAttribute('d', 'M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z');
+            svg.appendChild(starPath);
+            // tiny delay so the css transition actually plays
+            setTimeout(() => svg.classList.add('star-visible'), 50);
             return svg;
         };
 
-        // get best friends from localStorage
+        // runs a function in the page's actual js context, needed to call roblox's internal apis
+        const runInPageContext = (fn, args = []) => {
+            const script = document.createElement('script');
+            script.textContent = `(${fn.toString()})(${args.map(arg => JSON.stringify(arg)).join(',')});`;
+            document.documentElement.appendChild(script);
+            script.remove();
+        };
+
+        // reads best friend ids from localstorage and returns them as a Set
         const getBestFriends = () => {
             try {
                 const stored = localStorage.getItem('ROLOCATE_BEST_FRIENDS_IDS');
                 return stored ? new Set(JSON.parse(stored)) : new Set();
-            } catch (e) {
-                return new Set();
-            }
+            } catch (err) { return new Set(); }
         };
 
-        // save best friends to localStorage
         const saveBestFriends = (bestFriends) => {
             localStorage.setItem('ROLOCATE_BEST_FRIENDS_IDS', JSON.stringify([...bestFriends]));
         };
 
-        // fetch online friends status from API
-        const ROLOCATE_fetchOnlineFriends = async (userId) => {
+        // gets the list of online friends with their presence info
+        const fetchOnlineFriends = async (userId) => {
             try {
-                const url = `https://friends.roblox.com/v1/users/${userId}/friends/online`;
                 const response = await new Promise((resolve, reject) => {
                     GM_xmlhttpRequest({
                         method: "GET",
-                        url: url,
-                        onload: resolve,
-                        onerror: reject
+                        url: `https://friends.roblox.com/v1/users/${userId}/friends/online`,
+                        onload: resolve, onerror: reject
                     });
                 });
-
                 if (response.status >= 200 && response.status < 300) {
                     return JSON.parse(response.responseText).data || [];
                 }
-                ConsoleLogEnabled(`ROLOCATE: Online friends API error: ${response.status}`);
                 return [];
-            } catch (error) {
-                ConsoleLogEnabled('ROLOCATE: Failed to fetch online friends:', error);
-                return [];
-            }
+            } catch { return []; }
         };
 
-        // check best friends online status
-        const ROLOCATE_checkBestFriendsStatus = async () => {
-            const currentUserId = Roblox?.CurrentUser?.userId;
-            if (!currentUserId) {
-                ConsoleLogEnabled('ROLOCATE: Current user ID not available');
-                return;
-            }
-
+        // just logs what each best friend is up to, mostly for debugging
+        const checkBestFriendsStatus = async () => {
+            const currentUserId = getCurrentUserId();
+            if (!currentUserId) return;
             const bestFriends = getBestFriends();
-            if (bestFriends.size === 0) {
-                ConsoleLogEnabled('ROLOCATE: No best friends set');
-                return;
-            }
-
-            const onlineFriends = await ROLOCATE_fetchOnlineFriends(currentUserId);
-            const onlineIds = new Set(onlineFriends.map(friend => friend.id));
-
-            bestFriends.forEach(bfId => {
-                const friend = onlineFriends.find(f => f.id === bfId);
-
+            if (bestFriends.size === 0) return;
+            const onlineFriends = await fetchOnlineFriends(currentUserId);
+            bestFriends.forEach(bestFriendId => {
+                const friend = onlineFriends.find(onlineFriend => onlineFriend.id === bestFriendId);
                 if (friend) {
                     const presence = friend.userPresence;
-                    if (presence.UserPresenceType === 'Online') {
-                        ConsoleLogEnabled(`ROLOCATE: Best friend ${bfId} is online (Website)`);
-                    } else if (presence.UserPresenceType === 'InGame') {
-                        ConsoleLogEnabled(`ROLOCATE: Best friend ${bfId} is in-game: ${presence.lastLocation}`);
-                    } else { // else user is in studio
-                        ConsoleLogEnabled(`ROLOCATE: Best friend ${bfId} is in-studio: ${presence.UserPresenceType}`);
-                    }
+                    if (presence.UserPresenceType === 'Online')  ConsoleLogEnabled(`ROLOCATE: Best friend ${bestFriendId} is online`);
+                    else if (presence.UserPresenceType === 'InGame') ConsoleLogEnabled(`ROLOCATE: Best friend ${bestFriendId} is in-game: ${presence.lastLocation}`);
+                    else ConsoleLogEnabled(`ROLOCATE: Best friend ${bestFriendId} is in-studio: ${presence.UserPresenceType}`);
                 } else {
-                    ConsoleLogEnabled(`ROLOCATE: Best friend ${bfId} is offline`);
+                    ConsoleLogEnabled(`ROLOCATE: Best friend ${bestFriendId} is offline`);
                 }
             });
         };
 
-
+        // the popup where you pick who your best friends are
         const showBestFriendsPopup = async () => {
             const overlay = document.createElement('div');
             overlay.className = 'best-friends-overlay';
@@ -9887,7 +10895,6 @@ li a.about-link:hover::after {
             header.className = 'best-friends-popup-header';
             header.innerHTML = `<h3>Pick Your Best Friends</h3>`;
 
-            // add search container
             const searchContainer = document.createElement('div');
             searchContainer.className = 'best-friends-search-container';
             const searchInput = document.createElement('input');
@@ -9897,7 +10904,6 @@ li a.about-link:hover::after {
             searchContainer.appendChild(searchInput);
             header.appendChild(searchContainer);
 
-            // add close button
             const closeButton = document.createElement('button');
             closeButton.className = 'best-friends-close';
             closeButton.innerHTML = '×';
@@ -9907,17 +10913,12 @@ li a.about-link:hover::after {
 
             const grid = document.createElement('div');
             grid.className = 'best-friends-popup-grid';
-
-            const loading = document.createElement('div');
-            loading.className = 'best-friends-loading';
-            loading.innerHTML = `<div class="loading-spinner"></div>Loading friends...`;
-            grid.appendChild(loading);
+            grid.innerHTML = `<div class="best-friends-loading"><div class="loading-spinner"></div>Loading friends...</div>`;
 
             popup.appendChild(grid);
             overlay.appendChild(popup);
             document.body.appendChild(overlay);
 
-            // get current best friends
             let bestFriends = getBestFriends();
 
             closeButton.addEventListener('click', () => {
@@ -9925,146 +10926,116 @@ li a.about-link:hover::after {
                 setTimeout(() => overlay.remove(), 200);
             });
 
-            // search stuff for the ui best friewnds
             let allFriends = [];
             const performSearch = () => {
                 const searchTerm = searchInput.value.toLowerCase();
                 if (!allFriends.length) return;
-
                 grid.innerHTML = '';
-
-                const filtered = allFriends.filter(friend =>
-                    friend.displayName.toLowerCase().includes(searchTerm)
-                );
-
-                if (filtered.length === 0) {
-                    grid.innerHTML = '<div class="no-best-friends">No friends match your search</div>';
-                    return;
-                }
-
-                filtered.forEach(friend => {
-                    const friendItem = createFriendItem(friend, bestFriends.has(friend.id));
-                    grid.appendChild(friendItem);
-                });
+                const filteredFriends = allFriends.filter(friend => friend.displayName.toLowerCase().includes(searchTerm));
+                if (!filteredFriends.length) { grid.innerHTML = '<div class="no-best-friends">No friends match your search</div>'; return; }
+                filteredFriends.forEach(friend => grid.appendChild(createFriendItem(friend, bestFriends.has(friend.id))));
             };
-
             searchInput.addEventListener('input', performSearch);
 
-            try {
-                const currentUserId = Roblox?.CurrentUser?.userId || null;
-                if (!currentUserId) {
-                    loading.innerHTML = 'Failed to get current user ID.';
-                    return;
+            // fire off the friends fetch without blocking, so the popup shows immediately
+            (async () => {
+                try {
+                    const currentUserId = getCurrentUserId() || null;
+                    if (!currentUserId) { grid.innerHTML = 'Failed to get current user ID.'; return; }
+
+                    const friends = await gmFetchFriends(currentUserId);
+                    if (!friends || !friends.length) { grid.innerHTML = '<div class="no-best-friends">You have no friends.</div>'; return; }
+
+                    // clear the loading spinner now that we have data
+                    grid.innerHTML = '';
+
+                    // render all the names right away with placeholder avatars, then swap in real images as they load
+                    allFriends = friends.map(friend => ({ id: friend.id, displayName: friend.displayName || friend.name, avatarUrl: null }));
+                    const friendItemMap = {};
+                    allFriends.forEach(friend => {
+                        const item = createFriendItem(friend, bestFriends.has(friend.id));
+                        friendItemMap[friend.id] = item;
+                        grid.appendChild(item);
+                    });
+
+                    // fetch avatars in parallel batches so it doesnt take forever
+                    const friendIds = friends.map(friend => friend.id);
+                    const AVATAR_BATCH_SIZE = 10;
+                    const avatarBatches = [];
+                    for (let offset = 0; offset < friendIds.length; offset += AVATAR_BATCH_SIZE) {
+                        avatarBatches.push(friendIds.slice(offset, offset + AVATAR_BATCH_SIZE));
+                    }
+                    avatarBatches.forEach(batch => {
+                        fetchPlayerThumbnailsBatch(batch).then(raw => { const avatarMap = toAvatarMap(raw);
+                            batch.forEach(friendId => {
+                                if (!avatarMap[friendId]) return;
+                                const friendEntry = allFriends.find(friend => friend.id === friendId);
+                                if (friendEntry) friendEntry.avatarUrl = avatarMap[friendId];
+                                const avatarDiv = friendItemMap[friendId]?.querySelector('.best-friend-avatar');
+                                if (avatarDiv) {
+                                    avatarDiv.textContent = '';
+                                    const avatarImg = document.createElement('img');
+                                    avatarImg.src = avatarMap[friendId];
+                                    avatarImg.alt = friendEntry?.displayName || '';
+                                    avatarDiv.appendChild(avatarImg);
+                                }
+                            });
+                        });
+                    });
+
+                } catch (err) {
+                    ConsoleLogEnabled('[showBestFriendsPopup] Error:', err);
+                    grid.innerHTML = '<div class="no-best-friends">Failed to load friends</div>';
                 }
+            })();
 
-                const friends = await gmFetchFriends(currentUserId);
-                if (!friends || friends.length === 0) {
-                    loading.innerHTML = 'You have no friends.';
-                    return;
-                }
-
-                // get friend id
-                const friendIds = friends.map(friend => friend.id);
-
-                // fetch avatars in batches
-                const avatarMap = {};
-                const batchSize = 5;
-                for (let i = 0; i < friendIds.length; i += batchSize) {
-                    const batch = friendIds.slice(i, i + batchSize);
-                    const batchAvatars = await fetchUserAvatars(batch);
-                    Object.assign(avatarMap, batchAvatars);
-                }
-
-                // clear loading and populate grid
-                grid.innerHTML = '';
-                allFriends = friends.map(friend => ({
-                    id: friend.id,
-                    displayName: friend.displayName || friend.name,
-                    avatarUrl: avatarMap[friend.id]
-                }));
-
-                // store all friends for search
-                allFriends.forEach(friend => {
-                    const friendItem = createFriendItem(friend, bestFriends.has(friend.id));
-                    grid.appendChild(friendItem);
-                });
-
-            } catch (error) {
-                ConsoleLogEnabled('[showBestFriendsPopup] Error:', error);
-                grid.innerHTML = '<div class="no-best-friends">Failed to load friends</div>';
-            }
-
-            // create friend item element
+            // builds one friend card for the picker grid
             function createFriendItem(friend, isBestFriend) {
-                const friendItem = document.createElement('div');
-                friendItem.className = 'best-friends-popup-item';
+                const item = document.createElement('div');
+                item.className = 'best-friends-popup-item';
 
                 const avatarDiv = document.createElement('div');
                 avatarDiv.className = 'best-friend-avatar';
-
                 if (friend.avatarUrl) {
-                    const img = document.createElement('img');
-                    img.src = friend.avatarUrl;
-                    img.alt = friend.displayName;
-                    avatarDiv.appendChild(img);
-                } else {
-                    avatarDiv.textContent = '👤';
-                }
+                    const avatarImg = document.createElement('img');
+                    avatarImg.src = friend.avatarUrl;
+                    avatarImg.alt = friend.displayName;
+                    avatarDiv.appendChild(avatarImg);
+                } else { avatarDiv.textContent = '👤'; }
 
                 const nameSpan = document.createElement('span');
                 nameSpan.className = 'best-friend-name';
                 nameSpan.textContent = friend.displayName;
 
-                friendItem.appendChild(avatarDiv);
-                friendItem.appendChild(nameSpan);
+                item.appendChild(avatarDiv);
+                item.appendChild(nameSpan);
+                if (isBestFriend) item.appendChild(createStarIcon());
 
-                // add star if best friend
-                if (isBestFriend) {
-                    const star = createStarIcon();
-                    friendItem.appendChild(star);
-                }
-
-                // click handler
-                friendItem.addEventListener('click', (e) => {
-                    e.stopPropagation();
-
-                    // toggle best friend status
+                // clicking toggles them as a best friend
+                item.addEventListener('click', (event) => {
+                    event.stopPropagation();
                     if (bestFriends.has(friend.id)) {
                         bestFriends.delete(friend.id);
-                        const star = friendItem.querySelector(`.${CLASSES.BEST_FRIEND_STAR}`);
-                        if (star) {
-                            star.classList.remove('star-visible');
-                            setTimeout(() => star.remove(), 300);
-                        }
+                        const starIcon = item.querySelector(`.${CLASSES.BEST_FRIEND_STAR}`);
+                        if (starIcon) { starIcon.classList.remove('star-visible'); setTimeout(() => starIcon.remove(), 300); }
                     } else {
-
-                        // check if adding would exceed the limit
-                        if (bestFriends.size >= 20) {
-                            notifications('Maximum of 20 best friends allowed!', 'error', '⚠️', '2000');
-                            return;
-                        }
-
+                        if (bestFriends.size >= 20) { notifications('Maximum of 20 best friends allowed!', 'error', '⚠️', '2000'); return; }
                         bestFriends.add(friend.id);
-                        const star = createStarIcon();
-                        friendItem.appendChild(star);
+                        item.appendChild(createStarIcon());
                     }
-
-                    // save to localStorage
                     saveBestFriends(bestFriends);
                 });
 
-                return friendItem;
+                return item;
             }
         };
 
-        // handle best friends button click event
         const handleBestFriendsButtonClick = () => {
             showBestFriendsPopup();
-            notifications('Once you pick your best friends, make sure to refresh the page for it to show best friends!', 'info', '', '6000');
-            notifications('This feature is still buggy and incomplete. Remove best friends if it causes any issues.', 'warning', '', '12000');
+            notifications('Once you pick your best friends, make sure to refresh the page for it to show best friends!', 'info', '', '12000');
         };
 
-        // create person icon SVG
+        // the little person icon that goes on the best friends button
         const createPersonIcon = () => {
             const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             svg.setAttribute('viewBox', '0 0 24 24');
@@ -10073,206 +11044,127 @@ li a.about-link:hover::after {
             svg.setAttribute('stroke-width', '2');
             svg.setAttribute('stroke-linecap', 'round');
             svg.setAttribute('stroke-linejoin', 'round');
-
-            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            path.setAttribute('d', 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2');
-            svg.appendChild(path);
-
-            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            circle.setAttribute('cx', '12');
-            circle.setAttribute('cy', '7');
-            circle.setAttribute('r', '4');
-            svg.appendChild(circle);
-
+            const bodyPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            bodyPath.setAttribute('d', 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2');
+            svg.appendChild(bodyPath);
+            const headCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            headCircle.setAttribute('cx', '12'); headCircle.setAttribute('cy', '7'); headCircle.setAttribute('r', '4');
+            svg.appendChild(headCircle);
             return svg;
         };
 
-        // create and insert best friends button
+        // inserts the "best friends" button next to the friends section header
         const createAndInsertBestFriendsButton = () => {
-            const existingBestFriendsButton = document.querySelector(`.${CLASSES.BEST_FRIENDS_BUTTON}`);
-            if (existingBestFriendsButton) return;
-
-            const friendsHeaderElement = document.querySelector('.container-header.people-list-header h2');
-            if (!friendsHeaderElement) return;
-
-            const bestFriendsButton = document.createElement('button');
-            bestFriendsButton.className = CLASSES.BEST_FRIENDS_BUTTON;
-
-            // add the person icon
-            const personIcon = createPersonIcon();
-            bestFriendsButton.appendChild(personIcon);
-
-            // add the text
-            const textNode = document.createTextNode('Best Friends');
-            bestFriendsButton.appendChild(textNode);
-
-            bestFriendsButton.addEventListener('click', handleBestFriendsButtonClick);
-
-            // insert button right after the friends header element (next to it, not inside)
-            friendsHeaderElement.insertAdjacentElement('afterend', bestFriendsButton);
+            if (document.querySelector(`.${CLASSES.BEST_FRIENDS_BUTTON}`)) return;
+            const sectionHeader = document.querySelector('.container-header.people-list-header h2');
+            if (!sectionHeader) return;
+            const button = document.createElement('button');
+            button.className = CLASSES.BEST_FRIENDS_BUTTON;
+            button.appendChild(createPersonIcon());
+            button.appendChild(document.createTextNode('Best Friends'));
+            button.addEventListener('click', handleBestFriendsButtonClick);
+            sectionHeader.insertAdjacentElement('afterend', button);
         };
 
-        // setup observer for best friends button creation
+        // watches for the button getting removed by roblox's spa navigation and re-adds it
         const setupBestFriendsButtonObserver = () => {
-            if (bestFriendsButtonObserver) {
-                bestFriendsButtonObserver.disconnect();
-            }
-
-            bestFriendsButtonObserver = new MutationObserver(() => {
-                createAndInsertBestFriendsButton();
-            });
-
-            bestFriendsButtonObserver.observe(document.body, {
-                childList: true,
-                subtree: true
-            });
+            if (bestFriendsButtonObserver) bestFriendsButtonObserver.disconnect();
+            bestFriendsButtonObserver = new MutationObserver(() => createAndInsertBestFriendsButton());
+            bestFriendsButtonObserver.observe(document.body, { childList: true, subtree: true });
         };
 
-        // setup dropdown observer for dynamic content
+        // watches for roblox's native dropdowns being added so we can style them
         const setupDropdownMutationObserver = () => {
-            if (dropdownObserver) {
-                dropdownObserver.disconnect();
-            }
-
+            if (dropdownObserver) dropdownObserver.disconnect();
             dropdownObserver = new MutationObserver((mutations) => {
-                let needsDropdownStylingUpdate = false;
-
-                mutations.forEach((mutation) => {
-                    if (mutation.type === 'childList') {
-                        mutation.addedNodes.forEach((addedNode) => {
-                            if (addedNode.nodeType === 1 &&
-                                (addedNode.classList?.contains('friend-tile-dropdown') ||
-                                    addedNode.querySelector?.('.friend-tile-dropdown'))) {
-                                needsDropdownStylingUpdate = true;
-                            }
-                        });
-                    }
+                let needsUpdate = false;
+                mutations.forEach(mutation => {
+                    if (mutation.type === 'childList') mutation.addedNodes.forEach(node => {
+                        if (node.nodeType === 1 && (node.classList?.contains('friend-tile-dropdown') || node.querySelector?.('.friend-tile-dropdown'))) needsUpdate = true;
+                    });
                 });
-
-                if (needsDropdownStylingUpdate) {
-                    styleDropdownMenus();
-                }
+                if (needsUpdate) styleDropdownMenus();
             });
-
-            dropdownObserver.observe(document.body, {
-                childList: true,
-                subtree: true
-            });
+            dropdownObserver.observe(document.body, { childList: true, subtree: true });
         };
 
-        // setup avatar observer for status changes
+        // watches for avatar/status changes in the friends carousel and re-applies our colored borders
         const setupAvatarMutationObserver = () => {
-            if (avatarObserver) {
-                avatarObserver.disconnect();
-            }
-
-            const friendsContainerElement = document.querySelector('.friend-carousel-container');
-            if (!friendsContainerElement) return;
-
+            if (avatarObserver) avatarObserver.disconnect();
+            const friendsContainer = document.querySelector('.friend-carousel-container');
+            if (!friendsContainer) return;
             avatarObserver = new MutationObserver((mutations) => {
-                let needsAvatarStylingUpdate = false;
-
-                mutations.forEach((mutation) => {
-                    if (mutation.type === 'childList') {
-                        mutation.addedNodes.forEach((addedNode) => {
-                            if (addedNode.nodeType === 1 &&
-                                (addedNode.classList?.contains('friends-carousel-tile') ||
-                                    addedNode.querySelector?.('.friends-carousel-tile') ||
-                                    addedNode.classList?.contains('avatar-card-image') ||
-                                    addedNode.classList?.contains('avatar-status'))) {
-                                needsAvatarStylingUpdate = true;
-                            }
-                        });
-                    } else if (mutation.type === 'attributes') {
-                        const targetElement = mutation.target;
-                        if (targetElement.classList?.contains('avatar-status') ||
-                            targetElement.getAttribute('data-testid') === 'presence-icon' ||
-                            targetElement.closest('.avatar-status') ||
-                            targetElement.closest('.friends-carousel-tile')) {
-                            needsAvatarStylingUpdate = true;
-                        }
+                let needsUpdate = false;
+                mutations.forEach(mutation => {
+                    if (mutation.type === 'childList') mutation.addedNodes.forEach(node => {
+                        if (node.nodeType === 1 && (node.classList?.contains('friends-carousel-tile') || node.querySelector?.('.friends-carousel-tile') || node.classList?.contains('avatar-card-image') || node.classList?.contains('avatar-status'))) needsUpdate = true;
+                    });
+                    else if (mutation.type === 'attributes') {
+                        const target = mutation.target;
+                        if (target.classList?.contains('avatar-status') || target.getAttribute('data-testid') === 'presence-icon' || target.closest?.('.avatar-status') || target.closest?.('.friends-carousel-tile')) needsUpdate = true;
                     }
                 });
-
-                if (needsAvatarStylingUpdate) {
-                    // small delay to ensure dom is ready
-                    setTimeout(applyFriendStatusStyling, 100);
-                }
+                if (needsUpdate) setTimeout(applyFriendStatusStyling, 100);
             });
-
-            avatarObserver.observe(friendsContainerElement, {
-                childList: true,
-                subtree: true,
-                attributes: true,
-                attributeFilter: ['class', 'title', 'src']
-            });
+            avatarObserver.observe(friendsContainer, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'title', 'src'] });
         };
 
-        // apply main container styling
+        // styles the friends container div to match our custom look
         const applyFriendsContainerStyling = () => {
-            const friendsContainerElement = document.querySelector('.friend-carousel-container');
-            if (!friendsContainerElement) return false;
-            friendsContainerElement.style.backgroundColor = `${isDarkMode() ? '#1a1c23' : '#E0D8CC'}`;
-            friendsContainerElement.style.borderRadius = '12px';
-            friendsContainerElement.style.border = `1px solid ${isDarkMode() ? '#1a1c23' : '#C1B19A'}`;
-            friendsContainerElement.style.padding = '12px';
-            friendsContainerElement.style.boxSizing = 'border-box';
-            friendsContainerElement.style.margin = '0 0 16px 0';
-
+            const friendsContainer = document.querySelector('.friend-carousel-container');
+            if (!friendsContainer) return false;
+            friendsContainer.style.backgroundColor = isDarkMode() ? '#1a1c23' : '#E0D8CC';
+            friendsContainer.style.borderRadius    = '12px';
+            friendsContainer.style.border          = `1px solid ${isDarkMode() ? '#1a1c23' : '#C1B19A'}`;
+            friendsContainer.style.padding         = '12px';
+            friendsContainer.style.boxSizing       = 'border-box';
+            friendsContainer.style.margin          = '0 0 16px 0';
             return true;
         };
 
+        // kicks everything off once we know the friends section is on the page
         const initializeBetterFriendsFeatures = () => {
             if (!applyFriendsContainerStyling()) return false;
-
             addStatusStyles();
             applyFriendStatusStyling();
             setupDropdownMutationObserver();
             setupAvatarMutationObserver();
             setupBestFriendsButtonObserver();
             createAndInsertBestFriendsButton();
-
-            // add best friends section
             createBestFriendsSection();
             removeBestFriendsFromRegularSection();
 
-            // check if dom is ready
-            const checkWhenReady = () => {
-                if (Roblox?.CurrentUser?.userId) {
-                    ROLOCATE_checkBestFriendsStatus();
-                } else {
-                    requestAnimationFrame(checkWhenReady);
-                }
+            // roblox sets the userId a bit late so we poll until its ready
+            const waitForUserId = () => {
+                if (getCurrentUserId()) checkBestFriendsStatus();
+                else requestAnimationFrame(waitForUserId);
             };
-            checkWhenReady();
+            waitForUserId(); // ik i should use the universal one but here its fine.
             return true;
         };
 
-        // cleanup function for observers so no memory leaks
         const cleanupAllObservers = () => {
-            if (dropdownObserver) dropdownObserver.disconnect();
-            if (avatarObserver) avatarObserver.disconnect();
-            if (mainObserver) mainObserver.disconnect();
+            if (dropdownObserver)          dropdownObserver.disconnect();
+            if (avatarObserver)            avatarObserver.disconnect();
+            if (mainObserver)              mainObserver.disconnect();
             if (bestFriendsButtonObserver) bestFriendsButtonObserver.disconnect();
-            if (observerTimeout) clearTimeout(observerTimeout);
+            if (observerTimeout)           clearTimeout(observerTimeout);
+            removeStatusTooltip();
         };
 
-        // check if friends section exists
-        const checkForFriendsSectionExistence = () => {
-            return document.querySelector('.friend-carousel-container') ||
-                document.querySelector('.add-friends-icon-container');
-        };
+        const checkForFriendsSectionExistence = () =>
+            document.querySelector('.friend-carousel-container') ||
+            document.querySelector('.add-friends-icon-container');
 
-        // main execution logic
+        // if the friends section is already there just go for it, otherwise wait for it
         if (checkForFriendsSectionExistence()) {
             initializeBetterFriendsFeatures();
             return cleanupAllObservers;
         }
 
-        // timeout for cleanup if friends section doesnt appear
+        // give up after 15 seconds if the friends section never shows up
         observerTimeout = setTimeout(cleanupAllObservers, 15000);
 
-        // main observer for waiting for friends section
         mainObserver = new MutationObserver(() => {
             if (checkForFriendsSectionExistence()) {
                 if (initializeBetterFriendsFeatures()) {
@@ -10281,15 +11173,10 @@ li a.about-link:hover::after {
                 }
             }
         });
-
-        mainObserver.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
+        mainObserver.observe(document.body, { childList: true, subtree: true });
 
         return cleanupAllObservers;
     }
-
 
 
     /*******************************************************
@@ -10335,7 +11222,9 @@ li a.about-link:hover::after {
                 .chat-search-input,
                 .select-friends-input,
                 .content-action-utility,
-                #user-profile-header-AddFriend
+                #user-profile-header-AddFriend,
+                .content-emphasis,
+                .toast-content
             `.replace(/\s+/g, ''));
         }
 
@@ -10701,7 +11590,6 @@ li a.about-link:hover::after {
             startDispatcher();
         });
     }
-
 
     /*******************************************************
     name of function: delay
@@ -12490,7 +13378,7 @@ li a.about-link:hover::after {
     description: a function to join servers. has btroblox comptabaility. also join private servers
     *******************************************************/
     async function JoinServer(placeId, serverId, serverType) {
-        if (!/^https:\/\/www\.roblox\.com(\/[a-z]{2})?\/games\//.test(window.location.href)) return;
+       if (!/^https:\/\/www\.roblox\.com(\/[a-z]{2})?\/(games\/|home(\/|$))/.test(window.location.href)) return; // update cause of the betterfriends function now
 
         if (localStorage.getItem("ROLOCATE_joinconfirmation") === "true") {
             // checkj if in game
@@ -13023,6 +13911,229 @@ li a.about-link:hover::after {
         new MutationObserver(() => {}).observe(document.body, { childList: true, subtree: true });
     }
 
+
+    /*******************************************************
+     name of function: bettergamestats
+     description: popup for customizing game stats display
+     *******************************************************/
+    function bettergamestats_settings () {
+      // don't open it twice
+      if (document.getElementById('rolocate-gamestats-settings-modal')) return;
+      notifications('Warning: This revenue estimate may be 10–25% higher or lower than the game’s actual earnings and does not account for premium payouts. It is intended to provide a general sense of how much a game makes.', 'warning', '', '60000');
+
+      // default toggle values
+      const defaultSettings = {
+        estimatedRevenue: false
+      };
+
+      // load saved settings and fall back to defaults
+      const savedSettings = JSON.parse(
+        localStorage.getItem('ROLOCATE_bettergamestats_settings') || '{}'
+      );
+      const settings = { ...defaultSettings, ...savedSettings };
+
+      // dark background overlay
+      const overlay = document.createElement('div');
+      overlay.id = 'rolocate-gamestats-settings-modal';
+      overlay.style.cssText = `
+        position:fixed;inset:0;display:flex;justify-content:center;align-items:center;
+        background:rgba(0,0,0,.45);z-index:10000;opacity:0;transition:.2s;
+      `;
+
+      // main modal box
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        background:#181818;border-radius:14px;padding:18px;width:340px;max-width:92vw;
+        color:#fff;border:1px solid #2f2f2f;box-shadow:0 10px 30px rgba(0,0,0,.6);
+        transform:scale(.96) translateY(12px);transition:.2s;
+      `;
+
+      // title + subtitle
+      modal.innerHTML = `
+        <h2 style="margin:0;font-size:18px;text-align:center">Game Stats Settings</h2>
+        <p style="margin:6px 0 0px;text-align:center;font-size:12px;color:#aaa">
+          Choose what you want displayed
+        </p>
+      `;
+
+      // toggle definitions
+      const toggleOptions = [
+        ['estimatedRevenue', 'Estimated Revenue']
+      ];
+
+      // container for all toggles
+      const togglesContainer = document.createElement('div');
+      togglesContainer.style.cssText = `
+        background:#222;padding:10px;border-radius:10px;display:grid;gap:8px;
+      `;
+
+      // build each toggle row
+      toggleOptions.forEach(([key, label]) => {
+        const row = document.createElement('label');
+        row.style.cssText = `
+          display:flex;justify-content:space-between;align-items:center;
+          padding:8px 10px;border-radius:8px;cursor:pointer;
+          transition:.15s;background:#262626;
+        `;
+
+        // hover effect
+        row.onmouseenter = () => (row.style.background = '#2d2d2d');
+        row.onmouseleave = () => (row.style.background = '#262626');
+
+        const on = settings[key];
+        row.innerHTML = `
+          <span style="font-size:13px">${label}</span>
+          <input type="checkbox" id="bgs-${key}" ${on ? 'checked' : ''} style="display:none">
+          <div class="tgl" style="
+            width:36px;height:20px;border-radius:20px;
+            background:${on ? '#16a34a' : '#444'};
+            position:relative;transition:.15s;
+          ">
+            <div style="
+              width:16px;height:16px;border-radius:50%;background:#fff;
+              position:absolute;top:2px;left:${on ? '18px' : '2px'};
+              transition:.15s;
+            "></div>
+          </div>
+        `;
+
+        const checkbox = row.querySelector('input');
+        const toggle = row.querySelector('.tgl');
+        const knob = toggle.querySelector('div');
+
+        // handle toggle click
+        row.onclick = (e) => {
+          e.preventDefault();
+          checkbox.checked = !checkbox.checked;
+          toggle.style.background = checkbox.checked ? '#16a34a' : '#444';
+          knob.style.left = checkbox.checked ? '18px' : '2px';
+        };
+
+        togglesContainer.appendChild(row);
+      });
+
+      // buttons container
+      const buttonRow = document.createElement('div');
+      buttonRow.style.cssText = `
+        display:flex;justify-content:flex-end;gap:8px;margin-top:14px;
+      `;
+
+      // close animation + cleanup
+      const closeModal = () => {
+        modal.style.transform = 'scale(.96) translateY(12px)';
+        overlay.style.opacity = '0';
+        setTimeout(() => overlay.remove(), 200);
+      };
+
+      // reusable button factory
+      const createButton = (text, bgColor, onClick) => {
+        const button = document.createElement('button');
+        button.textContent = text;
+        button.style.cssText = `
+          padding:8px 14px;border-radius:8px;border:1px solid ${bgColor};
+          background:${bgColor};color:#fff;font-size:13px;cursor:pointer;
+          transition:.15s;
+        `;
+        button.onmouseenter = () => (button.style.opacity = 0.85);
+        button.onmouseleave = () => (button.style.opacity = 1);
+        button.onclick = onClick;
+        return button;
+      };
+
+      // add buttons
+      buttonRow.append(
+        createButton('Cancel', '#333', closeModal),
+        createButton('Save', '#16a34a', () => {
+          const newSettings = {};
+          toggleOptions.forEach(([key]) => {
+            newSettings[key] = document.getElementById(`bgs-${key}`).checked;
+          });
+
+          localStorage.setItem(
+            'ROLOCATE_bettergamestats_settings',
+            JSON.stringify(newSettings)
+          );
+
+          // feedback stuff
+          ConsoleLogEnabled('Game stats settings saved:', newSettings);
+          notifications('Settings saved', 'success', '👍', '5000');
+
+          closeModal();
+        })
+      );
+
+      // assemble modal
+      modal.append(togglesContainer, buttonRow);
+      overlay.append(modal);
+      document.body.append(overlay);
+
+      // animate in
+      requestAnimationFrame(() => {
+        overlay.style.opacity = '1';
+        modal.style.transform = 'scale(1) translateY(0)';
+      });
+    }
+
+    /*******************************************************
+    name of function: getCsrfToken
+    description: get crsf token
+    *******************************************************/
+    // NOTE NOTE NOTE: DO NOT CONSOLE LOG THE CSRF TOKEN!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    async function getCsrfToken() { // look ik this function may get called like a million times. but shouldnt be an issue. :) real men test in production >:)
+        return new Promise((resolve) => {
+            GM_xmlhttpRequest({ // low risk endpoint. hopefully no ratelimit
+                url: "https://catalog.roblox.com/v1/catalog/items/details",
+                method: "POST",
+                withCredentials: true,
+                onload: function(response) {
+                    const token = response.responseHeaders
+                        .split("\n")
+                        .find(h => h.toLowerCase().startsWith("x-csrf-token"));
+
+                    if (!token) {
+                        ConsoleLogEnabled("Error: Something went wrong getting csrf token!");
+                        resolve(null);
+                        return;
+                    }
+
+                    const value = token.split(":")[1].trim();
+                    resolve(value);
+                },
+                onerror: function() {
+                    ConsoleLogEnabled("Error: Request failed while getting csrf token!");
+                    resolve(null);
+                }
+            });
+        });
+    }
+
+    /*******************************************************
+    name of function: checkBannedUser
+    description: so like this is the banned user logic. coming soonish
+    *******************************************************/
+    async function checkBannedUser() {
+        function check() {
+            if (!location.href.includes("ROLOCATE_BANNED_USER")) return;
+            const container = document.querySelector(".profile-platform-container");
+            if (!container) return;
+            const textColor = isDarkMode() ? "#ffffff" : "#000000";
+            container.innerHTML = `
+                <p style="color:${textColor};padding:24px;text-align:center;margin:0;font-size:24px;font-weight:600;">
+                    🛠️ Coming Soon-ish
+                </p>
+            `;
+        }
+
+        // logic so on page updates
+        for (const method of ["pushState", "replaceState"]) {
+            const orig = history[method];
+            history[method] = function (...a) { orig.apply(this, a); check(); };
+        }
+        window.addEventListener("popstate",   check);
+        window.addEventListener("hashchange", check);
+        check();
+    }
+
     /*******************************************************
     name of function: event listener
     description: Not a function but runs the initial setup for the script to actually
@@ -13048,13 +14159,14 @@ li a.about-link:hover::after {
         }
 
         betterfriends(); // shows better friends
+        checkBannedUser(); // banned user
         Responsivegamecards(); // uh the repsonsive game cards
         SmartSearch(); // smartsearch bar ontop cool function :)
         applycustombackgrounds(); // applies custom backgrounds
         restoreclassicterms(); // restores classic terms
         quicklaunchgamesfunction(); // shows quick launch games
         manageRobloxChatBar(); // removes chatbar if enabled
-        loadmutualfriends(); // shows mutualfriends
+        loadbetterprofileinfo(); // shows mutualfriends, accountage, etc
         Update_Popup(); // shows update message
         initializeLocalStorage(); // sets up localstorage
         removeAds(); // removes ads
@@ -13351,58 +14463,217 @@ li a.about-link:hover::after {
         /*******************************************************
         name of function: disableYouTubeAutoplayInIframes
         Description:
-        disable autoplay in YouTube iframes on game page
+        disable autoplay in YouTube iframes on game page & new video blob thingy
         *******************************************************/
-        // currently bug where if u play the video it like keeps playing when scrolling through
-        function disableYouTubeAutoplayInIframes(rootElement = document, observeMutations = false) {
-            const processedFlag = 'data-autoplay-blocked';
+        function disableVideoAutoplay(rootElement = document, observeMutations = true) {
+            const processedFlag = 'data-autoclicked';
 
-            function disableAutoplay(iframe) {
-                if (iframe.hasAttribute(processedFlag)) return;
-                const src = iframe.src;
-                if (!src || (!src.includes('youtube.com') && !src.includes('youtube-nocookie.com'))) return;
-                iframe.removeAttribute('allow');
-                try {
-                    const url = new URL(src);
-                    url.searchParams.delete('autoplay');
-                    url.searchParams.set('enablejsapi', '0');
-                    const newSrc = url.toString();
-                    if (src !== newSrc) iframe.src = newSrc;
-                    iframe.setAttribute(processedFlag, 'true');
-                } catch (error) {
-                    // url parsing failed, just skip it
-                    ConsoleLogEnabled('Failed to parse iframe src URL', error);
+            function findAndClickPlay() {
+                const playButton = document.querySelector('button[aria-label="Pause"]');
+                if (playButton && !playButton.hasAttribute(processedFlag)) {
+                    playButton.setAttribute(processedFlag, 'true');
+                    playButton.click();
+                    return true;
                 }
+                return false;
             }
 
-            function processAll() {
-                const selector = 'iframe[src*="youtube.com"], iframe[src*="youtube-nocookie.com"]';
-                const iframes = rootElement.querySelectorAll ? rootElement.querySelectorAll(selector) : [];
-                iframes.forEach(disableAutoplay);
-            }
-            processAll();
-            if (!observeMutations) return null;
-            // watch for new iframes if needed
-            const observer = new MutationObserver(mutations => {
-                mutations.forEach(mutation => {
-                    mutation.addedNodes.forEach(node => {
-                        if (!(node instanceof HTMLElement)) return;
-                        if (node.tagName === 'IFRAME') {
-                            disableAutoplay(node);
-                        } else if (node.querySelectorAll) {
-                            node.querySelectorAll('iframe[src*="youtube.com"], iframe[src*="youtube-nocookie.com"]')
-                                .forEach(disableAutoplay);
-                        }
-                    });
+            // Run immediately in case button is already in the DOM
+            if (findAndClickPlay()) return;
+
+            if (observeMutations) {
+                const observer = new MutationObserver(() => {
+                    if (findAndClickPlay()) {
+                        observer.disconnect();
+                    }
                 });
-            });
-            observer.observe(rootElement.body || rootElement, {
-                childList: true,
-                subtree: true
-            });
-            return observer;
-        }
 
+                observer.observe(rootElement.body || rootElement, {
+                    childList: true,
+                    subtree: true,
+                    attributes: true,
+                    attributeFilter: ['aria-label']
+                });
+
+                return observer;
+            }
+        }
+        /*******************************************************
+         name of function: bettergamestats_action
+         description: calculates estimated revenue range for the
+         current game based on genre RPV benchmarks.
+         formula: visits * RPV * 0.70 * 0.0038
+         *******************************************************/
+        async function bettergamestats_action() {
+          const enabled = localStorage.getItem('ROLOCATE_bettergamestats');
+          if (!enabled || enabled !== 'true') return;
+
+          const rawSettings = localStorage.getItem('ROLOCATE_bettergamestats_settings');
+          const settings = rawSettings ? JSON.parse(rawSettings) : {};
+          if (!settings.estimatedRevenue) return;
+
+          // rpv range by genre
+          // keyed by lowercase genre_l1, with optional genre_l2 overrides
+          // [min, max] RPV in Robux
+          const RPV_BY_GENRE = {
+            shooter:    { default: [3.5, 7.0] },
+            action: {
+              default:       [4.5, 8.5],
+              battlegrounds: [4.0, 8.5],
+              'open world':  [5.0, 9.0],
+              'battle royale': [4.0, 8.5],
+            },
+            rpg: {
+              default:  [5.0, 9.0],
+              action:   [6.0, 12.0],
+              survival: [4.0, 7.5],
+            },
+            simulation: {
+              default: [2.5, 5.0],
+              tycoon:  [1.5, 2.5],
+              idle:    [3.5, 7.5],
+              pet:     [3.5, 7.5],
+            },
+            roleplay: {
+              default:    [1.5, 3.5],
+              social:     [0.5, 1.5],
+              specialized:[2.5, 5.0],
+              life:       [0.5, 2.0],
+            },
+            strategy:   { default: [3.0, 7.5] },
+            horror:     { default: [2.0, 4.5] },
+            survival:   { default: [1.5, 3.5] },
+            obby:       { default: [0.1, 0.5] },
+            platformer: { default: [0.1, 0.5] },
+            // fallback
+            _unknown:   { default: [2.0, 5.0] },
+          };
+
+          function getRpvRange(genre_l1, genre_l2) {
+            const g1 = (genre_l1 || '').toLowerCase();
+            const g2 = (genre_l2 || '').toLowerCase();
+
+            const genreEntry = RPV_BY_GENRE[g1] ?? RPV_BY_GENRE._unknown;
+
+            // check if any genre_l2 keyword matches a subgenre key
+            const subKey = Object.keys(genreEntry).find(k => k !== 'default' && g2.includes(k));
+
+            return subKey ? genreEntry[subKey] : genreEntry.default;
+          }
+
+          // helpers
+          const gmFetch = url => new Promise((resolve, reject) =>
+            GM_xmlhttpRequest({
+              method: 'GET', url,
+              onload: r => resolve(r.responseText),
+              onerror: err => reject(err),
+            })
+          );
+
+          function upsertStat(labelText, valueText) {
+            const container = document.querySelector('ul.game-stat-container');
+            if (!container) return;
+            let el = [...container.querySelectorAll('.game-stat')]
+              .find(li => li.querySelector('.text-label')?.textContent === labelText);
+            if (el) { el.querySelector('.text-lead').textContent = valueText; return; }
+            const li = document.createElement('li');
+            li.className = 'game-stat';
+            li.innerHTML = `
+              <p class="text-label text-overflow font-caption-header">${labelText}</p>
+              <p class="text-lead font-caption-body">${valueText}</p>
+            `;
+            container.appendChild(li);
+          }
+
+          // money compactereretrter
+          function fmtUSD(n) {
+            if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+            if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+            if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+            return '$' + Math.round(n);
+          }
+
+          const wait = ms => new Promise(res => setTimeout(res, ms));
+
+          // get game data
+          const placeId = getCurrentGameId();
+          const universeId = await getUniverseIdFromPlaceId(placeId);
+          ConsoleLogEnabled('[bettergamestats] universeId:', universeId);
+
+          let visits = 0, genre_l1 = '', genre_l2 = '';
+          try {
+            const res  = await gmFetch(`https://games.roblox.com/v1/games?universeIds=${universeId}`);
+            const data = JSON.parse(res);
+            const game = data.data?.[0];
+            if (!game) return;
+
+            visits   = game.visits ?? 0;
+            genre_l1 = game.genre_l1 ?? '';
+            genre_l2 = game.genre_l2 ?? '';
+
+            ConsoleLogEnabled('[bettergamestats] visits:', visits);
+            ConsoleLogEnabled('[bettergamestats] genre_l1:', genre_l1, '| genre_l2:', genre_l2);
+          } catch (e) {
+            ConsoleLogEnabled('[bettergamestats] failed to fetch game info:', e);
+            return;
+          }
+
+          if (visits <= 0) return;
+
+          // get dev products
+          await wait(100);
+          let hasDevProducts = false;
+          try {
+            const dpRes  = await gmFetch(`https://apis.roblox.com/developer-products/v2/universes/${universeId}/developerproducts?limit=500`);
+            const dpData = JSON.parse(dpRes);
+            hasDevProducts = (dpData.developerProducts || []).some(p => p.PriceInRobux > 0);
+            ConsoleLogEnabled('[bettergamestats] hasDevProducts:', hasDevProducts);
+          } catch (e) {
+            ConsoleLogEnabled('[bettergamestats] failed to fetch dev products:', e);
+          }
+
+          // get gamepasses
+          await wait(100);
+          let hasGamePasses = false;
+          try {
+            const gpRes  = await gmFetch(`https://apis.roblox.com/game-passes/v1/universes/${universeId}/game-passes?passView=full`);
+            const gpData = JSON.parse(gpRes);
+            hasGamePasses = (gpData.gamePasses || []).some(p => p.price > 0);
+            ConsoleLogEnabled('[bettergamestats] hasGamePasses:', hasGamePasses);
+          } catch (e) {
+            ConsoleLogEnabled('[bettergamestats] failed to fetch game passes:', e);
+          }
+
+          const noMonetization = !hasDevProducts && !hasGamePasses;
+          ConsoleLogEnabled('[bettergamestats] noMonetization (0.1x):', noMonetization);
+
+          // revenue range
+          const [rpvMin, rpvMax] = getRpvRange(genre_l1, genre_l2);
+          const calc = rpv => visits * rpv * 0.70 * 0.0038;
+
+          // ouitler multipler
+          // top games attract more robux montezization really good
+          let outlierMultiplier;
+          if      (visits >= 100_000_000_000) outlierMultiplier = 3.8;
+          else if (visits >=  50_000_000_000) outlierMultiplier = 3.3;
+          else if (visits >=  20_000_000_000) outlierMultiplier = 3.0;
+          else if (visits >=  10_000_000_000) outlierMultiplier = 2.3;
+          else if (visits >=   5_000_000_000) outlierMultiplier = 1.5;
+          else if (visits >=   1_000_000_000) outlierMultiplier = 1.2;
+          else                                outlierMultiplier = 1.0;
+
+          ConsoleLogEnabled('[bettergamestats] outlierMultiplier:', outlierMultiplier);
+
+          const monetizationMultiplier = noMonetization ? 0.1 : 1;
+          const combined = monetizationMultiplier * outlierMultiplier;
+          const revenueMin = Math.round(calc(rpvMin) * combined);
+          const revenueMax = Math.round(calc(rpvMax) * combined);
+
+          ConsoleLogEnabled('[bettergamestats] RPV range:', rpvMin, '–', rpvMax);
+          ConsoleLogEnabled('[bettergamestats] Est. Revenue range:', revenueMin, '–', revenueMax);
+
+          upsertStat('Est. Revenue', `${fmtUSD(revenueMin)} – ${fmtUSD(revenueMax)}`);
+        }
         /*******************************************************
         name of function: cleanupPrivateServerCards
         Description:
@@ -13410,370 +14681,212 @@ li a.about-link:hover::after {
         *******************************************************/
         function cleanupPrivateServerCards() {
           if (localStorage.ROLOCATE_betterprivateservers !== "true") return;
-          // prevent multiple observers or other runs
           if (cleanupPrivateServerCards._initialized) return;
           cleanupPrivateServerCards._initialized = true;
 
-          let isRunning = false;
-          let searchBar = null;
-          let currentSearchQuery = '';
+          let isRunning = false, searchBar = null, currentSearchQuery = '';
 
-          // load settings
-          const getSettings = () => {
-            const defaultSettings = {
-              compactPrivateServers: true,
-              onlyYourPrivateServers: false,
-              privateServerSearch: false
-            };
-            const saved = JSON.parse(
-              localStorage.getItem('ROLOCATE_editprivateserversettings') || '{}'
-            );
-            return { ...defaultSettings, ...saved };
-          };
+          const getSettings = () => ({
+            compactPrivateServers: true,
+            onlyYourPrivateServers: false,
+            privateServerSearch: false,
+            ...JSON.parse(localStorage.getItem('ROLOCATE_editprivateserversettings') || '{}')
+          });
 
-          // apply search filter
           const applySearchFilter = (query) => {
             currentSearchQuery = query;
-            const cards = document.querySelectorAll('.card-item-private-server');
-
-            cards.forEach(card => {
+            document.querySelectorAll('.card-item-private-server').forEach(card => {
               const parentLi = card.closest('li');
-
-              const serverNameEl = card.querySelector('.section-header .font-bold');
-              const serverName = serverNameEl ? serverNameEl.textContent.toLowerCase() : '';
-
-              const ownerNameEl = card.querySelector('.rbx-private-owner .text-name');
-              const ownerName = ownerNameEl ? ownerNameEl.textContent.toLowerCase() : '';
-
-              const matches = serverName.includes(query) || ownerName.includes(query);
-
-              if (query === '' || matches) {
-                if (parentLi) parentLi.style.display = '';
-                else card.style.display = '';
-              } else {
-                if (parentLi) parentLi.style.display = 'none';
-                else card.style.display = 'none';
-              }
+              const serverName = card.querySelector('.section-header .font-bold')?.textContent.toLowerCase() || '';
+              const ownerName = card.querySelector('.rbx-private-owner .text-name')?.textContent.toLowerCase() || '';
+              const show = !query || serverName.includes(query) || ownerName.includes(query);
+              (parentLi || card).style.display = show ? '' : 'none';
             });
-
             updateFilterBadge();
           };
 
-          // update filter badge
           const updateFilterBadge = () => {
             const container = document.getElementById('rolocate-ps-search-container');
             if (!container) return;
-
             let badge = document.getElementById('rolocate-ps-filter-badge');
-
             if (currentSearchQuery) {
               if (!badge) {
                 badge = document.createElement('div');
                 badge.id = 'rolocate-ps-filter-badge';
-                badge.style.cssText = `
-                  display: inline-flex;
-                  align-items: center;
-                  gap: 6px;
-                  padding: 8px 12px;
-                  background: rgba(77, 133, 238, 0.15);
-                  border: 1px solid rgba(77, 133, 238, 0.3);
-                  border-radius: 8px;
-                  color: #4d85ee;
-                  font-size: 13px;
-                  font-weight: 600;
-                  margin-left: 8px;
-                `;
-
+                badge.style.cssText = `display:inline-flex;align-items:center;gap:6px;padding:8px 12px;background:rgba(77,133,238,.15);border:1px solid rgba(77,133,238,.3);border-radius:8px;color:#4d85ee;font-size:13px;font-weight:600;margin-left:8px`;
                 const text = document.createElement('span');
                 text.id = 'rolocate-ps-filter-text';
-                text.textContent = `Filter: "${currentSearchQuery}"`;
-
                 const closeBtn = document.createElement('span');
                 closeBtn.textContent = '×';
-                closeBtn.style.cssText = `
-                  cursor: pointer;
-                  font-size: 18px;
-                  font-weight: 700;
-                  line-height: 1;
-                  opacity: 0.7;
-                  transition: opacity 0.2s;
-                `;
+                closeBtn.style.cssText = `cursor:pointer;font-size:18px;font-weight:700;line-height:1;opacity:.7;transition:opacity .2s`;
                 closeBtn.onmouseenter = () => closeBtn.style.opacity = '1';
                 closeBtn.onmouseleave = () => closeBtn.style.opacity = '0.7';
-                closeBtn.onclick = () => {
-                  currentSearchQuery = '';
-                  applySearchFilter('');
-                };
-
+                closeBtn.onclick = () => { currentSearchQuery = ''; applySearchFilter(''); };
                 badge.appendChild(text);
                 badge.appendChild(closeBtn);
                 container.appendChild(badge);
-              } else {
-                const text = document.getElementById('rolocate-ps-filter-text');
-                if (text) text.textContent = `Filter: "${currentSearchQuery}"`;
               }
+              document.getElementById('rolocate-ps-filter-text').textContent = `Filter: "${currentSearchQuery}"`;
             } else {
-              if (badge) badge.remove();
+              badge?.remove();
             }
           };
 
-          // create search button
           const createSearchButton = () => {
             if (searchBar) return searchBar;
-
             const container = document.createElement('div');
             container.id = 'rolocate-ps-search-container';
-            container.style.cssText = `
-              display: inline-flex;
-              align-items: center;
-              margin-bottom: 15px;
-              margin-left: 9px;
-            `;
-
+            container.style.cssText = `display:inline-flex;align-items:center;margin-bottom:15px;margin-left:9px`;
             const button = document.createElement('button');
             button.id = 'rolocate-ps-search-button';
             button.innerHTML = '🔍 Search Private Servers';
             button.className = 'btn-secondary-md';
-            button.style.cssText = `
-              padding: 10px 18px;
-              background: transparent;
-              border: 1px solid rgba(150, 150, 150, 0.3);
-              border-radius: 8px;
-              color: #a0a8b8;
-              font-size: 14px;
-              font-weight: 600;
-              cursor: pointer;
-              transition: all 0.2s;
-              display: inline-flex;
-              align-items: center;
-              gap: 6px;
-            `;
-
-            button.onmouseenter = () => {
-              button.style.background = 'rgba(77, 133, 238, 0.15)';
-              button.style.borderColor = 'rgba(77, 133, 238, 0.3)';
-              button.style.color = '#4d85ee';
-            };
-            button.onmouseleave = () => {
-              button.style.background = 'transparent';
-              button.style.borderColor = 'rgba(150, 150, 150, 0.3)';
-              button.style.color = '#a0a8b8';
-            };
-
+            button.style.cssText = `padding:10px 18px;background:transparent;border:1px solid rgba(150,150,150,.3);border-radius:8px;color:#a0a8b8;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:6px`;
+            button.onmouseenter = () => { button.style.background='rgba(77,133,238,.15)'; button.style.borderColor='rgba(77,133,238,.3)'; button.style.color='#4d85ee'; };
+            button.onmouseleave = () => { button.style.background='transparent'; button.style.borderColor='rgba(150,150,150,.3)'; button.style.color='#a0a8b8'; };
             button.onclick = () => showSearchPopup();
-
             container.appendChild(button);
             searchBar = container;
             return container;
           };
 
-          // show search popup
+          // keep clicking "Load More" until it disappears, then run callback
+          const loadAllServers = (onDone) => {
+            const clickNext = () => {
+              const loadMoreBtn = document.querySelector('.rbx-private-running-games-footer .rbx-running-games-load-more');
+              if (!loadMoreBtn) { onDone(); return; }
+              loadMoreBtn.click();
+              setTimeout(clickNext, 600); // 600 ms delay
+            };
+            clickNext();
+          };
+
+          // the show popup function
           const showSearchPopup = () => {
             const overlay = document.createElement('div');
             overlay.className = 'search-popup-overlay';
-
             const box = document.createElement('div');
             box.className = 'search-popup-content';
 
             const title = document.createElement('h3');
             title.textContent = 'Search Private Servers';
-            title.style.cssText = `
-              margin: 0 0 20px 0;
-              color: #e8ecf3;
-              font-size: 20px;
-              font-weight: 700;
-              text-align: center;
-            `;
+            title.style.cssText = `margin:0 0 20px 0;color:#e8ecf3;font-size:20px;font-weight:700;text-align:center`;
 
             const input = document.createElement('input');
             input.type = 'text';
             input.placeholder = 'Search by server name or owner...';
             input.id = 'rolocate-ps-search-input-popup';
             input.value = currentSearchQuery;
-            input.style.cssText = `
-              width: 100%;
-              padding: 14px 16px;
-              background: rgba(28, 31, 37, 0.6);
-              border: 1px solid rgba(77, 133, 238, 0.3);
-              border-radius: 8px;
-              color: #e8ecf3;
-              font-size: 15px;
-              font-weight: 600;
-              outline: none;
-              transition: border-color 0.2s;
-              box-sizing: border-box;
-            `;
-
-            input.onfocus = () => {
-              input.style.borderColor = 'rgba(77, 133, 238, 0.6)';
-            };
-            input.onblur = () => {
-              input.style.borderColor = 'rgba(77, 133, 238, 0.3)';
-            };
-
-            // search functionality
-            input.oninput = (e) => {
-              const query = e.target.value.toLowerCase().trim();
-              applySearchFilter(query);
-            };
+            input.style.cssText = `width:100%;padding:14px 16px;background:rgba(28,31,37,.6);border:1px solid rgba(77,133,238,.3);border-radius:8px;color:#e8ecf3;font-size:15px;font-weight:600;outline:none;transition:border-color .2s;box-sizing:border-box`;
+            input.onfocus = () => input.style.borderColor = 'rgba(77,133,238,.6)';
+            input.onblur  = () => input.style.borderColor = 'rgba(77,133,238,.3)';
+            input.oninput = (e) => { currentSearchQuery = e.target.value.toLowerCase().trim(); };
 
             const close = document.createElement('button');
             close.className = 'search-popup-close btn-secondary-md';
             close.textContent = 'Close';
 
             const closeOverlay = () => {
-              overlay.classList.add('fade-out');
-              overlay.addEventListener('animationend', () => overlay.remove(), { once: true });
+              // load all servers then filter when user closes
+              if (currentSearchQuery) {
+                close.textContent = 'Finding Server...';
+                close.disabled = true;
+                input.disabled = true;
+                loadAllServers(() => {
+                  applySearchFilter(currentSearchQuery);
+                  overlay.classList.add('fade-out');
+                  overlay.addEventListener('animationend', () => overlay.remove(), { once: true });
+                });
+              } else {
+                applySearchFilter('');
+                overlay.classList.add('fade-out');
+                overlay.addEventListener('animationend', () => overlay.remove(), { once: true });
+              }
             };
 
             close.onclick = closeOverlay;
             overlay.onclick = e => e.target === overlay && closeOverlay();
-
-            box.addEventListener('click', (e) => {
-              e.stopPropagation();
-            });
+            box.addEventListener('click', e => e.stopPropagation());
 
             box.appendChild(title);
             box.appendChild(input);
             box.appendChild(close);
             overlay.appendChild(box);
             document.body.appendChild(overlay);
-
-            // auto-focus the input
             setTimeout(() => input.focus(), 100);
           };
 
-          // insert search button into DOM
+          // search abr
           const insertSearchBar = () => {
             const settings = getSettings();
             if (!settings.privateServerSearch) {
-              // remove search button if it exists
-              const existing = document.getElementById('rolocate-ps-search-container');
-              if (existing) existing.remove();
+              document.getElementById('rolocate-ps-search-container')?.remove();
               searchBar = null;
               return;
             }
-
-            // find the container
             const serverList = document.querySelector('#rbx-private-running-games');
-            if (!serverList) return;
-
-            const existing = document.getElementById('rolocate-ps-search-container');
-            if (!existing) {
-              const container = createSearchButton();
-              serverList.insertBefore(container, serverList.firstChild);
-              updateFilterBadge();
-            }
+            if (!serverList || document.getElementById('rolocate-ps-search-container')) return;
+            const container = createSearchButton();
+            serverList.insertBefore(container, serverList.firstChild);
+            updateFilterBadge();
           };
 
-          // popup stuff
-          const showPlayersPopup = (thumbs, card) => {
+          const showPlayersPopup = (thumbs) => {
             const overlay = document.createElement('div');
             overlay.className = 'players-popup-overlay';
-
             const box = document.createElement('div');
             box.className = 'players-popup-content';
-            box.innerHTML = '<h3 style="font-size: 1.4em;">Players in Server</h3>';
+            box.innerHTML = '<h3 style="font-size:1.4em">Players in Server</h3>';
 
-            if (thumbs && thumbs.querySelector('img')) {
-              Object.assign(thumbs.style, {
-                display: 'flex',
-                justifyContent: 'center',
-                flexWrap: 'wrap'
-              });
-
-              // open in new tab
-              thumbs.querySelectorAll('a').forEach(link => {
-                link.setAttribute('target', '_blank');
-                link.setAttribute('rel', 'noopener noreferrer');
-              });
-
-              // stop propagation on thumbnail clicks so links work
-              thumbs.addEventListener('click', (e) => {
-                e.stopPropagation();
-              });
-
+            if (thumbs?.querySelector('img')) {
+              Object.assign(thumbs.style, { display:'flex', justifyContent:'center', flexWrap:'wrap' });
+              thumbs.querySelectorAll('a').forEach(l => { l.target='_blank'; l.rel='noopener noreferrer'; });
+              thumbs.addEventListener('click', e => e.stopPropagation());
               box.appendChild(thumbs);
             } else {
               const noP = document.createElement('p');
-              noP.innerHTML = '<b style="font-size: 1.2em;">No players currently in this server.</b><br><span style="color: gray; font-size: 1.0em;">RoLocate: To disable: Settings -> Appearance -> Better Private Servers.</span>';
+              noP.innerHTML = '<b style="font-size:1.2em">No players currently in this server.</b><br><span style="color:gray;font-size:1.0em">RoLocate: To disable: Settings -> Appearance -> Better Private Servers.</span>';
               box.appendChild(noP);
             }
 
             const close = document.createElement('button');
             close.className = 'players-popup-close btn-secondary-md';
             close.textContent = 'Close';
-
-            const closeOverlay = () => {
-              overlay.classList.add('fade-out');
-              overlay.addEventListener('animationend', () => overlay.remove(), { once: true });
-            };
-
+            const closeOverlay = () => { overlay.classList.add('fade-out'); overlay.addEventListener('animationend', () => overlay.remove(), { once: true }); };
             close.onclick = closeOverlay;
             overlay.onclick = e => e.target === overlay && closeOverlay();
-
-            box.addEventListener('click', (e) => {
-              e.stopPropagation();
-            });
-
+            box.addEventListener('click', e => e.stopPropagation());
             box.appendChild(close);
             overlay.appendChild(box);
             document.body.appendChild(overlay);
           };
 
-          // cleanup logic
           const performCleanup = () => {
             if (isRunning) return;
             isRunning = true;
 
             const settings = getSettings();
             const currentUserId = getCurrentUserId();
-
-            // insert or remove search bar based on settings
             insertSearchBar();
 
-            const cards = document.querySelectorAll('.card-item-private-server');
-            for (const card of cards) {
+            document.querySelectorAll('.card-item-private-server').forEach(card => {
               const parentLi = card.closest('li');
 
-              // Only Your Private Servers feature
               if (settings.onlyYourPrivateServers) {
-                const ownerLink = card.querySelector('.rbx-private-owner a[href*="/users/"]');
-                if (ownerLink) {
-                  const href = ownerLink.getAttribute('href');
-                  const match = href.match(/\/users\/(\d+)\//);
-                  if (match) {
-                    const ownerId = match[1];
-                    if (ownerId !== currentUserId.toString()) {
-                      // Hide this server since it's not yours
-                      if (parentLi) {
-                        parentLi.style.display = 'none';
-                      } else {
-                        card.style.display = 'none';
-                      }
-                      continue; // Skip processing this card further
-                    }
-                  }
+                const href = card.querySelector('.rbx-private-owner a[href*="/users/"]')?.getAttribute('href');
+                const match = href?.match(/\/users\/(\d+)\//);
+                if (match && match[1] !== currentUserId.toString()) {
+                  (parentLi || card).style.display = 'none';
+                  return;
                 }
-              } else {
-                // Make sure cards are visible if setting is off (unless search is hiding them)
-                if (!currentSearchQuery) {
-                  if (parentLi) {
-                    parentLi.style.display = '';
-                  } else {
-                    card.style.display = '';
-                  }
-                }
+              } else if (!currentSearchQuery) {
+                (parentLi || card).style.display = '';
               }
 
-              // Compact Private Servers feature
               if (settings.compactPrivateServers) {
                 const thumbs = card.querySelector('.player-thumbnails-container');
                 if (thumbs) thumbs.remove();
-
-                const details = card.querySelector('.rbx-private-game-server-details');
-                details?.classList.remove('game-server-details', 'border-right');
-
+                card.querySelector('.rbx-private-game-server-details')?.classList.remove('game-server-details', 'border-right');
                 const joinBtn = card.querySelector('.rbx-private-game-server-join');
                 if (joinBtn && !card.querySelector('.rolocate-view-players-btn')) {
                   const btn = document.createElement('button');
@@ -13781,26 +14894,15 @@ li a.about-link:hover::after {
                   btn.className = 'btn-full-width btn-control-xs rolocate-view-players-btn btn-secondary-md btn-min-width';
                   btn.style.marginTop = '6px';
                   joinBtn.after(btn);
-
-                  // no "once" here allows multiple uses without leaking memory
-                  btn.addEventListener('click', () => {
-                    const clonedThumbs = thumbs ? thumbs.cloneNode(true) : null;
-                    showPlayersPopup(clonedThumbs, card);
-                  });
+                  btn.addEventListener('click', () => showPlayersPopup(thumbs?.cloneNode(true)));
                 }
               }
-            }
+            });
 
-            // Reapply search filter if one exists
-            if (currentSearchQuery) {
-              applySearchFilter(currentSearchQuery);
-            }
+            if (currentSearchQuery) applySearchFilter(currentSearchQuery);
 
-            // Only apply compact styles if compact mode is enabled
-            if (settings.compactPrivateServers) {
-              document.querySelectorAll('.rbx-private-game-server-item')
-                .forEach(i => i.classList.remove('rbx-private-game-server-item'));
-            }
+            if (settings.compactPrivateServers)
+              document.querySelectorAll('.rbx-private-game-server-item').forEach(i => i.classList.remove('rbx-private-game-server-item'));
 
             if (!document.getElementById('private-server-cleanup-styles')) {
               const s = document.createElement('style');
@@ -13809,16 +14911,15 @@ li a.about-link:hover::after {
                 .card-item-private-server{display:inline-block;width:auto;max-width:250px;min-width:200px}
                 #rbx-private-game-server-item-container li{display:inline-block;width:auto!important;float:none}
                 .rbx-private-game-server-item-container{display:flex;flex-wrap:wrap;gap:10px}
-                .players-popup-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:9999;animation:fadeIn .2s ease-out;opacity:1}
-                .players-popup-content{background:rgba(20, 22, 26, 0.95);color:#e8ecf3;border-radius:12px;padding:20px;max-width:400px;width:90%;box-shadow:0 10px 25px rgba(0,0,0,.3);border:1px solid rgba(77, 133, 238, 0.2);text-align:center;transform:scale(.95);animation:popIn .2s ease-out forwards}
+                .players-popup-overlay,.search-popup-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:9999;animation:fadeIn .2s ease-out;opacity:1}
+                .players-popup-content{background:rgba(20,22,26,.95);color:#e8ecf3;border-radius:12px;padding:20px;max-width:400px;width:90%;box-shadow:0 10px 25px rgba(0,0,0,.3);border:1px solid rgba(77,133,238,.2);text-align:center;transform:scale(.95);animation:popIn .2s ease-out forwards}
                 .players-popup-content h3{margin-top:0;color:#e8ecf3;font-size:16px;font-weight:600;margin-bottom:16px}
                 .players-popup-content p{color:#a0a8b8;font-size:13px;line-height:1.5;margin-bottom:24px}
                 .players-popup-content .player-thumbnails-container{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:10px}
-                .players-popup-close{margin-top:15px;padding:8px 20px;cursor:pointer;background:rgba(28, 31, 37, 0.6);color:#e8ecf3;border:1px solid rgba(255, 255, 255, 0.12);border-radius:6px;font-size:13px;font-weight:500;transition:0.2s}
-                .search-popup-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:9999;animation:fadeIn .2s ease-out;opacity:1}
-                .search-popup-content{background:rgba(20, 22, 26, 0.95);color:#e8ecf3;border-radius:12px;padding:30px;max-width:400px;width:20%;box-shadow:0 10px 25px rgba(0,0,0,.3);border:1px solid rgba(77, 133, 238, 0.2);transform:scale(.95);animation:popIn .2s ease-out forwards}
-                .search-popup-close{margin-top:20px;width:100%;padding:10px 20px;cursor:pointer;background:rgba(28, 31, 37, 0.6);color:#e8ecf3;border:1px solid rgba(255, 255, 255, 0.12);border-radius:8px;font-size:14px;font-weight:600;transition:0.2s}
-                .search-popup-close:hover{background:rgba(28, 31, 37, 0.8);border-color:rgba(255, 255, 255, 0.2)}
+                .players-popup-close{margin-top:15px;padding:8px 20px;cursor:pointer;background:rgba(28,31,37,.6);color:#e8ecf3;border:1px solid rgba(255,255,255,.12);border-radius:6px;font-size:13px;font-weight:500;transition:.2s}
+                .search-popup-content{background:rgba(20,22,26,.95);color:#e8ecf3;border-radius:12px;padding:30px;max-width:400px;width:20%;box-shadow:0 10px 25px rgba(0,0,0,.3);border:1px solid rgba(77,133,238,.2);transform:scale(.95);animation:popIn .2s ease-out forwards}
+                .search-popup-close{margin-top:20px;width:100%;padding:10px 20px;cursor:pointer;background:rgba(28,31,37,.6);color:#e8ecf3;border:1px solid rgba(255,255,255,.12);border-radius:8px;font-size:14px;font-weight:600;transition:.2s}
+                .search-popup-close:hover{background:rgba(28,31,37,.8);border-color:rgba(255,255,255,.2)}
                 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
                 @keyframes popIn{to{transform:scale(1)}}
                 @keyframes fadeOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.95)}}
@@ -13830,14 +14931,12 @@ li a.about-link:hover::after {
             isRunning = false;
           };
 
-          // observer inside same scope
           const observer = new MutationObserver(() => {
             observer.disconnect();
             performCleanup();
             observer.observe(document.body, { childList: true, subtree: true });
           });
 
-          // run
           performCleanup();
           observer.observe(document.body, { childList: true, subtree: true });
         }
@@ -14186,7 +15285,8 @@ li a.about-link:hover::after {
                             });
                             break;
                         case 5:
-                            rebuildServerList(gameId, 100, true); // finds 100 servers but this is for safety
+                            rebuildServerList(gameId, 50, true); // finds 50 servers
+                            notifications("Please Wait 5-7 seconds...", "info", "", "8000");
                             break;
                         case 6:
                             auto_join_small_server();
@@ -14565,7 +15665,7 @@ li a.about-link:hover::after {
                         if (typeof disableLoadMoreButton === "function") disableLoadMoreButton();
                         if (typeof rebuildServerList === "function") {
                             const serverCount = parseInt(window.localStorage.getItem('ROLOCATE_AutoRunServerRegionsnumber')) || 16; // fallback to 16
-                            rebuildServerList(gameId, serverCount); // search 100 servers
+                            rebuildServerList(gameId, serverCount);
                             ConsoleLogEnabled(`[Auto] Server list rebuilt for game ID: ${gameId}`);
                         } else {
                             ConsoleLogEnabled("[Auto] rebuildServerList function not found.");
@@ -14621,8 +15721,9 @@ li a.about-link:hover::after {
             filter button, server hop button, recent servers, disables
             trailer autoplay, and adds monitor server button if settings are true
             *******************************************************/
+            let bettergamesstats_action_enabled = false;
+            let trailerDisableInitialized = false; // for the dumb trailer thing
             const observer = new MutationObserver((mutations, obs) => {
-                let trailerDisableInitialized = false; // for the dumb trailer thing
                 const serverListOptions = document.querySelector('.server-list-options');
                 const playButton = document.querySelector('.btn-common-play-game-lg.btn-primary-md');
                 if (serverListOptions && !document.querySelector('.RL-filter-button') && localStorage.getItem("ROLOCATE_togglefilterserversbutton") === "true") {
@@ -14689,9 +15790,16 @@ li a.about-link:hover::after {
                 if (localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true" && !document.querySelector('.recent-servers-section')) {
                     HandleRecentServers();
                 }
+
+                // new condition to trigger recent server logic
+                if (localStorage.getItem("ROLOCATE_bettergamestats") === "true" && !bettergamesstats_action_enabled) {
+                    bettergamestats_action();
+                    bettergamesstats_action_enabled = true;
+                }
+
                 // new condition to trigger disable trailer logic
                 if (localStorage.getItem("ROLOCATE_disabletrailer") === "true" && !trailerDisableInitialized) {
-                    disableYouTubeAutoplayInIframes();
+                    disableVideoAutoplay();
                     trailerDisableInitialized = true;
                 }
 
@@ -17125,7 +18233,7 @@ select:hover, select:focus {
                 if (prevValue && Array.from(versionSelect.options).some(o => o.value === prevValue)) {
                     versionSelect.value = prevValue;
                 }
-            }
+            };
             // on city change update versions so no bugs
             const citySelect = cityDropdown.querySelector('select');
             citySelect.addEventListener('change', () => {
@@ -17221,91 +18329,6 @@ select:hover, select:focus {
 
           return servers;
         }
-
-
-
-        /*******************************************************
-        name of function: fetchPlayerThumbnails_servers
-        description: finds player thumbnails (Server regions) - now returns promise
-        *******************************************************/
-        const fetchPlayerThumbnails_servers = (() => {
-            const queue = [];
-            let processing = false;
-
-            return async function(playerTokens) {
-                ConsoleLogEnabled("Function called with playerTokens:", playerTokens);
-                const waitHalfSecond = (ms = 250) => new Promise(res => setTimeout(res, ms));
-
-                return new Promise(resolve => {
-                    ConsoleLogEnabled("Pushing to queue:", playerTokens);
-                    queue.push({
-                        playerTokens,
-                        resolve
-                    });
-
-                    const processQueue = async () => {
-                        if (processing) {
-                            ConsoleLogEnabled("Already processing, exiting...");
-                            return;
-                        }
-                        processing = true;
-                        ConsoleLogEnabled("Started processing queue...");
-
-                        while (queue.length > 0) {
-                            const {
-                                playerTokens,
-                                resolve
-                            } = queue.shift();
-                            ConsoleLogEnabled("Processing batch:", playerTokens);
-
-                            const body = playerTokens.map(token => ({
-                                requestId: `0:${token}:AvatarHeadshot:150x150:png:regular`,
-                                type: "AvatarHeadShot",
-                                targetId: 0,
-                                token,
-                                format: "png",
-                                size: "150x150",
-                            }));
-
-                            let success = false;
-                            let data = [];
-
-                            while (!success) {
-                                ConsoleLogEnabled("Sending request to thumbnails.roblox.com...");
-                                const response = await fetch("https://thumbnails.roblox.com/v1/batch", {
-                                    method: "POST",
-                                    headers: {
-                                        "Content-Type": "application/json",
-                                        Accept: "application/json",
-                                    },
-                                    body: JSON.stringify(body),
-                                });
-
-                                ConsoleLogEnabled("Response status:", response.status);
-
-                                if (response.status === 429) {
-                                    ConsoleLogEnabled("Rate limited. Waiting...");
-                                    await waitHalfSecond();
-                                } else {
-                                    const json = await response.json();
-                                    data = json.data || [];
-                                    success = true;
-                                    ConsoleLogEnabled("Received data:", data);
-                                }
-                            }
-
-                            resolve(data);
-                            ConsoleLogEnabled("Resolved promise with data");
-                        }
-
-                        processing = false;
-                        ConsoleLogEnabled("Finished processing queue.");
-                    };
-
-                    processQueue();
-                });
-            };
-        })();
 
         /*******************************************************
         name of function: updateServerCardThumbnails
@@ -17426,38 +18449,6 @@ select:hover, select:focus {
             }
 
             return thumbnailsContainer;
-        }
-
-        /*******************************************************
-        name of function: getCsrfToken
-        description: get crsf token
-        *******************************************************/
-        async function getCsrfToken() { // look ik this function may get called like a million times. but shouldnt be an issue. :) real men test in production >:)
-            return new Promise((resolve) => {
-                GM_xmlhttpRequest({ // low risk endpoint. hopefully no ratelimit
-                    url: "https://catalog.roblox.com/v1/catalog/items/details",
-                    method: "POST",
-                    withCredentials: true,
-                    onload: function(response) {
-                        const token = response.responseHeaders
-                            .split("\n")
-                            .find(h => h.toLowerCase().startsWith("x-csrf-token"));
-
-                        if (!token) {
-                            ConsoleLogEnabled("Error: Something went wrong getting csrf token!");
-                            resolve(null);
-                            return;
-                        }
-
-                        const value = token.split(":")[1].trim();
-                        resolve(value);
-                    },
-                    onerror: function() {
-                        ConsoleLogEnabled("Error: Request failed while getting csrf token!");
-                        resolve(null);
-                    }
-                });
-            });
         }
 
         /*******************************************************
@@ -18153,7 +19144,7 @@ select:hover, select:focus {
                       if (server.playerTokens && server.playerTokens.length > 0 && !thumbnailCache.has(server.id) && localStorage.ROLOCATE_mobilemode === "false") {
                           // mark as being fetched to prevent duplicate requests
                           thumbnailCache.set(server.id, 'loading');
-                          fetchPlayerThumbnails_servers(server.playerTokens)
+                          fetchPlayerThumbnails(server.playerTokens)
                               .then(thumbnails => {
                                   thumbnailCache.set(server.id, thumbnails);
                                   updateServerCardThumbnails(server.id, thumbnails, server.maxPlayers, server.playing);
@@ -18452,11 +19443,20 @@ select:hover, select:focus {
                     return resolveOfflineFallbackLocation(resolve);
                 }
 
+                // notify the user if location detection is taking too long
+                const slowTimer = setTimeout(() => {
+                    notifications("Location detection is slow. Consider setting your location manually in Settings > Advanced > Set Default Location Mode, to make server search almost instant.", "info", "⚙️", "12000");
+                }, 3000);
+
                 navigator.geolocation.getCurrentPosition(
-                    (position) => resolveSuccess(position, resolve, quickJoin),
+                    (position) => {
+                        clearTimeout(slowTimer);
+                        resolveSuccess(position, resolve, quickJoin);
+                    },
                     async (error) => {
                         ConsoleLogEnabled("Geolocation error:", error);
-
+                        // slow timer
+                        clearTimeout(slowTimer);
                         // attempt to inspect geolocation permission state
                         try {
                             if (navigator.permissions && navigator.permissions.query) {
@@ -18756,57 +19756,6 @@ select:hover, select:focus {
             }
         }
 
-
-
-
-        /*******************************************************
-        name of function: fetchPlayerThumbnails
-        description: Fetches player thumbnails for up to 5 players. Skips the batch if an error occurs.
-        *******************************************************/
-        async function fetchPlayerThumbnails(playerTokens) {
-            const limitedTokens = playerTokens.slice(0, 5);
-
-            const body = limitedTokens.map(token => ({
-                requestId: `0:${token}:AvatarHeadshot:150x150:png:regular`,
-                type: "AvatarHeadShot",
-                targetId: 0,
-                token,
-                format: "png",
-                size: "150x150",
-            }));
-
-            return new Promise((resolve) => {
-                GM_xmlhttpRequest({
-                    method: "POST",
-                    url: "https://thumbnails.roblox.com/v1/batch",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Accept": "application/json"
-                    },
-                    data: JSON.stringify(body),
-                    onload: function(response) {
-                        try {
-                            if (response.status >= 200 && response.status < 300) {
-                                const data = JSON.parse(response.responseText);
-                                resolve(data.data || []);
-                            } else {
-                                ConsoleLogEnabled(`HTTP error! Status: ${response.status}`);
-                                resolve([]);
-                            }
-                        } catch (error) {
-                            ConsoleLogEnabled('Error parsing batch thumbnail response:', error);
-                            resolve([]);
-                        }
-                    },
-                    onerror: function(err) {
-                        ConsoleLogEnabled('Request error fetching batch thumbnails:', err);
-                        resolve([]);
-                    }
-                });
-            });
-        }
-
-
         /*******************************************************
         name of function: disableFilterButton
         description: Disables or enables the filter button based on the input.
@@ -18899,7 +19848,7 @@ select:hover, select:focus {
         description: Creates the roblox cards that are not from server regions
         *******************************************************/
         async function rbx_card(serverId, playerTokens, maxPlayers, playing, gameId) {
-            const thumbnails = await fetchPlayerThumbnails(playerTokens);
+            const thumbnails = await fetchPlayerThumbnails(playerTokens, true);
 
             // helper function to create elements with properties
             const createElement = (tag, props = {}, styles = {}) => {
