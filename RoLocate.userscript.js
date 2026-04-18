@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RoLocate
 // @namespace    https://oqarshi.github.io/
-// @version      46.6
+// @version      46.7
 // @description  Adds filter options to roblox server page. Alternative to paid extensions like RoPro, RoGold®, RoQol, and RoKit.
 // @author       Oqarshi
 // @match        https://www.roblox.com/*
@@ -823,19 +823,10 @@
         localStorage.removeItem('ROLOCATE_compactprivateservers');
         localStorage.removeItem('ROLOCATE_mutualfriends');
 
-        const VERSION = "V46.5", PREV_VERSION = "V45.5";
+        const VERSION = "V46.7", PREV_VERSION = "V46.6";
         const changelog = {
-            BetterProfileInfo: ["🧑‍💻","Better Profile Info","Replaces Mutual Friends; adds detailed stats like mutuals, followers, and following.","New"],
-            PrivateServerSearch:["🔎","Private Server Search","Search your friends' private servers (may be slightly buggy).","New"],
-            StatusControls:     ["🟢","Status & Join Controls","Change online status and game join status via Show Old Greeting.","New"],
-            PlaytimeStats:      ["⏱️","Playtime & RoPro","View weekly playtime and RoPro compatibility via Show Old Greeting.","New"],
-            BestFriendsUI:      ["👥","Best Friends Improvements","Hover dropdown added and popup loads faster.","Improved"],
-            CustomBackgrounds:  ["🎨","Custom Backgrounds","More customization options added, plus presets for easier setup.","Improved"],
-            Adblocker:          ["🏠","Remove All Roblox Ads","Option to hide Standout Games section.","Improved"],
-            SmartSearchUpdate:  ["🔍","Smart Search","Prioritizes exact usernames (friends first) and shows banned users.","Improved"],
-            BugFixes:           ["🛠️","Bug Fixes","Fixed trailer autoplay, Best Friends (BTR/RoSeal), server filter (BTR), and old greeting issues.","Fixed"],
-            RemovedFeature:     ["🗑️","Removed Feature","Mutual Friends removed and replaced by Better Profile Info.","Removed"],
-            MoreInfo:           ["✨","More Info","For full details, view the complete changelog here.","Info","https://oqarshi.github.io/Invite/rolocate/changelog/"]
+            SmartSearchUpdate:  ["🔍","Smart Search","SmartSearch cannot find user stats autmatically since roblox put in new ratelimits. So, a new button is added as a substitute.","Fixed"],
+            BugFixes:           ["🛠️","Bug Fixes","Thx for Akira for fixing 'This weeks playtime' overflowing. Also version number fixed, thx Waivy.","Fixed"],
         };
 
         const cur = localStorage.getItem('version') || "V0.0";
@@ -1232,7 +1223,7 @@
                 <div style="text-align:left;">
                     <div style="font-size:22px;font-weight:700;color:#fff;letter-spacing:0.5px;line-height:1.1;">RoLocate</div>
                     <div style="margin-top:8px;display:inline-block;background:rgba(220,53,69,0.08);border:1.5px solid rgba(220,53,69,0.35);padding:3px 10px;border-radius:8px;">
-                        <span style="font-size:13px;font-weight:700;color:#e8566a;letter-spacing:1.5px;">V 46.5</span>
+                        <span style="font-size:13px;font-weight:700;color:#e8566a;letter-spacing:1.5px;">V 46.7</span>
                     </div>
                 </div>
             </div>
@@ -1538,31 +1529,61 @@
     `;
         }
 
-
         if (section === "about") {
+            const contributors = [
+                { name: "Oqarshi", id: 545334824, role: "Creator & Maintainer", url: "https://www.roblox.com/users/545334824/profile" },
+                { name: "Waivy", id: 3795846072, role: "Contributor", url: "https://www.roblox.com/users/3795846072/profile" },
+                { name: "Akira", id: 797399348, role: "Contributor", url: "https://www.roblox.com/users/797399348/profile" }
+            ];
+
+            // update profile pictures after the HTML is injected. lazy loda cause too lazy for async
+            setTimeout(() => {
+                // get userid
+                const contributorIds = contributors.map(user => user.id);
+
+                // fetch in batch
+                fetchPlayerThumbnailsBatch(contributorIds).then(results => {
+                    const imageMap = Object.fromEntries(
+                        results.map(thumb => [thumb.targetId, thumb.imageUrl])
+                    );
+
+                    // update image each one
+                    contributors.forEach(user => {
+                        const profileImg = document.querySelector(
+                            `img[data-id="${user.id}"]`
+                        );
+                        // if image already there ignore
+                        if (profileImg) profileImg.src = imageMap[user.id] || "";
+                    });
+                });
+            }, 0);
             return `
-        <div class="about-section">
-            <h3 class="grayish-center">Contributors</h3>
-            <p>Special thanks to everyone who has contributed to this project:</p>
-            <ul>
-                <li><a href="https://www.roblox.com/users/545334824/profile" target="_blank">Oqarshi</a> <span style="color: #888;">• Creator & Maintainer</span></li>
-                <li><a href="https://www.roblox.com/users/3795846072/profile" target="_blank">Waivy</a> <span style="color: #888;">• Contributor</span></li>
-            </ul>
+                <div class="about-section">
+                    <h3 class="grayish-center">Contributors</h3>
+                    <p>Special thanks to everyone who has contributed to this project:</p>
+                    <ul>
+                        ${contributors.map(user => `
+                            <li style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                                <img data-id="${user.id}" width="24" height="24" style="border-radius:50%; background:#333;" />
+                                <a href="${user.url}" target="_blank">${user.name}</a>
+                                <span style="color:#888;">• ${user.role}</span>
+                            </li>
+                        `).join("")}
+                    </ul>
 
-            <div class="section-separator"></div>
+                    <div class="section-separator"></div>
 
-            <p>Resources & Links:</p>
-            <ul>
-                <li><strong>Developer:</strong> <a href="https://www.roblox.com/users/545334824/profile" target="_blank">Oqarshi</a></li>
-                <li><strong>Want to Contribute?:</strong> <a href="https://github.com/Oqarshi/RoLocate" target="_blank">Github</a></li>
-                <li><strong>Rolocate Source Code:</strong> <a href="https://greasyfork.org/en/scripts/523727-rolocate/code" target="_blank">GreasyFork</a><a> | </a><a href="https://greasyfork.org/en/scripts/523727-rolocate/code" target="_blank">Github</a></li>
-                <li><strong>Invite & FAQ Source Code:</strong> <a href="https://github.com/Oqarshi/Invite" target="_blank">GitHub</a></li>
-                <li><strong>Official Website:</strong> <a href="https://oqarshi.github.io/Invite/rolocate/index.html" target="_blank">RoLocate Website</a></li>
-                <li><strong>Suggest or Report Issues:</strong> <a href="https://greasyfork.org/en/scripts/523727-rolocate/feedback" target="_blank">Submit Feedback</a></li>
-                <li><strong>Inspiration:</strong> <a href="https://chromewebstore.google.com/detail/btroblox-making-roblox-be/hbkpclpemjeibhioopcebchdmohaieln" target="_blank">Btroblox Team</a></li>
-            </ul>
-        </div>
-    `;
+                    <p>Resources & Links:</p>
+                    <ul>
+                        <li><strong>Want to Contribute?:</strong> <a href="https://github.com/Oqarshi/RoLocate" target="_blank">Github</a></li>
+                        <li><strong>Rolocate Source Code:</strong> <a href="https://greasyfork.org/en/scripts/523727-rolocate/code" target="_blank">GreasyFork</a> | <a href="https://github.com/Oqarshi/RoLocate" target="_blank">Github</a></li>
+                        <li><strong>Invite & FAQ Source Code:</strong> <a href="https://github.com/Oqarshi/Invite" target="_blank">GitHub</a></li>
+                        <li><strong>Official Website:</strong> <a href="https://oqarshi.github.io/Invite/rolocate/index.html" target="_blank">RoLocate Website</a></li>
+                        <li><strong>Suggest or Report Issues:</strong> <a href="https://greasyfork.org/en/scripts/523727-rolocate/feedback" target="_blank">Submit Feedback</a></li>
+                        <li><strong>Inspiration:</strong> <a href="https://chromewebstore.google.com/detail/btroblox-making-roblox-be/hbkpclpemjeibhioopcebchdmohaieln" target="_blank">Btroblox Team</a></li>
+                    </ul>
+                </div>
+            `;
         }
 
         if (section === "technical") {
@@ -1611,6 +1632,7 @@
                 return txt;
             };
 
+            // read the functions name. also ls = localstorage
             function updateAllDisplays() {
                 const { ls, gm } = calculateStorages();
 
@@ -8163,26 +8185,70 @@ li a.about-link:hover::after {
                     // whats in the user cards like name, follors, verify badge, friends, and the loading stats text for stats
                     // yes ik i used my profile :)
                     contentArea.innerHTML = users.map(user => `
-                        <a href="${user.isBanned ? `https://www.roblox.com/users/545334824/profile#ROLOCATE_BANNED_USER_${user.contentId}` : `https://www.roblox.com/users/${user.contentId}/profile`}" class="ROLOCATE_SMARTSEARCH_user-card-link" target="_self">
-                            <div class="ROLOCATE_SMARTSEARCH_user-card">
-                                <div class="ROLOCATE_SMARTSEARCH_thumbnail-loading" data-user-id="${user.contentId}"></div>
-                                <div class="ROLOCATE_SMARTSEARCH_user-info">
-                                    <h3 class="ROLOCATE_SMARTSEARCH_user-display-name">
-                                        ${user.displayName || user.username}
-                                        ${user.hasVerifiedBadge ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 28 28" fill="none"><g clip-path="url(#a)"><path fill="#06f" d="m5.888 0 22.11 5.924-5.924 22.11-22.11-5.924z"/><path fill-rule="evenodd" clip-rule="evenodd" d="m20.543 8.75.006.007a1.54 1.54 0 0 1 0 2.176l-8.732 8.732-4.367-4.368a1.54 1.54 0 0 1 0-2.175l.007-.007a1.54 1.54 0 0 1 2.176 0l2.184 2.185 6.55-6.55a1.54 1.54 0 0 1 2.176 0" fill="#fff"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h28v28H0z"/></clipPath></defs></svg>' : ''}
-                                    </h3>
-                                    <p class="ROLOCATE_SMARTSEARCH_user-username">
-                                        @${user.username}
-                                        ${user.isFriend ? '<span class="ROLOCATE_SMARTSEARCH_friend-badge">Friend</span>' : ''}
-                                        ${user.isBanned ? '<span class="ROLOCATE_SMARTSEARCH_banned-badge">Banned</span>' : ''}
-                                    </p>
-                                    <p class="ROLOCATE_SMARTSEARCH_user-stats" data-user-id="${user.contentId}">
-                                        <span class="ROLOCATE_SMARTSEARCH_stats-loading">Loading stats...</span>
-                                    </p>
+                        <div class="ROLOCATE_SMARTSEARCH_user-card-container">
+                            <a href="${user.isBanned ? `https://www.roblox.com/users/545334824/profile#ROLOCATE_BANNED_USER_${user.contentId}` : `https://www.roblox.com/users/${user.contentId}/profile`}" class="ROLOCATE_SMARTSEARCH_user-card-link" target="_self">
+                                <div class="ROLOCATE_SMARTSEARCH_user-card">
+                                    <div class="ROLOCATE_SMARTSEARCH_thumbnail-loading" data-user-id="${user.contentId}"></div>
+                                    <div class="ROLOCATE_SMARTSEARCH_user-info">
+                                        <h3 class="ROLOCATE_SMARTSEARCH_user-display-name">
+                                            ${user.displayName || user.username}
+                                            ${user.hasVerifiedBadge ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 28 28" fill="none"><g clip-path="url(#a)"><path fill="#06f" d="m5.888 0 22.11 5.924-5.924 22.11-22.11-5.924z"/><path fill-rule="evenodd" clip-rule="evenodd" d="m20.543 8.75.006.007a1.54 1.54 0 0 1 0 2.176l-8.732 8.732-4.367-4.368a1.54 1.54 0 0 1 0-2.175l.007-.007a1.54 1.54 0 0 1 2.176 0l2.184 2.185 6.55-6.55a1.54 1.54 0 0 1 2.176 0" fill="#fff"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h28v28H0z"/></clipPath></defs></svg>' : ''}
+                                        </h3>
+                                        <p class="ROLOCATE_SMARTSEARCH_user-username">
+                                            @${user.username}
+                                            ${user.isFriend ? '<span class="ROLOCATE_SMARTSEARCH_friend-badge">Friend</span>' : ''}
+                                            ${user.isBanned ? '<span class="ROLOCATE_SMARTSEARCH_banned-badge">Banned</span>' : ''}
+                                        </p>
+                                        <p class="ROLOCATE_SMARTSEARCH_stats_and_placeholder" data-user-id="${user.contentId}">
+                                            <span class="ROLOCATE_SMARTSEARCH_stats_and_placeholder">ⓘ Click to load stats</span>
+                                        </p>
+                                    </div>
                                 </div>
-                            </div>
-                        </a>
+                            </a>
+                            <button class="ROLOCATE_SMARTSEARCH_user-stats-button" data-user-id="${user.contentId}" title="Load user stats">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <circle cx="12" cy="12" r="10" stroke="#1FAEFF" stroke-width="2"/>
+                                    <path d="M12 8V12M12 16H12.01" stroke="#1FAEFF" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                            </button>
+                        </div>
                     `).join('');
+
+                    // Attach click listeners for user stats buttons. replaced cauyse roblox ratelimit sad
+                    setTimeout(() => {
+                        document.querySelectorAll('.ROLOCATE_SMARTSEARCH_user-stats-button').forEach(button => {
+                            button.addEventListener('click', async function(e) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const userId = this.getAttribute('data-user-id');
+                                const statsElement = document.querySelector(`.ROLOCATE_SMARTSEARCH_stats_and_placeholder[data-user-id="${userId}"]`); // this looks at the class ROLOCATE_SMARTSEARCH_stats_and_placeholder and then changes the contents inside
+                                if (!statsElement) return;
+
+                                // Show loading state
+                                statsElement.innerHTML = '<span class="ROLOCATE_SMARTSEARCH_stats-loading">Loading stats...</span>';
+
+                                try {
+                                    const [friendCount, followerCount] = await fetchUserStatsBatch(userId, "smartsearch");
+                                    const friendCountVal = friendCount?.count ?? 0;
+                                    const followerCountVal = followerCount?.count ?? 0;
+
+                                    statsElement.innerHTML = `
+                                        <span class="ROLOCATE_SMARTSEARCH_stat-item">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:4px"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M23 21v-2a4 4 0 0 0-3-3.87m-4-12a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                            ${formatNumberCount(friendCountVal)} Friends
+                                        </span>&nbsp|&nbsp
+                                        <span class="ROLOCATE_SMARTSEARCH_stat-item">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:4px"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 8v6m3-3h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                            ${formatNumberCount(followerCountVal)} Followers
+                                        </span>
+                                    `;
+                                } catch (error) {
+                                    ConsoleLogEnabled('Error fetching user stats:', error);
+                                    statsElement.innerHTML = '<span class="ROLOCATE_SMARTSEARCH_stats-error">Failed to load stats</span>';
+                                }
+                            });
+                        });
+                    }, 100);
 
                     // this gets the user thumbnails for smartsearch
                     const userIds = users.map(user => user.contentId);
@@ -8199,33 +8265,7 @@ li a.about-link:hover::after {
                         } catch (error) { ConsoleLogEnabled('Error fetching user thumbnails:', error); }
                     }
 
-                    // edited to fit new global functions
-                    const statsBatches = chunkArray(userIds, 10);
-                    for (const batch of statsBatches) {
-                        try {
-                            const stats = await Promise.all(batch.map(async userId => {
-                                // here we send smartsearch to only get 2 requests
-                                const [friendCount, followerCount] = await fetchUserStatsBatch(userId, "smartsearch");
-                                // yea get the userid griend count and followercouint
-                                return { userId, friendCount: friendCount?.count ?? 0, followerCount: followerCount?.count ?? 0 };
-                            }));
-                            stats.forEach(stat => {
-                                const statsElement = document.querySelector(`.ROLOCATE_SMARTSEARCH_user-stats[data-user-id="${stat.userId}"]`);
-                                if (statsElement) {
-                                    statsElement.innerHTML = `
-                                        <span class="ROLOCATE_SMARTSEARCH_stat-item">
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:4px"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M23 21v-2a4 4 0 0 0-3-3.87m-4-12a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                                            ${formatNumberCount(stat.friendCount)} Friends
-                                        </span>&nbsp|&nbsp
-                                        <span class="ROLOCATE_SMARTSEARCH_stat-item">
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:4px"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 8v6m3-3h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                                            ${formatNumberCount(stat.followerCount)} Followers
-                                        </span>
-                                    `;
-                                }
-                            });
-                        } catch (error) { ConsoleLogEnabled('Error fetching user stats:', error); }
-                    }
+                // else throw error cause yea
                 } else contentArea.innerHTML = '<div class="ROLOCATE_SMARTSEARCH_error">Error loading user results</div>';
             } catch (error) {
                 ConsoleLogEnabled('Error in user search:', error);
@@ -8905,7 +8945,7 @@ li a.about-link:hover::after {
             display: flex;
             align-items: center;
         }
-        .ROLOCATE_SMARTSEARCH_user-stats {
+        .ROLOCATE_SMARTSEARCH_stats_and_placeholder {
             font-size: 14px;
             color: #6d717a;
             margin: 4px 0 0 0;
@@ -9051,6 +9091,36 @@ li a.about-link:hover::after {
             letter-spacing: 0.025em;
             transform: translateY(-1px);
             border: 1px solid #7a3535;
+        }
+        .ROLOCATE_SMARTSEARCH_user-card-container {
+            position: relative;
+            margin: 6px 0;
+        }
+        .ROLOCATE_SMARTSEARCH_user-stats-button {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 36px;
+            height: 36px;
+            border-radius: 6px;
+            background: rgba(0, 178, 255, 0.2);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            z-index: 2;
+            color: #00B2FF;
+        }
+        .ROLOCATE_SMARTSEARCH_user-stats-button:hover {
+            background: rgba(0, 178, 255, 0.3);
+            transform: translateY(-50%) scale(1.05);
+        }
+        .ROLOCATE_SMARTSEARCH_stats-error {
+            color: #f44336;
+            font-size: 13px;
         }
         `;
         document.head.appendChild(style);
@@ -13427,16 +13497,16 @@ li a.about-link:hover::after {
             return;
         }
         if (localStorage.getItem("ROLOCATE_btrobloxfix") === "true") {
+            /* ---------- smartserver join---------- */
+            if (localStorage.getItem("ROLOCATE_smartjoinpopup") === "true") {
+                showLoadingOverlay(placeId, serverId);
+                await new Promise(res => setTimeout(res, 1500));
+            }
             /* ---------- recent‑servers handling (always runs) ---------- */
             if (localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true") {
                 await HandleRecentServersAddGames(placeId, serverId);
                 document.querySelector(".recent-servers-section")?.remove();
                 HandleRecentServers();
-            }
-            /* ---------- smartserver join---------- */
-            if (localStorage.getItem("ROLOCATE_smartjoinpopup") === "true") {
-                showLoadingOverlay(placeId, serverId);
-                await new Promise(res => setTimeout(res, 1500));
             }
             //join via deeplink
             ConsoleLogEnabled(`Joining via deeplink: placeId=${placeId}, serverId=${serverId}`);
@@ -13444,16 +13514,16 @@ li a.about-link:hover::after {
         } else {
             // join via roblox launcher
             ConsoleLogEnabled(`Joining via Roblox launcher: placeId=${placeId}, serverId=${serverId}`);
+            /* ---------- smartserver join---------- */
+            if (localStorage.getItem("ROLOCATE_smartjoinpopup") === "true") {
+                showLoadingOverlay(placeId, serverId);
+                await new Promise(res => setTimeout(res, 1500));
+            }
             /* ---------- recent‑servers handling (always runs) ---------- */
             if (localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true") {
                 await HandleRecentServersAddGames(placeId, serverId);
                 document.querySelector(".recent-servers-section")?.remove();
                 HandleRecentServers();
-            }
-            /* ---------- smartserver join---------- */
-            if (localStorage.getItem("ROLOCATE_smartjoinpopup") === "true") {
-                showLoadingOverlay(placeId, serverId);
-                await new Promise(res => setTimeout(res, 1500));
             }
             // set flag to bypass interceptor
             window._skipRobloxJoinInterceptor = true;
