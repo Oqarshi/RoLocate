@@ -6435,15 +6435,22 @@ li a.about-link:hover::after {
                 .rolocate-toggle-row.disabled .rolocate-toggle-track { opacity: .35; cursor: not-allowed; }
                 .rolocate-toggle-row.disabled input { pointer-events: none; }
                 .rolocate-weekly-playtime {
-                    margin-left: auto; flex-shrink: 0;
+                    margin-left: auto; flex-shrink: 0; min-width: 0;
                     display: flex; flex-direction: column; justify-content: center;
+                    max-width: 560px;
                 }
                 .rolocate-weekly-playtime h3 {
                     font-size: 1em; font-weight: 700; margin: 0 0 10px;
                     color: ${dark ? "#fff" : "#333"};
                     font-family: "Segoe UI", Roboto, sans-serif;
                 }
-                .rolocate-playtime-cards { display: flex; flex-wrap: wrap; gap: 10px; }
+                .rolocate-playtime-cards {
+                    display: flex; flex-wrap: nowrap; gap: 10px;
+                    overflow-x: auto; overflow-y: hidden;
+                    padding-bottom: 6px; max-height: 145px;
+                    scrollbar-width: thin;
+                    scrollbar-color: ${dark ? "#2a2a30 transparent" : "#C1B19A transparent"};
+                }
                 .rolocate-game-card {
                     display: flex; flex-direction: column; align-items: center;
                     width: 90px; cursor: pointer; text-decoration: none;
