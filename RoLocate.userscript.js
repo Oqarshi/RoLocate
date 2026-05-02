@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RoLocate
 // @namespace    https://oqarshi.github.io/
-// @version      46.7
+// @version      46.8
 // @description  Adds filter options to roblox server page. Alternative to paid extensions like RoPro, RoGold®, RoQol, and RoKit.
 // @author       Oqarshi
 // @match        https://www.roblox.com/*
@@ -14,7 +14,7 @@
 // @grant        GM_setValue
 // @grant        GM_deleteValue
 // @require      https://update.greasyfork.org/scripts/535590/1586769/Rolocate%20Base64%20Image%20Library%2020.js
-// @require      https://update.greasyfork.org/scripts/547134/1796560/Rolocate%20Server%20Region%20Data%20%28Data%20Saving%29.js
+// @require      https://update.greasyfork.org/scripts/547134/1813490/Rolocate%20Server%20Region%20Data%20%28Data%20Saving%29.js
 // @require      https://update.greasyfork.org/scripts/540553/1648593/Rolocate%20Flag%20Base64%20Data.js
 // @require      https://update.greasyfork.org/scripts/544437/1642116/Rolocate%20Restore%20Classic%20Terms%20All%20Languages.js
 // @connect      thumbnails.roblox.com
@@ -823,10 +823,9 @@
         localStorage.removeItem('ROLOCATE_compactprivateservers');
         localStorage.removeItem('ROLOCATE_mutualfriends');
 
-        const VERSION = "V46.7", PREV_VERSION = "V46.6";
+        const VERSION = "V46.8", PREV_VERSION = "V46.7";
         const changelog = {
-            SmartSearchUpdate:  ["🔍","Smart Search","SmartSearch cannot find user stats autmatically since roblox put in new ratelimits. So, a new button is added as a substitute.","Fixed"],
-            BugFixes:           ["🛠️","Bug Fixes","Thx for Akira for fixing 'This weeks playtime' overflowing. Also version number fixed, thx Waivy.","Fixed"],
+            serverfiltersregions:  ["⏰","Server Age/Uptime","You can now sort by server uptime/age when finding server regions! Roblox has recently provided this info in their api. May not be present for all servers.","New"],
         };
 
         const cur = localStorage.getItem('version') || "V0.0";
@@ -1223,7 +1222,7 @@
                 <div style="text-align:left;">
                     <div style="font-size:22px;font-weight:700;color:#fff;letter-spacing:0.5px;line-height:1.1;">RoLocate</div>
                     <div style="margin-top:8px;display:inline-block;background:rgba(220,53,69,0.08);border:1.5px solid rgba(220,53,69,0.35);padding:3px 10px;border-radius:8px;">
-                        <span style="font-size:13px;font-weight:700;color:#e8566a;letter-spacing:1.5px;">V 46.7</span>
+                        <span style="font-size:13px;font-weight:700;color:#e8566a;letter-spacing:1.5px;">V 46.8</span>
                     </div>
                 </div>
             </div>
@@ -3685,7 +3684,7 @@ li a.about-link:hover::after {
         navbarGroup.appendChild(li);
     }
 
-    /*******************************************************
+/*******************************************************
     name of function: editremoveads
     description: popup for customizing the ads
     *******************************************************/
@@ -3702,7 +3701,8 @@ li a.about-link:hover::after {
         recommendedForYou: true,
         feedItems: true,
         standoutGames: true,
-        sitdownGames: true
+        sitdownGames: true,
+        robloxPlus: true // New: On by default
       };
 
       // load saved settings and fall back to defaults
@@ -3745,6 +3745,7 @@ li a.about-link:hover::after {
         ['feedItems', 'Feed Posts (Home Page)'],
         ['standoutGames', 'Standout Games (Home Page)'],
         ['sitdownGames', 'Sitdown Games (Home Page)'],
+        ['robloxPlus', 'Roblox Plus Subscription Ad'], // New Toggle
       ];
 
       // container for all toggles
@@ -3878,7 +3879,8 @@ li a.about-link:hover::after {
             recommendedForYou: true,
             feedItems: true,
             standoutGames: true,
-            sitdownGames: true
+            sitdownGames: true,
+            robloxPlus: true // New Default
         };// if no settings use default settings
         const settings = { ...defaultSettings, ...userSettings };
 
@@ -3939,6 +3941,14 @@ li a.about-link:hover::after {
                     });
                 }
 
+                // block "Roblox Plus" side/menu ad
+                if (settings.robloxPlus) {
+                    document.querySelectorAll('a[href="/plus"]').forEach(adLink => {
+                        const listItem = adLink.closest('li');
+                        if (listItem) hide(listItem);
+                    });
+                }
+
                 // block carousel sections by header name
                 const carouselBlockList = [
                     settings.sponsoredSections  && /^sponsored$/i,
@@ -3988,7 +3998,6 @@ li a.about-link:hover::after {
         // im a master at glitch fixing ikr
         setTimeout(removeElements, 100);
     }
-
     /*******************************************************
     name of function: changeServerCount
     description: gui to cyhange autoservergion count
@@ -11465,14 +11474,13 @@ li a.about-link:hover::after {
             attributeFilter: attributesToCheckForTextContent
         });
     }
-
     /*******************************************************
     name of function: fetchServerDetails
     description: Function to fetch server details so game id and job id. yea!
     *******************************************************/
     // WARNING: Do not republish this script. Licensed for personal use only.
     // oneday I will change the variable names from ip to datacenters
-    async function fetchServerDetails(gameId, jobId) { //here!
+async function fetchServerDetails(gameId, jobId) { //here!
         const useBatching = localStorage.ROLOCATE_fastservers === "true";
 
         if (!useBatching) {
@@ -11522,14 +11530,35 @@ li a.about-link:hover::after {
                             return null;
                         }
 
-                        const location = getLocationData(String(datacenterId));
-                        if (!location) {
+                        const locationRef = getLocationData(String(datacenterId));
+                        if (!locationRef) {
                             ConsoleLogEnabled("API Response (Unknown Location):", json);
                             reject(`Unknown datacenter ID ${datacenterId}`);
                             return;
                         }
 
+                        // fixed so each server has its own thing
+                        const location = { ...locationRef };
+
                         location.placeVersion = json.joinScript.PlaceVersion;
+
+                        const serverClaimedTimeMs = json.joinScript.ServerClaimedTime;
+
+                        if (serverClaimedTimeMs === 0) {
+                            // The "Ancient Server" exception
+                            location.serverClaimedTimeMs = 0;
+                            location.serverUptime = { days: 999999, hours: 0, minutes: 0 };
+                        } else if (serverClaimedTimeMs) {
+                            // Normal calculation
+                            location.serverClaimedTimeMs = serverClaimedTimeMs;
+                            const uptimeMs = Math.max(0, Date.now() - serverClaimedTimeMs);
+                            const totalMinutes = Math.floor(uptimeMs / 60000);
+                            const days = Math.floor(totalMinutes / 1440);
+                            const hours = Math.floor((totalMinutes % 1440) / 60);
+                            const minutes = totalMinutes % 60;
+                            location.serverUptime = { days, hours, minutes };
+                        }
+
                         resolve(location);
                     },
                     onerror: function(error) {
@@ -11612,14 +11641,35 @@ li a.about-link:hover::after {
                             return null;
                         }
 
-                        const location = getLocationData(String(datacenterId));
-                        if (!location) {
+                        const locationRef = getLocationData(String(datacenterId));
+                        if (!locationRef) {
                             ConsoleLogEnabled("API Response (Unknown Location):", json);
                             innerReject(`Unknown datacenter ID ${datacenterId}`);
                             return;
                         }
 
+                        // fixed agaiun
+                        const location = { ...locationRef };
+
                         location.placeVersion = json.joinScript.PlaceVersion;
+
+                        const serverClaimedTimeMs = json.joinScript.ServerClaimedTime;
+
+                        if (serverClaimedTimeMs === 0) {
+                            // will fix dont put into production
+                            location.serverClaimedTimeMs = 0;
+                            location.serverUptime = { days: 999999, hours: 0, minutes: 0 };
+                        } else if (serverClaimedTimeMs) {
+                            // normal calculation
+                            location.serverClaimedTimeMs = serverClaimedTimeMs;
+                            const uptimeMs = Math.max(0, Date.now() - serverClaimedTimeMs);
+                            const totalMinutes = Math.floor(uptimeMs / 60000);
+                            const days = Math.floor(totalMinutes / 1440);
+                            const hours = Math.floor((totalMinutes % 1440) / 60);
+                            const minutes = totalMinutes % 60;
+                            location.serverUptime = { days, hours, minutes };
+                        }
+
                         innerResolve(location);
                     },
                     onerror: function(error) {
@@ -17580,9 +17630,6 @@ select:hover, select:focus {
             return servers.slice(0, totalLimit);
         }
 
-
-
-
         /*******************************************************
         name of function: createFilterDropdowns
         description: Creates the server selecting dropdown with country flags.
@@ -17607,7 +17654,7 @@ select:hover, select:focus {
                 transition: 'all 1.2s cubic-bezier(0.16, 1, 0.3, 1)',
                 position: 'relative',
                 border: '1px solid rgba(200,30,30,0.12)',
-                margin: '40px',
+                margin: '15px 0 15px 0',
                 fontFamily: "'Inter', 'SF Pro Display', system-ui, -apple-system, sans-serif",
                 fontSize: '16px',
                 overflow: 'hidden'
@@ -17759,8 +17806,8 @@ select:hover, select:focus {
             const logoContainer = document.createElement('div');
             Object.assign(logoContainer.style, {
                 position: 'relative',
-                padding: '8px',
-                borderRadius: '20px',
+                padding: '4px',
+                borderRadius: '14px',
                 background: 'linear-gradient(145deg, rgba(25,25,25,0.8), rgba(15,15,15,0.9))',
                 border: '1px solid rgba(200,30,30,0.2)',
                 transition: 'all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)'
@@ -17821,6 +17868,7 @@ select:hover, select:focus {
             // create icons
             const createIcon = (type) => {
                 const iconMap = {
+                    clock: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><polyline points="12 7 12 12 16 14"/></svg>`,
                     globe: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 2a14.5 14.5 0 0 1 0 20 14.5 14.5 0 0 1 0-20z"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
                     city: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="6" height="12" rx="1"/><rect x="13" y="5" width="6" height="16" rx="1"/><rect x="5" y="12" width="2" height="2" rx="0.5"/><rect x="5" y="16" width="2" height="2" rx="0.5"/><rect x="15" y="8" width="2" height="2" rx="0.5"/><rect x="15" y="12" width="2" height="2" rx="0.5"/><rect x="15" y="16" width="2" height="2" rx="0.5"/></svg>`,
                     version: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 2.5v6.527a2 2 0 0 1-.211.896L5.22 19.55a1 1 0 0 0 .9 1.45h11.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 13.5 9.027V2.5"/><path d="M8.5 2.5h7"/><path d="M7 15.5h10"/></svg>`,
@@ -17857,7 +17905,7 @@ select:hover, select:focus {
                 const wrapper = document.createElement('div');
                 Object.assign(wrapper.style, {
                     position: 'relative',
-                    minWidth: '200px',
+                    minWidth: '180px',
                     flex: '1'
                 });
 
@@ -17918,7 +17966,7 @@ select:hover, select:focus {
                 Object.assign(dropdown.style, {
                     width: '100%',
                     padding: '20px 60px 20px 28px',
-                    fontSize: '16px',
+                    fontSize: '14px',
                     fontWeight: '500',
                     background: 'transparent',
                     color: 'rgba(200,30,30,0.95)',
@@ -17947,7 +17995,7 @@ select:hover, select:focus {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    padding: '6px',
+                    padding: '2px',
                     borderRadius: '8px',
                     background: 'rgba(200,30,30,0.1)',
                     border: '1px solid rgba(200,30,30,0.2)'
@@ -18039,9 +18087,26 @@ select:hover, select:focus {
             };
 
             // Create premium dropdowns with icons
-            const countryDropdown = createDropdown('countryFilter', 'All Countries', 'globe');
-            const cityDropdown = createDropdown('cityFilter', 'All Cities', 'city');
+            const countryDropdown = createDropdown('countryFilter', 'Countries', 'globe');
+            const cityDropdown = createDropdown('cityFilter', 'Cities', 'city');
             const versionDropdown = createDropdown('versionFilter', 'Server Versions', 'version'); // glitch somehwre ein the code but idc
+            const uptimeDropdown = createDropdown('uptimeSortFilter', 'Server Uptime', 'clock');
+
+            // Populate its options
+            const uptimeSelect = uptimeDropdown.querySelector('select');
+            uptimeSelect.innerHTML = `
+                <option value="distance">All Uptimes</option>
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+            `;
+            // Apply styling to options (same as other dropdowns)
+            uptimeSelect.querySelectorAll('option').forEach(option => {
+                Object.assign(option.style, {
+                    background: 'rgba(15,15,15,0.98)',
+                    color: 'rgba(200,30,30,0.9)',
+                    padding: '12px'
+                });
+            });
 
             // server data and flasgs
             const countryCounts = {};
@@ -18127,7 +18192,7 @@ select:hover, select:focus {
                     pointerEvents: 'none',
                     zIndex: '1',
                     color: 'rgba(200,30,30,0.95)',
-                    fontSize: '16px',
+                    fontSize: '14px',
                     fontWeight: '500',
                     letterSpacing: '0.4px',
                     fontFamily: "'Inter', sans-serif"
@@ -18162,12 +18227,14 @@ select:hover, select:focus {
             const countryCustomDisplay = createCustomDropdownDisplay(countrySelect);
             countryDropdownContainer.appendChild(countryCustomDisplay);
 
+            // make it transparent initially
+            countrySelect.style.color = 'transparent';
             // make it transparent
             countrySelect.addEventListener('change', () => {
                 if (countrySelect.value) {
                     countrySelect.style.color = 'transparent';
                 } else {
-                    countrySelect.style.color = 'rgba(200,30,30,0.95)';
+                    countrySelect.style.color = 'transparent';
                 }
             });
 
@@ -18320,6 +18387,7 @@ select:hover, select:focus {
             filterContainer.appendChild(countryDropdown);
             filterContainer.appendChild(cityDropdown);
             filterContainer.appendChild(versionDropdown);
+            filterContainer.appendChild(uptimeDropdown);
 
             // add versions in
             populateVersionOptions('', '');
@@ -19014,18 +19082,50 @@ select:hover, select:focus {
                 const serverVersions = serverDetails.map(d => d.location.placeVersion).filter(v => v != null && v !== 'N/A').map(Number);
                 const minVersion = serverVersions.length > 0 ? Math.min(...serverVersions) : null;
                 const maxVersion = serverVersions.length > 0 ? Math.max(...serverVersions) : null;
-
-                const displayFilteredServers = (country, city, version) => {
+                const displayFilteredServers = (country, city, version, sortUptime = 'distance') => {
                     serverListContainer.innerHTML = "";
 
                     const filteredServers = filterServers(serverDetails, country, city, version);
-                    const sortedServers = filteredServers.sort((a, b) => {
-                        const distanceA = calculateDistance(userLocation.latitude, userLocation.longitude, a.location.latitude, a.location.longitude);
-                        const distanceB = calculateDistance(userLocation.latitude, userLocation.longitude, b.location.latitude, b.location.longitude);
-                        return distanceA - distanceB;
-                    });
 
-                    //create server cards immediately
+                    // Helper: total uptime in minutes (handles missing / N/A)
+                    const getUptimeMinutes = (s) => {
+                        const u = s.location.serverUptime;
+                        if (!u || u.days === 999999) return null; // N/A or missing
+                        return (u.days * 24 * 60) + (u.hours * 60) + (u.minutes || 0);
+                    };
+
+                    // Sort based on selected mode
+                    let sortedServers;
+                    if (sortUptime === 'newest') {
+                        // Newest first = smallest uptime (recently started)
+                        sortedServers = filteredServers.sort((a, b) => {
+                            const uA = getUptimeMinutes(a);
+                            const uB = getUptimeMinutes(b);
+                            if (uA === null && uB === null) return 0;
+                            if (uA === null) return 1;       // push N/A to end
+                            if (uB === null) return -1;
+                            return uA - uB;
+                        });
+                    } else if (sortUptime === 'oldest') {
+                        // Oldest first = largest uptime (long running)
+                        sortedServers = filteredServers.sort((a, b) => {
+                            const uA = getUptimeMinutes(a);
+                            const uB = getUptimeMinutes(b);
+                            if (uA === null && uB === null) return 0;
+                            if (uA === null) return 1;       // push N/A to end
+                            if (uB === null) return -1;
+                            return uB - uA;
+                        });
+                    } else {
+                        // Default: sort by distance
+                        sortedServers = filteredServers.sort((a, b) => {
+                            const distanceA = calculateDistance(userLocation.latitude, userLocation.longitude, a.location.latitude, a.location.longitude);
+                            const distanceB = calculateDistance(userLocation.latitude, userLocation.longitude, b.location.latitude, b.location.longitude);
+                            return distanceA - distanceB;
+                        });
+                    }
+
+                    // create server cards immediately
                     sortedServers.forEach(({
                         server,
                         location
@@ -19164,6 +19264,15 @@ select:hover, select:focus {
                                     <div style="margin-bottom: 6px; font-size: 14px; color: #888888;">
                                             <span style="color: #e5e5e5; font-weight: 600;">Version:</span> ${versionDisplay}
                                     </div>
+                                    ${location.serverUptime ? `
+                                        <hr style="margin: 6px 0; border: none; height: 1px; background: #333333;">
+                                        <div style="margin-bottom: 6px; font-size: 14px; color: #888888;">
+                                            <span style="color: #e5e5e5; font-weight: 600;">Server Uptime:</span>
+                                            ${location.serverUptime.days === 999999
+                                                ? 'N/A'
+                                                : `${location.serverUptime.days}d ${location.serverUptime.hours}h ${location.serverUptime.minutes}m`}
+                                        </div>
+                                    ` : ''}
                                 </div>
                             </div>
                         </div>
@@ -19215,22 +19324,22 @@ select:hover, select:focus {
                         serverCard.appendChild(cardItem);
                         serverListContainer.appendChild(serverCard);
 
-                      // load real thumbnails in background if not cached and not already being fetched
-                      // added another condition so that finding thumbnails only occurs if mobilemode = false. This is a performance upgrade for mobile users.
-                      if (server.playerTokens && server.playerTokens.length > 0 && !thumbnailCache.has(server.id) && localStorage.ROLOCATE_mobilemode === "false") {
-                          // mark as being fetched to prevent duplicate requests
-                          thumbnailCache.set(server.id, 'loading');
-                          fetchPlayerThumbnails(server.playerTokens)
-                              .then(thumbnails => {
-                                  thumbnailCache.set(server.id, thumbnails);
-                                  updateServerCardThumbnails(server.id, thumbnails, server.maxPlayers, server.playing);
-                              })
-                              .catch(error => {
-                                  ConsoleLogEnabled(`Failed to load thumbnails for server ${server.id}:`, error);
-                                  // remove the 'loading' marker on error so it can be retried
-                                  thumbnailCache.delete(server.id);
-                          });
-                      }
+                        // load real thumbnails in background if not cached and not already being fetched
+                        // added another condition so that finding thumbnails only occurs if mobilemode = false. This is a performance upgrade for mobile users.
+                        if (server.playerTokens && server.playerTokens.length > 0 && !thumbnailCache.has(server.id) && localStorage.ROLOCATE_mobilemode === "false") {
+                            // mark as being fetched to prevent duplicate requests
+                            thumbnailCache.set(server.id, 'loading');
+                            fetchPlayerThumbnails(server.playerTokens)
+                                .then(thumbnails => {
+                                    thumbnailCache.set(server.id, thumbnails);
+                                    updateServerCardThumbnails(server.id, thumbnails, server.maxPlayers, server.playing);
+                                })
+                                .catch(error => {
+                                    ConsoleLogEnabled(`Failed to load thumbnails for server ${server.id}:`, error);
+                                    // remove the 'loading' marker on error so it can be retried
+                                    thumbnailCache.delete(server.id);
+                                });
+                        }
                     });
                 };
 
@@ -19238,21 +19347,24 @@ select:hover, select:focus {
                 const countryFilter = document.getElementById('countryFilter');
                 const cityFilter = document.getElementById('cityFilter');
                 const versionFilter = document.getElementById('versionFilter');
+                const uptimeFilter = document.getElementById('uptimeSortFilter');
 
-                countryFilter.addEventListener('change', () => {
-                    displayFilteredServers(countryFilter.value, cityFilter.value, versionFilter.value);
-                });
+                const redrawthedropdowns = () => {
+                    displayFilteredServers(
+                        countryFilter.value,
+                        cityFilter.value,
+                        versionFilter.value,
+                        uptimeFilter.value   // yep pass the sort
+                    );
+                };
 
-                cityFilter.addEventListener('change', () => {
-                    displayFilteredServers(countryFilter.value, cityFilter.value, versionFilter.value);
-                });
+                countryFilter.addEventListener('change', redrawthedropdowns);
+                cityFilter.addEventListener('change', redrawthedropdowns);
+                versionFilter.addEventListener('change', redrawthedropdowns);
+                uptimeFilter.addEventListener('change', redrawthedropdowns);
 
-                versionFilter.addEventListener('change', () => {
-                    displayFilteredServers(countryFilter.value, cityFilter.value, versionFilter.value);
-                });
-
-                // countries cities and versions
-                displayFilteredServers("", "", "");
+                // Initial draw with default sort (distance)
+                displayFilteredServers("", "", "", "distance"); // show closest distance servers by default
 
             } catch (error) {
                 if (error === 'purchase_required') {
