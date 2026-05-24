@@ -1831,7 +1831,7 @@
             <h3 class="grayish-center">🚀 Advanced Tab</h3>
             <ul>
                 <li id="help-Enable Console Logs"><strong>Enable Console Logs:</strong> <span>Enables console.log messages from the script. You can view this in the browser console or under the Technical tab.</span></li>
-                <li id="help-Enable Server Filters"><strong>Enable Server Filters:</strong> <span>Enables server filter features on the game page. You can customize what server regions it displays.</span></li>
+                <li id="help-Enable Server Filters"><strong>Enable Server Filters:</strong> <span>Enables the server filter button on the game page. When on, ServerHop and Best Connection will skip any regions you've banned via the Edit button. The Server Region dropdown always shows every region regardless of this setting.</span></li>
                 <li id="help-Enable Server Hop Button"><strong>Enable Server Hop Button:</strong> <span>Enables server hop feature on the game page.</span></li>
                 <li id="help-Enable Notifications"><strong>Enable Notifications:</strong> <span>Enables helpful notifications from the script.</span></li>
                 <li id="help-Fix BTRoblox"><strong>Fix Btroblox Compatability:</strong> <span>Uses alternative methods to make the script compatible with BTRoblox.</span></li>
@@ -4176,7 +4176,7 @@ li a.about-link:hover::after {
           Only join servers from enabled regions
         </p>
         <p style="margin:0px 0 6px;text-align:center;font-size:12px;color:#aaa">
-          Affects ServerHop, Server Regions, and Best Connection
+          Affects ServerHop and Best Connection
         </p>
       `;
 
@@ -13606,7 +13606,7 @@ li a.about-link:hover::after {
     description: Loading box when joining a server + Shows server location
     *******************************************************/
     // WARNING: Do not republish this script. Licensed for personal use only.
-    async function showLoadingOverlay(gameId, serverId, mainMessage = "", statusMessage = "") {
+    async function showLoadingOverlay(gameId, serverId, mainMessage = "", statusMessage = "", options = {}) {
         // remove existing overlay if present
         const existingOverlay = document.querySelector('[data-loading-overlay]');
         if (existingOverlay) {
@@ -13782,7 +13782,9 @@ li a.about-link:hover::after {
             minWidth: '0'
         });
 
-        const isServerHopping = !gameId || !serverId;
+        const isMatchmaking = options.matchmaking === true;
+        const hideServerInfo = options.hideServerInfo === true;
+        const isServerHopping = !isMatchmaking && !hideServerInfo && (!gameId || !serverId);
         const titleText = createElement('div', {
             fontSize: '24px',
             fontWeight: '600',
@@ -13806,6 +13808,21 @@ li a.about-link:hover::after {
         textSection.appendChild(subtitleText);
         headerSection.appendChild(iconContainer);
         headerSection.appendChild(textSection);
+
+        // play-button popup: stack icon above text and center everything relative
+        // to the whole popup width (the side-by-side layout looks asymmetric without
+        // a second column of server info to balance the icon).
+        if (hideServerInfo) {
+            Object.assign(headerSection.style, {
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '18px',
+                padding: '32px 32px 20px 32px'
+            });
+            Object.assign(textSection.style, { textAlign: 'center', flex: 'none', width: '100%' });
+            Object.assign(titleText.style, { fontSize: '32px', marginBottom: '6px' });
+            Object.assign(subtitleText.style, { fontSize: '16px' });
+        }
 
         // divider
         const divider = createElement('div', {
@@ -13887,11 +13904,21 @@ li a.about-link:hover::after {
 
             detail.appendChild(labelEl);
             detail.appendChild(valueEl);
+            detail._valueEl = valueEl;
             return detail;
         };
 
-        detailsSection.appendChild(createDetail('Game ID', gameId, '#60a5fa'));
-        detailsSection.appendChild(createDetail('Server ID', serverId, '#34d399'));
+        const gameIdDetail = createDetail('Game ID', gameId, '#60a5fa');
+        detailsSection.appendChild(gameIdDetail);
+        let serverIdDetail = null;
+        if (!hideServerInfo) {
+            serverIdDetail = createDetail('Server ID', serverId || (isMatchmaking ? 'Pending...' : null), '#34d399');
+            detailsSection.appendChild(serverIdDetail);
+        } else if (gameIdDetail._valueEl) {
+            // play-button popup: Game ID is the only detail card, so center + enlarge it
+            Object.assign(gameIdDetail.style, { textAlign: 'center', padding: '18px 20px' });
+            Object.assign(gameIdDetail._valueEl.style, { fontSize: '22px' });
+        }
 
         // progress bar section
         const progressSection = createElement('div', {
@@ -13944,7 +13971,7 @@ li a.about-link:hover::after {
         container.appendChild(closeButton);
         container.appendChild(headerSection);
         container.appendChild(divider);
-        container.appendChild(locationSection);
+        if (!hideServerInfo) container.appendChild(locationSection);
         container.appendChild(detailsSection);
         container.appendChild(progressSection);
         container.appendChild(footer);
@@ -13977,33 +14004,60 @@ li a.about-link:hover::after {
                 .catch(error => ConsoleLogEnabled('Error fetching game icon:', error));
         }
 
-        // fetch server location
-        (async () => {
-            subtitleText.textContent = statusMessage || (isServerHopping ? 'Finding server...' : 'Locating server...');
+        // fetch server location (skipped when hideServerInfo is set — e.g. play-button case
+        // where the JS side has no resolved serverId)
+        if (!hideServerInfo) {
+            (async () => {
+                subtitleText.textContent = statusMessage || (isServerHopping ? 'Finding server...' : 'Locating server...');
 
-            await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise(resolve => setTimeout(resolve, 500));
 
-            try {
-                if (isServerHopping) {
-                    locationValue.innerHTML = '🌍 Random Server';
+                try {
+                    if (isServerHopping) {
+                        locationValue.innerHTML = '🌍 Random Server';
+                        subtitleText.textContent = statusMessage || 'Connecting...';
+                    } else if (isMatchmaking && !serverId) {
+                        locationValue.innerHTML = '🌍 Locating server...';
+                    } else {
+                        const locationData = await fetchServerDetails(gameId, serverId);
+                        const flagEmoji = getFlagEmoji(locationData.country.code);
+                        locationValue.innerHTML = '';
+                        locationValue.appendChild(flagEmoji);
+                        locationValue.append(` ${locationData.city}, ${locationData.country.name}`);
+                        subtitleText.innerHTML = statusMessage || `Connecting to <span style="color: #60a5fa; font-weight: 600;">${locationData.city}</span>`;
+                    }
+                } catch (error) {
+                    ConsoleLogEnabled('Error fetching location:', error);
+                    locationValue.innerHTML = isServerHopping ? '🌍 Random Server' : '🌍 Unknown Location';
                     subtitleText.textContent = statusMessage || 'Connecting...';
-                } else {
-                    const locationData = await fetchServerDetails(gameId, serverId);
-                    const flagEmoji = getFlagEmoji(locationData.country.code);
-                    locationValue.innerHTML = '';
-                    locationValue.appendChild(flagEmoji);
-                    locationValue.append(` ${locationData.city}, ${locationData.country.name}`);
-                    subtitleText.innerHTML = statusMessage || `Connecting to <span style="color: #60a5fa; font-weight: 600;">${locationData.city}</span>`;
                 }
-            } catch (error) {
-                ConsoleLogEnabled('Error fetching location:', error);
-                locationValue.innerHTML = isServerHopping ? '🌍 Random Server' : '🌍 Unknown Location';
-                subtitleText.textContent = statusMessage || 'Connecting...';
-            }
-        })();
+            })();
+        }
+
+        // suppress Roblox's native launch dialog ("Download Roblox to play..." /
+        // "Open Roblox" / etc.) while our overlay is up — but only when the user
+        // has Smart Join Popup enabled, so unrelated callers (e.g. ServerHop) don't
+        // strip out other Radix dialogs.
+        let nativeDialogObserver = null;
+        if (localStorage.getItem("ROLOCATE_smartjoinpopup") === "true") {
+            const dismissNativeRobloxDialog = () => {
+                document.querySelectorAll('.foundation-web-dialog-overlay').forEach(el => el.remove());
+                // Radix locks body interaction when its modal opens — restore it
+                if (document.body.style.pointerEvents === 'none') {
+                    document.body.style.pointerEvents = '';
+                }
+                if (document.body.hasAttribute('data-scroll-locked')) {
+                    document.body.removeAttribute('data-scroll-locked');
+                }
+            };
+            dismissNativeRobloxDialog();
+            nativeDialogObserver = new MutationObserver(() => dismissNativeRobloxDialog());
+            nativeDialogObserver.observe(document.body, { childList: true, subtree: true });
+        }
 
         // cleanup function
         const cleanup = () => {
+            if (nativeDialogObserver) nativeDialogObserver.disconnect();
             overlay.style.opacity = '0';
             setTimeout(() => {
                 overlay.remove();
@@ -14011,8 +14065,8 @@ li a.about-link:hover::after {
             }, 200);
         };
 
-        // auto hide after 20 seconds for server hopping, 6 seconds for normal join
-        const fadeOutDuration = isServerHopping ? 20000 : 6000;
+        // auto hide after 20 seconds for server hopping/matchmaking, 6 seconds for normal join
+        const fadeOutDuration = (isServerHopping || isMatchmaking) ? 20000 : 6000;
         const fadeOutTimer = setTimeout(cleanup, fadeOutDuration);
 
         // close button handler
@@ -14020,6 +14074,13 @@ li a.about-link:hover::after {
             clearTimeout(fadeOutTimer);
             cleanup();
         });
+
+        return {
+            close: () => {
+                clearTimeout(fadeOutTimer);
+                cleanup();
+            }
+        };
     }
 
     function Responsivegamecards() {
@@ -14539,7 +14600,8 @@ li a.about-link:hover::after {
                 localStorage.getItem("ROLOCATE_togglefilterserversbutton") === "true" ||
                 localStorage.getItem("ROLOCATE_toggleserverhopbutton") === "true" ||
                 localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true" ||
-                localStorage.getItem("ROLOCATE_betterprivateservers") == "true"
+                localStorage.getItem("ROLOCATE_betterprivateservers") == "true" ||
+                localStorage.getItem("ROLOCATE_smartjoinpopup") === "true"
             )
         ) {
 
@@ -14590,8 +14652,6 @@ li a.about-link:hover::after {
 
             button.addEventListener('click', onPlayClick, true);
         }
-
-
 
         /*******************************************************
         name of function: InitRobloxLaunchHandler
@@ -14649,6 +14709,35 @@ li a.about-link:hover::after {
                 /* ---------- finally join the game ---------- */
                 return originalJoin.apply(this, arguments);
             };
+
+            /* ---------- matchmaker entry point (public Play button) ---------- */
+            // Roblox's Play button calls joinMultiplayerGame, NOT joinGameInstance.
+            // We can't fill in serverId/location for this path — modern Roblox web
+            // hands matchmaking off to the player app via the protocol URL, so the
+            // JS side never sees the JobId. The popup shows just game info + a
+            // "Finding server..." message; server location/ID are omitted.
+            if (typeof Roblox?.GameLauncher?.joinMultiplayerGame === 'function') {
+                const originalJoinMP = Roblox.GameLauncher.joinMultiplayerGame;
+                Roblox.GameLauncher.joinMultiplayerGame = async function() {
+                    if (window._skipRobloxJoinInterceptor) {
+                        window._skipRobloxJoinInterceptor = false;
+                        return originalJoinMP.apply(this, arguments);
+                    }
+
+                    const placeId = arguments[0];
+                    ConsoleLogEnabled(`Intercepted matchmaker join: placeId=${placeId}`);
+
+                    if (localStorage.getItem("ROLOCATE_smartjoinpopup") === "true") {
+                        showLoadingOverlay(
+                            placeId, null, "Joining Game", "Finding server...",
+                            { matchmaking: true, hideServerInfo: true }
+                        );
+                        await new Promise(res => setTimeout(res, 1500));
+                    }
+
+                    return originalJoinMP.apply(this, arguments);
+                };
+            }
         }
 
         /*******************************************************
@@ -15445,7 +15534,7 @@ li a.about-link:hover::after {
                     }
                 });
 
-                buttonContainer.addEventListener('click', () => {
+                buttonContainer.addEventListener('click', async () => {
                     // no clciks on disabled buttons
                     if (data.disabled) {
                         return;
@@ -15457,18 +15546,81 @@ li a.about-link:hover::after {
                         buttonContainer.style.transform = 'translateY(0px) scale(1)';
                     }, 150);
 
+                    // When Auto Server Regions is on, route the list-producing filter
+                    // buttons through the enhanced streaming UI (rebuildServerList) so the
+                    // user gets the same cards with ping/distance/health/etc. The servers
+                    // themselves still come from each button's original endpoint — passed
+                    // into rebuildServerList via options.servers — so "Smallest Servers"
+                    // really shows Roblox's smallest-first list, not Server Region's pool.
+                    // Best Connection (5) and Join Small Server (6/7) stay as-is — they
+                    // auto-join, no list to enhance.
+                    const autoRegions = localStorage.getItem('ROLOCATE_AutoRunServerRegions') === 'true';
+
+                    const fetchSorted = (sortOrder, limit) => new Promise((resolve, reject) => {
+                        GM_xmlhttpRequest({
+                            method: 'GET',
+                            url: `https://games.roblox.com/v1/games/${gameId}/servers/0?sortOrder=${sortOrder}&excludeFullGames=true&limit=${limit}`,
+                            onload: r => {
+                                if (r.status === 429) return reject(new Error('Rate limited'));
+                                if (r.status < 200 || r.status >= 300) return reject(new Error('HTTP ' + r.status));
+                                try { resolve((JSON.parse(r.responseText).data) || []); }
+                                catch (e) { reject(e); }
+                            },
+                            onerror: e => reject(e),
+                        });
+                    });
+
                     switch (index) {
                         case 0:
-                            smallest_servers();
+                            if (autoRegions) {
+                                try {
+                                    const list = await fetchSorted(1, 25); // smallest first
+                                    rebuildServerList(gameId, list.length, false, false, { intent: 'smallest', servers: list });
+                                } catch (e) {
+                                    notifications('Failed to fetch smallest servers. Try again.', 'error', '⚠️', '5000');
+                                }
+                            } else {
+                                smallest_servers();
+                            }
                             break;
                         case 1:
-                            available_space_servers();
+                            if (autoRegions) {
+                                try {
+                                    const list = await fetchSorted(2, 25); // largest non-full first
+                                    rebuildServerList(gameId, list.length, false, false, { intent: 'largest', servers: list });
+                                } catch (e) {
+                                    notifications('Failed to fetch available-space servers. Try again.', 'error', '⚠️', '5000');
+                                }
+                            } else {
+                                available_space_servers();
+                            }
                             break;
                         case 2:
                             player_count_tab();
                             break;
                         case 3:
-                            random_servers();
+                            if (autoRegions) {
+                                try {
+                                    const a = await fetchSorted(1, 10);
+                                    const b = await fetchSorted(2, 10);
+                                    const seen = new Set();
+                                    const merged = [];
+                                    for (const s of [...a, ...b]) {
+                                        if (!seen.has(s.id)) { seen.add(s.id); merged.push(s); }
+                                    }
+                                    // Fisher-Yates shuffle, then cap at 16 — same as random_servers()
+                                    for (let i = merged.length - 1; i > 0; i--) {
+                                        const j = Math.floor(Math.random() * (i + 1));
+                                        [merged[i], merged[j]] = [merged[j], merged[i]];
+                                    }
+                                    const list = merged.slice(0, 16);
+                                    rebuildServerList(gameId, list.length, false, false, { intent: 'random', servers: list });
+                                } catch (e) {
+                                    notifications('Failed to fetch random servers. Try again.', 'error', '⚠️', '5000');
+                                }
+                            } else {
+                                random_servers();
+                            }
                             break;
                         case 4:
                             createServerCountPopup((totalLimit) => {
@@ -15641,7 +15793,11 @@ li a.about-link:hover::after {
             *******************************************************/
             async function pickRandomServer() {
                 if (serverIds.length > 0) {
-                    const serverRegionsPrefs = JSON.parse(localStorage.getItem('ROLOCATE_serverRegions') || '{}');
+                    // ServerHop honors saved bans only when the master "Enable Server Filters"
+                    // toggle is on. Otherwise pretend nothing's banned.
+                    const serverRegionsPrefs = localStorage.getItem('ROLOCATE_togglefilterserversbutton') === 'true'
+                        ? JSON.parse(localStorage.getItem('ROLOCATE_serverRegions') || '{}')
+                        : {};
                     let attempts = 0;
                     while (attempts < 100 && serverIds.length > 0) { // 100 genrous attempts
                         const idx = Math.floor(Math.random() * serverIds.length);
@@ -16653,7 +16809,18 @@ li a.about-link:hover::after {
             submitButton.addEventListener('click', () => {
                 const maxPlayers = parseInt(slider.value, 10);
                 if (!isNaN(maxPlayers) && maxPlayers > 0) {
-                    filterServersByPlayerCount(maxPlayers);
+                    if (localStorage.getItem('ROLOCATE_AutoRunServerRegions') === 'true') {
+                        // Route through the enhanced streaming UI so cards still show
+                        // ping/location/distance/health/etc. totalLimit=Infinity exhausts
+                        // every page from /servers/public until Roblox returns no more
+                        // pages, so the search covers all available servers. intent
+                        // 'largest' = descending player count (the requested cap N at the
+                        // top, then N-1, then N-2…), ping as tiebreaker within each tier.
+                        const gameId = getCurrentGameId();
+                        rebuildServerList(gameId, Infinity, false, false, { intent: 'largest', playerCountFilter: maxPlayers });
+                    } else {
+                        filterServersByPlayerCount(maxPlayers);
+                    }
                     fadeOutAndRemove(popup, overlay);
                 } else {
                     notifications('Error: Please enter a number greater than 0', 'error', '⚠️', '5000');
@@ -17702,7 +17869,10 @@ select:hover, select:focus {
         function createFilterDropdowns(servers) {
             // get flag data
             getFlagEmoji(); // load flag data without country code
-            const serverRegionsPrefs = JSON.parse(localStorage.getItem('ROLOCATE_serverRegions') || '{}');
+            // Server Region / Auto Server Regions intentionally never apply saved bans —
+            // those only gate ServerHop and Best Connection (and only when "Enable Server
+            // Filters" is on). The dropdown UI always shows every region we discovered.
+            const serverRegionsPrefs = {};
 
             // create the main filter container with premium styling
             const filterContainer = document.createElement('div');
@@ -17803,11 +17973,11 @@ select:hover, select:focus {
             content: '';
             position: absolute;
             top: 0;
-            left: -100%;
+            left: 0;
             width: 100%;
             height: 100%;
             background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
-            animation: shimmer 3s infinite;
+            animation: shimmer 8s linear infinite;
         }
 
         .premium-icon {
@@ -18173,76 +18343,76 @@ select:hover, select:focus {
                 });
             });
 
-            // server data and flasgs
-            const countryCounts = {};
-            const countryServerMap = {}; // store server ifno for each one
-
-            servers.forEach(server => {
-                const country = server.location.country.name;
-                countryCounts[country] = (countryCounts[country] || 0) + 1;
-                if (!countryServerMap[country]) {
-                    countryServerMap[country] = server; // store first server for country code reference
-                }
-            });
-
-            const sortedCountries = Object.keys(countryCounts).sort();
+            // Country dropdown is now populated via a reusable function so it can be
+            // re-run live as new servers stream in. Selection is preserved across refreshes.
             const countrySelect = countryDropdown.querySelector('select');
 
-            sortedCountries.forEach(country => {
-                const option = document.createElement('option');
-                option.value = country;
+            // Banned regions are skipped during card streaming, so don't list them in
+            // the dropdowns either — otherwise the count is misleading and selecting one
+            // shows zero results.
+            const isBannedServer = (s) =>
+                serverRegionsPrefs[`${s.location.city}_${s.location.country?.code}`] === 'banned';
 
-                // Try to get country code from server data first, then fallback to mapping
-                let countryCode;
-                const server = countryServerMap[country];
-                if (server && server.location.country.code) {
-                    countryCode = server.location.country.code;
-                } else {
-                    countryCode = getCountryCode(country);
-                }
+            function populateCountryOptions() {
+                const prevValue = countrySelect.value;
+                countrySelect.innerHTML = `<option value="">Countries</option>`;
 
-                // Create flag element
-                try {
-                    const flagImg = getFlagEmoji(countryCode);
-                    if (flagImg) {
-                        flagImg.className = 'flag-image';
-                        // Since we can't directly add HTML to option text, we'll use a data attribute
-                        // and handle the display with CSS or JavaScript
-                        option.setAttribute('data-flag-src', flagImg.src);
-                        option.setAttribute('data-country-code', countryCode);
-                        option.textContent = `${country} (${countryCounts[country]})`;
-                        // mark country if all or some regions inside are banned
-                        try {
-                            const serversForCountry = servers.filter(s => s.location.country.name === country);
-                            const allBanned = serversForCountry.length > 0 && serversForCountry.every(s => serverRegionsPrefs[`${s.location.city}_${s.location.country?.code}`] === 'banned');
-                            const someBanned = serversForCountry.some(s => serverRegionsPrefs[`${s.location.city}_${s.location.country?.code}`] === 'banned');
-                            if (allBanned) {
-                                option.textContent += ' — BANNED';
-                                option.style.color = '#ff6b6b';
-                            } else if (someBanned) {
-                                option.textContent += ' — PARTIAL BANS';
-                                option.style.color = '#f59e0b';
-                            }
-                        } catch (e) {
-                            ConsoleLogEnabled('Error checking banned status for country dropdown:', e);
-                        }
-                    }
-                } catch (error) {
-                    ConsoleLogEnabled(`Could not load flag for ${country} (${countryCode}):`, error);
-                    option.textContent = `${country} (${countryCounts[country]})`;
-                }
-
-                Object.assign(option.style, {
-                    background: 'rgba(15,15,15,0.98)',
-                    color: 'rgba(200,30,30,0.9)',
-                    padding: '12px',
-                    borderRadius: '8px',
-                    margin: '2px'
+                const countryCounts = {};
+                const countryServerMap = {};
+                servers.forEach(server => {
+                    if (isBannedServer(server)) return;
+                    const country = server.location.country.name;
+                    countryCounts[country] = (countryCounts[country] || 0) + 1;
+                    if (!countryServerMap[country]) countryServerMap[country] = server;
                 });
-                countrySelect.appendChild(option);
-            });
+
+                const sortedCountries = Object.keys(countryCounts).sort();
+                sortedCountries.forEach(country => {
+                    const option = document.createElement('option');
+                    option.value = country;
+
+                    let countryCode;
+                    const server = countryServerMap[country];
+                    if (server && server.location.country.code) {
+                        countryCode = server.location.country.code;
+                    } else {
+                        countryCode = getCountryCode(country);
+                    }
+
+                    try {
+                        const flagImg = getFlagEmoji(countryCode);
+                        if (flagImg) {
+                            flagImg.className = 'flag-image';
+                            option.setAttribute('data-flag-src', flagImg.src);
+                            option.setAttribute('data-country-code', countryCode);
+                        }
+                    } catch (error) {
+                        ConsoleLogEnabled(`Could not load flag for ${country} (${countryCode}):`, error);
+                    }
+                    option.textContent = `${country} (${countryCounts[country]})`;
+
+                    Object.assign(option.style, {
+                        background: 'rgba(15,15,15,0.98)',
+                        color: 'rgba(200,30,30,0.9)',
+                        padding: '12px',
+                        borderRadius: '8px',
+                        margin: '2px'
+                    });
+                    countrySelect.appendChild(option);
+                });
+
+                if (prevValue && Array.from(countrySelect.options).some(o => o.value === prevValue)) {
+                    countrySelect.value = prevValue;
+                }
+            }
+            populateCountryOptions();
 
             // Create a custom dropdown display that shows flags
+            // Strip a trailing " (123)" count from option text. Used by the closed-state
+            // dropdown overlay so the button shows just "Brazil" while the open dropdown
+            // popup still shows "Brazil (3)" via the option's actual textContent.
+            const stripCountSuffix = (text) => (text || '').replace(/\s*\(\d+\)\s*$/, '');
+
             const createCustomDropdownDisplay = (selectElement) => {
                 const customDisplay = document.createElement('div');
                 Object.assign(customDisplay.style, {
@@ -18274,10 +18444,10 @@ select:hover, select:focus {
                          alt="${countryCode}"
                          class="flag-image"
                          style="width: 24px; height: 18px; margin-right: 12px; border-radius: 3px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);">
-                    <span>${selectedOption.textContent}</span>
+                    <span>${stripCountSuffix(selectedOption.textContent)}</span>
                 `;
                     } else {
-                        customDisplay.textContent = selectedOption ? selectedOption.textContent : selectElement.options[0].textContent;
+                        customDisplay.textContent = stripCountSuffix(selectedOption ? selectedOption.textContent : selectElement.options[0].textContent);
                     }
                 };
 
@@ -18303,6 +18473,17 @@ select:hover, select:focus {
                 }
             });
 
+            // Same overlay treatment for cities so the closed button shows "São Paulo"
+            // not "São Paulo (3)" — the open dropdown popup still shows the count via
+            // the option's textContent. citySelect is hoisted here from its original
+            // declaration site (formerly just above populateCityOptions) so this overlay
+            // can reference it without hitting a temporal dead zone.
+            const citySelect = cityDropdown.querySelector('select');
+            const cityDropdownContainer = cityDropdown.querySelector('.shimmer-effect');
+            const cityCustomDisplay = createCustomDropdownDisplay(citySelect);
+            cityDropdownContainer.appendChild(cityCustomDisplay);
+            citySelect.style.color = 'transparent';
+
             // premium separator with gradient
             const separator = document.createElement('div');
             Object.assign(separator.style, {
@@ -18326,45 +18507,50 @@ select:hover, select:focus {
             });
             separator.appendChild(separatorGlow);
 
+            // City populator. forCountry === "" means "show all cities across every country".
+            // This fixes the bug where the Cities dropdown was empty until a Country was picked.
+            // (citySelect is declared earlier so the cityCustomDisplay overlay can use it.)
+            function populateCityOptions(forCountry) {
+                const prevValue = citySelect.value;
+                citySelect.innerHTML = '<option value="">All Cities</option>';
+
+                const candidates = (forCountry
+                    ? servers.filter(s => s.location.country.name === forCountry)
+                    : servers
+                ).filter(s => !isBannedServer(s));
+
+                const cityCounts = {};
+                candidates.forEach(server => {
+                    const city = server.location.city;
+                    const region = server.location.region?.name;
+                    const cityKey = region ? `${city}, ${region}` : city;
+                    cityCounts[cityKey] = (cityCounts[cityKey] || 0) + 1;
+                });
+
+                const sortedCities = Object.keys(cityCounts).sort();
+                sortedCities.forEach(city => {
+                    const option = document.createElement('option');
+                    option.value = city;
+                    option.textContent = `${city} (${cityCounts[city]})`;
+                    Object.assign(option.style, {
+                        background: 'rgba(15,15,15,0.98)',
+                        color: 'rgba(200,30,30,0.9)',
+                        padding: '12px'
+                    });
+                    citySelect.appendChild(option);
+                });
+
+                if (prevValue && Array.from(citySelect.options).some(o => o.value === prevValue)) {
+                    citySelect.value = prevValue;
+                }
+            }
+
             // Enhanced country change handler with flag support
             countrySelect.addEventListener('change', () => {
                 const selectedCountry = countrySelect.value;
-                const citySelect = cityDropdown.querySelector('select');
-                citySelect.innerHTML = '<option value="">All Cities</option>';
+                populateCityOptions(selectedCountry);
 
-                    if (selectedCountry) {
-                    const cityCounts = {};
-                    const cityCountryMap = {};
-                    servers
-                        .filter(server => server.location.country.name === selectedCountry)
-                        .forEach(server => {
-                            const city = server.location.city;
-                            const region = server.location.region?.name;
-                            const cityKey = region ? `${city}, ${region}` : city;
-                            cityCounts[cityKey] = (cityCounts[cityKey] || 0) + 1;
-                            cityCountryMap[cityKey] = server.location.country.code;
-                        });
-
-                    const sortedCities = Object.keys(cityCounts).sort();
-                    sortedCities.forEach(city => {
-                        const option = document.createElement('option');
-                        option.value = city;
-                        // annotate banned cities
-                        const countryCodeForCity = cityCountryMap[city];
-                        const cityNameOnly = city.split(',')[0].trim();
-                        const regionKey = `${cityNameOnly}_${countryCodeForCity}`;
-                        option.textContent = `${city} (${cityCounts[city]})` + (serverRegionsPrefs[regionKey] === 'banned' ? ' — BANNED' : '');
-                        if (serverRegionsPrefs[regionKey] === 'banned') {
-                            option.style.color = '#ff6b6b';
-                        }
-                        Object.assign(option.style, {
-                            background: 'rgba(15,15,15,0.98)',
-                            color: 'rgba(200,30,30,0.9)',
-                            padding: '12px'
-                        });
-                        citySelect.appendChild(option);
-                    });
-
+                if (selectedCountry) {
                     // Premium update animation
                     const cityContainer = cityDropdown.querySelector('div');
                     cityContainer.style.opacity = '0.4';
@@ -18395,7 +18581,6 @@ select:hover, select:focus {
                         setTimeout(() => cityDropdown.removeChild(updateRipple), 1000);
                     }, 100);
                 }
-                // update theis
                 populateVersionOptions(countrySelect.value, citySelect.value);
             });
 
@@ -18405,7 +18590,7 @@ select:hover, select:focus {
             function populateVersionOptions(countryValue, cityValue) {
                 const prevValue = versionSelect.value;
                 versionSelect.innerHTML = '<option value="">All Versions</option>';
-                let candidateServers = servers;
+                let candidateServers = servers.filter(s => !isBannedServer(s));
                 if (countryValue) candidateServers = candidateServers.filter(s => s.location.country.name === countryValue);
                 if (cityValue) {
                     candidateServers = candidateServers.filter(s => `${s.location.city}${s.location.region?.name ? `, ${s.location.region.name}` : ''}` === cityValue);
@@ -18443,7 +18628,6 @@ select:hover, select:focus {
                 }
             };
             // on city change update versions so no bugs
-            const citySelect = cityDropdown.querySelector('select');
             citySelect.addEventListener('change', () => {
                 populateVersionOptions(countrySelect.value, citySelect.value);
             });
@@ -18454,8 +18638,44 @@ select:hover, select:focus {
             filterContainer.appendChild(versionDropdown);
             filterContainer.appendChild(uptimeDropdown);
 
-            // add versions in
+            // Initial populate: show all cities (across all countries) and all versions.
+            populateCityOptions('');
             populateVersionOptions('', '');
+
+            // Expose a single refresh entry point so the caller can re-run all populators
+            // as new servers stream in. Selections are preserved across each refresh.
+            //
+            // Important: rebuilding a <select>'s <option> children (which all three populators
+            // do) will dismiss the native dropdown popup if it's currently open. With cards
+            // streaming in at ~10/sec the user can't keep a dropdown open long enough to pick
+            // anything. So we suppress refreshes while the user has any of the four filter
+            // selects focused, and run a single catch-up refresh once they blur.
+            const filterSelects = [countrySelect, citySelect, versionSelect, uptimeSelect];
+            const userIsInteractingWithDropdown = () =>
+                filterSelects.includes(document.activeElement);
+
+            const doRefresh = () => {
+                populateCountryOptions();
+                populateCityOptions(countrySelect.value);
+                populateVersionOptions(countrySelect.value, citySelect.value);
+            };
+
+            filterContainer.refresh = () => {
+                if (userIsInteractingWithDropdown()) {
+                    filterContainer._pendingRefresh = true;
+                    return;
+                }
+                doRefresh();
+            };
+
+            filterSelects.forEach(sel => {
+                sel.addEventListener('blur', () => {
+                    if (filterContainer._pendingRefresh) {
+                        filterContainer._pendingRefresh = false;
+                        doRefresh();
+                    }
+                });
+            });
 
             // Premium container entrance animation
             setTimeout(() => {
@@ -18718,7 +18938,16 @@ select:hover, select:focus {
         name of function: rebuildServerList
         description: function to create server cards immediately and load thumbnails
         *******************************************************/
-        async function rebuildServerList(gameId, totalLimit, best_connection, quick_join = false) {
+        async function rebuildServerList(gameId, totalLimit, best_connection, quick_join = false, options = {}) {
+            // options.intent — initial sort mode for the streamed cards. Maps onto the
+            //   buttons in the Filters popup: 'distance' (Server Region), 'smallest'
+            //   (Smallest Servers), 'largest' (Available Space), 'random' (Random Shuffle),
+            //   or one of the existing dropdown sorts ('newest' / 'oldest'). User can
+            //   still override via the Server Uptime dropdown.
+            // options.playerCountFilter — when set, only stream cards whose `playing` is
+            //   <= this number. Used by Player Count routed through the enhanced UI.
+            const intent = options.intent || 'distance';
+            const playerCountFilter = options.playerCountFilter;
             const latestPublishedVersion = await getLatestPlaceVersion(gameId);
             const serverListContainer = document.getElementById("rbx-public-game-server-item-container");
             const isJoinMode = best_connection || quick_join;
@@ -18735,7 +18964,11 @@ select:hover, select:focus {
                     }
                     notifications("Retrieving Location...", "success", "🌎", '5000');
                     const userLocation = await getUserLocation(true);
-                    const serverRegionsPrefs = JSON.parse(localStorage.getItem('ROLOCATE_serverRegions') || '{}');
+                    // Best Connection / quick-join honor saved bans only when the master
+                    // "Enable Server Filters" toggle is on. Otherwise pretend nothing's banned.
+                    const serverRegionsPrefs = localStorage.getItem('ROLOCATE_togglefilterserversbutton') === 'true'
+                        ? JSON.parse(localStorage.getItem('ROLOCATE_serverRegions') || '{}')
+                        : {};
                     if (!userLocation) {
                         notifications('Error: Unable to fetch your location. Please enable location access or set it to manual in settings.', 'error', '⚠️', '5000');
                         return;
@@ -18901,23 +19134,31 @@ select:hover, select:focus {
                     premium_message.textContent = "Location detected! Discovering servers...";
                 }
 
-                // thx Waivy
-                let servers = await fetchPublicServers(gameId, totalLimit);
+                // If a caller already fetched servers (e.g., a Filters popup button using
+                // its own endpoint like sortOrder=1 for Smallest Servers), reuse them
+                // verbatim. Otherwise paginate fetchPublicServers as usual.
+                let servers;
+                if (options.servers) {
+                    servers = options.servers;
+                } else {
+                    // thx Waivy
+                    servers = await fetchPublicServers(gameId, totalLimit);
 
-                if (servers.length === 0) {
-                    ConsoleLogEnabled("No servers returned on first attempt, Retrying after delay");
-                    if (premium_message) {
-                        premium_message.textContent = "Waiting for server data to load";
-                    }
-
-                    const retrycap = 3;
-                    for (let retry = 1; retry <= retrycap && servers.length === 0; retry++) {
-                        await new Promise(resolve => setTimeout(resolve, 1500));
+                    if (servers.length === 0) {
+                        ConsoleLogEnabled("No servers returned on first attempt, Retrying after delay");
                         if (premium_message) {
-                            premium_message.textContent = `Retrying server fetch (attempt ${retry}/${retrycap})`;
+                            premium_message.textContent = "Waiting for server data to load";
                         }
-                        ConsoleLogEnabled(`Retry attempt ${retry}/${retrycap}...`);
-                        servers = await fetchPublicServers(gameId, totalLimit);
+
+                        const retrycap = 3;
+                        for (let retry = 1; retry <= retrycap && servers.length === 0; retry++) {
+                            await new Promise(resolve => setTimeout(resolve, 1500));
+                            if (premium_message) {
+                                premium_message.textContent = `Retrying server fetch (attempt ${retry}/${retrycap})`;
+                            }
+                            ConsoleLogEnabled(`Retry attempt ${retry}/${retrycap}...`);
+                            servers = await fetchPublicServers(gameId, totalLimit);
+                        }
                     }
                 }
 
@@ -18944,6 +19185,395 @@ select:hover, select:focus {
                 let serverDetails = [];
                 const thumbnailCache = new Map(); // cache for thumbnails
                 const useBatching = localStorage.ROLOCATE_fastservers === "true";
+                // Server Region / Auto Server Regions intentionally never apply saved bans —
+                // those only gate ServerHop and Best Connection (and only when "Enable Server
+                // Filters" is on). streamCardSorted's "skip banned" branch becomes a no-op.
+                const serverRegionsPrefs = {};
+
+                // === LIVE STREAMING SETUP ===
+                // Initialize the container up front so cards can be appended as each server's
+                // location is fetched, instead of waiting for the entire batch to finish.
+                let minVersion = null, maxVersion = null;
+                serverListContainer.innerHTML = "";
+                serverListContainer.style.display = "grid";
+                serverListContainer.style.gridTemplateColumns = "repeat(4, 1fr)";
+                serverListContainer.style.gap = "0px";
+
+                // Render the inner HTML of the version-display span (with NEW/OLD badge).
+                const renderVersionDisplay = (placeVersion, latestVersion, minV, maxV) => {
+                    if (placeVersion == null || placeVersion === 'N/A') return 'N/A';
+                    if (placeVersion === latestVersion) {
+                        return `${placeVersion} <span style="display: inline-block; background: rgba(34, 197, 94, 0.12); color: #22c55e; font-weight: 600; font-size: 10px; padding: 3px 10px; border-radius: 6px; margin-left: 8px; text-transform: uppercase; letter-spacing: 0.8px; border: 1px solid rgba(34, 197, 94, 0.25);">NEW</span>`;
+                    }
+                    if (minV != null && Number(placeVersion) === minV && minV !== maxV) {
+                        return `${placeVersion} <span style="display: inline-block; background: rgba(239, 68, 68, 0.12); color: #ef4444; font-weight: 600; font-size: 10px; padding: 3px 10px; border-radius: 6px; margin-left: 8px; text-transform: uppercase; letter-spacing: 0.8px; border: 1px solid rgba(239, 68, 68, 0.25);">OLD</span>`;
+                    }
+                    return String(placeVersion);
+                };
+
+                // Build a single server card element from a {server, location} detail.
+                // Reads minVersion/maxVersion from closure so the OLD/NEW badge always
+                // reflects the current min/max as more servers stream in.
+                const buildServerCardElement = ({ server, location }) => {
+                    const serverCard = document.createElement("li");
+                    serverCard.className = "rbx-game-server-item col-md-3 col-sm-4 col-xs-6";
+                    serverCard.style.width = "100%";
+                    serverCard.style.minHeight = "400px";
+                    serverCard.style.display = "flex";
+                    serverCard.style.flexDirection = "column";
+                    serverCard.style.justifyContent = "space-between";
+                    serverCard.style.boxSizing = "border-box";
+                    serverCard.style.outline = 'none';
+
+                    serverCard.setAttribute('data-server-id', server.id);
+                    serverCard.setAttribute('data-place-version', location.placeVersion ?? '');
+
+                    const distance = calculateDistance(
+                        userLocation.latitude,
+                        userLocation.longitude,
+                        location.latitude,
+                        location.longitude
+                    );
+                    serverCard.setAttribute('data-distance-km', String(distance));
+
+                    const pingLabel = document.createElement("div");
+                    pingLabel.style.marginBottom = "8px";
+                    pingLabel.style.padding = "8px 12px";
+                    pingLabel.style.borderRadius = "8px";
+                    pingLabel.style.fontWeight = "bold";
+                    pingLabel.style.textAlign = "center";
+                    pingLabel.style.fontSize = "13px !important";
+                    pingLabel.style.textTransform = "uppercase !important";
+                    pingLabel.style.letterSpacing = "0.5px !important";
+
+                    const calculatedPing = 2.05816 * Math.sqrt((1/0.700042) * (Math.max(distance,0) + 2479.47383)) - 72.29266;
+
+                    if (Math.max(distance, 0) < 1250) {
+                        pingLabel.textContent = "⚡ Fast";
+                        pingLabel.style.backgroundColor = "#1a4a3a";
+                        pingLabel.style.color = "#4ade80";
+                        pingLabel.style.border = "1px solid #22c55e";
+                    } else if (Math.max(distance, 0) < 5000) {
+                        pingLabel.textContent = "⏳ OK";
+                        pingLabel.style.backgroundColor = "#4a3a1a";
+                        pingLabel.style.color = "#fbbf24";
+                        pingLabel.style.border = "1px solid #f59e0b";
+                    } else {
+                        pingLabel.textContent = "🐌 Slow";
+                        pingLabel.style.backgroundColor = "#4a1a1a";
+                        pingLabel.style.color = "#f87171";
+                        pingLabel.style.border = "1px solid #ef4444";
+                    }
+
+                    let thumbnailsContainer;
+                    const cachedThumbnails = thumbnailCache.get(server.id);
+                    if (cachedThumbnails && cachedThumbnails !== 'loading') {
+                        thumbnailsContainer = createThumbnailContainer(cachedThumbnails, server.maxPlayers, server.playing, false);
+                    } else {
+                        thumbnailsContainer = createThumbnailContainer(null, server.maxPlayers, server.playing, true);
+                    }
+
+                    const healthPercentage = Math.min(100, Math.round((server.fps / 60) * 100));
+                    let healthBg, healthIcon;
+                    if (healthPercentage >= 90) {
+                        healthBg = '#1a4a3a';
+                        healthIcon = '🟢';
+                    } else if (healthPercentage >= 80) {
+                        healthBg = '#4a3a1a';
+                        healthIcon = '🟡';
+                    } else if (healthPercentage >= 70) {
+                        healthBg = '#4a2a1a';
+                        healthIcon = '🟠';
+                    } else {
+                        healthBg = '#4a1a1a';
+                        healthIcon = '🔴';
+                    }
+
+                    const cardItem = document.createElement("div");
+                    cardItem.className = "card-item";
+                    cardItem.style.display = "flex";
+                    cardItem.style.flexDirection = "column";
+                    cardItem.style.justifyContent = "space-between";
+                    cardItem.style.height = "100%";
+                    cardItem.style.color = "#e5e5e5";
+
+                    const versionDisplay = renderVersionDisplay(location.placeVersion, latestPublishedVersion, minVersion, maxVersion);
+
+                    cardItem.innerHTML = `
+                    ${thumbnailsContainer.outerHTML}
+                    <div class="rbx-game-server-details game-server-details" style="margin-top: 12px;">
+                        <div class="text-info rbx-game-status rbx-game-server-status text-overflow" style="color: #b3b3b3; font-size: 16px; margin-bottom: 8px; text-align: center;">
+                            ${server.playing} of ${server.maxPlayers} people max
+                        </div>
+                        <div class="server-player-count-gauge border" style="background: #1a1a1a; border: 1px solid #404040; border-radius: 6px; height: 8px; overflow: hidden; margin-bottom: 12px;">
+                            <div class="gauge-inner-bar border" style="background: linear-gradient(90deg, #bcbec8, #bcbec8); height: 100%; border: none; transition: width 0.3s ease; width: ${(server.playing / server.maxPlayers) * 100}%;"></div>
+                        </div>
+                        <span data-placeid="${gameId}">
+                            <button type="button" class="btn-full-width btn-control-xs rbx-game-server-join game-server-join-btn btn-primary-md btn-min-width" style="background: #404040; border: 1px solid #555555; color: #e5e5e5; border-radius: 8px; padding: 10px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; width: 100%; text-transform: uppercase; letter-spacing: 0.5px; font-size: 12px;">Join</button>
+                        </span>
+                    </div>
+                        <div style="margin-top: 12px; text-align: center; color: #b3b3b3;">
+                            ${pingLabel.outerHTML}
+                            <div style="margin-top: 10px; background: #1f1f1f; border-radius: 8px; padding: 12px; border: 1px solid #333333;">
+                                <div style="margin-bottom: 6px; font-size: 14px; color: #888888;">
+                                    <span style="color: #e5e5e5; font-weight: 600;">Estimated Ping:</span> ${calculatedPing.toFixed(1)}ms
+                                </div>
+                                <hr style="margin: 6px 0; border: none; height: 1px; background: #333333;">
+                                <div style="margin-bottom: 6px; font-size: 14px; color: #888888;">
+                                    <span style="color: #e5e5e5; font-weight: 600;">Distance:</span> ${distance.toFixed(1)}km
+                                </div>
+                                <hr style="margin: 6px 0; border: none; height: 1px; background: #333333;">
+                                <div style="margin-bottom: 6px; font-size: 14px; color: #888888;">
+                                    <span style="color: #e5e5e5; font-weight: 600;">Location:</span> ${location.city}, ${location.country.name}
+                                </div>
+                                <hr style="margin: 6px 0; border: none; height: 1px; background: #333333;">
+                                <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+                                    <span style="color: #e5e5e5; font-weight: 600; font-size: 14px;">Server Health:</span>
+                                    <div style="display: flex; align-items: center; gap: 4px; background: ${healthBg}; padding: 3px 8px; border-radius: 6px;">
+                                        <span style="font-size: 12px;">${healthIcon}</span>
+                                        <span style="font-weight: 700; font-size: 13px;">${healthPercentage}%</span>
+                                    </div>
+                                </div>
+                                <hr style="margin: 6px 0; border: none; height: 1px; background: #333333;">
+                                <div style="margin-bottom: 6px; font-size: 14px; color: #888888;">
+                                        <span style="color: #e5e5e5; font-weight: 600;">Version:</span> <span class="rolocate-version-display">${versionDisplay}</span>
+                                </div>
+                                ${location.serverUptime ? `
+                                    <hr style="margin: 6px 0; border: none; height: 1px; background: #333333;">
+                                    <div style="margin-bottom: 6px; font-size: 14px; color: #888888;">
+                                        <span style="color: #e5e5e5; font-weight: 600;">Server Uptime:</span>
+                                        ${location.serverUptime.days === 999999
+                                            ? 'N/A'
+                                            : `${location.serverUptime.days}d ${location.serverUptime.hours}h ${location.serverUptime.minutes}m`}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                    `;
+
+                    const joinButton = cardItem.querySelector(".rbx-game-server-join");
+                    joinButton.addEventListener('mouseenter', () => {
+                        joinButton.style.background = '#4a4a4a';
+                        joinButton.style.borderColor = '#666666';
+                        joinButton.style.transform = 'translateY(-1px)';
+                    });
+                    joinButton.addEventListener('mouseleave', () => {
+                        joinButton.style.background = '#404040';
+                        joinButton.style.borderColor = '#555555';
+                        joinButton.style.transform = 'translateY(0)';
+                    });
+
+                    joinButton.addEventListener("click", () => {
+                        ConsoleLogEnabled(`Roblox.GameLauncher.joinGameInstance(${gameId}, "${server.id}")`);
+                        JoinServer(gameId, server.id);
+                    });
+
+                    const container = adjustJoinButtonContainer(joinButton);
+                    const inviteButton = createInviteButton(gameId, server.id);
+
+                    inviteButton.style.background = '#404040';
+                    inviteButton.style.border = '1px solid #555555';
+                    inviteButton.style.color = '#e5e5e5';
+                    inviteButton.style.borderRadius = '8px';
+                    inviteButton.style.fontWeight = '600';
+                    inviteButton.style.transition = 'all 0.2s ease';
+                    inviteButton.style.textTransform = 'uppercase';
+                    inviteButton.style.letterSpacing = '0.5px';
+                    inviteButton.style.fontSize = '12px';
+
+                    inviteButton.addEventListener('mouseenter', () => {
+                        inviteButton.style.background = '#4a4a4a';
+                        inviteButton.style.borderColor = '#666666';
+                        inviteButton.style.transform = 'translateY(-1px)';
+                    });
+                    inviteButton.addEventListener('mouseleave', () => {
+                        inviteButton.style.background = '#404040';
+                        inviteButton.style.borderColor = '#555555';
+                        inviteButton.style.transform = 'translateY(0)';
+                    });
+
+                    container.appendChild(inviteButton);
+                    serverCard.appendChild(cardItem);
+
+                    if (server.playerTokens && server.playerTokens.length > 0 && !thumbnailCache.has(server.id) && localStorage.ROLOCATE_mobilemode === "false") {
+                        thumbnailCache.set(server.id, 'loading');
+                        fetchPlayerThumbnails(server.playerTokens)
+                            .then(thumbnails => {
+                                thumbnailCache.set(server.id, thumbnails);
+                                updateServerCardThumbnails(server.id, thumbnails, server.maxPlayers, server.playing);
+                            })
+                            .catch(error => {
+                                ConsoleLogEnabled(`Failed to load thumbnails for server ${server.id}:`, error);
+                                thumbnailCache.delete(server.id);
+                            });
+                    }
+
+                    return serverCard;
+                };
+
+                // Compute a numeric sort key for a detail given the active sort mode.
+                // Smaller key = appears earlier in the list. Cards with N/A uptime are
+                // pushed to the end via Number.POSITIVE_INFINITY.
+                const getUptimeMinutes = (detail) => {
+                    const u = detail.location.serverUptime;
+                    if (!u || u.days === 999999) return null;
+                    return (u.days * 24 * 60) + (u.hours * 60) + (u.minutes || 0);
+                };
+                const detailDistance = (detail) => calculateDistance(
+                    userLocation.latitude, userLocation.longitude,
+                    detail.location.latitude, detail.location.longitude
+                );
+                // Composite-sort scale: max earth-distance is ~20000km, so multiplying
+                // player count by 1e6 guarantees the player-count tier always dominates
+                // and distance only breaks ties within a tier.
+                const PLAYER_COUNT_SCALE = 1e6;
+                const computeSortKey = (detail, sortMode) => {
+                    if (sortMode === 'newest') {
+                        const m = getUptimeMinutes(detail);
+                        return m === null ? Number.POSITIVE_INFINITY : m;
+                    }
+                    if (sortMode === 'oldest') {
+                        const m = getUptimeMinutes(detail);
+                        return m === null ? Number.POSITIVE_INFINITY : -m;
+                    }
+                    // Smallest / largest sort by player count, then by ping (distance).
+                    // 1-player servers come first as a group sorted by ping, then 2-player
+                    // sorted by ping, etc.
+                    if (sortMode === 'smallest') return  detail.server.playing * PLAYER_COUNT_SCALE + detailDistance(detail);
+                    if (sortMode === 'largest')  return -detail.server.playing * PLAYER_COUNT_SCALE + detailDistance(detail);
+                    if (sortMode === 'random') {
+                        // Pin a random key per detail so the order is stable across re-sorts.
+                        if (detail._randomKey === undefined) detail._randomKey = Math.random();
+                        return detail._randomKey;
+                    }
+                    return detailDistance(detail);
+                };
+
+                // Track whether the user has manually changed the sort dropdown. Until
+                // they have, streaming honors options.intent (set by the filter button
+                // they clicked). Once they touch it, their selection wins.
+                let userChoseSort = false;
+
+                // Read the current dropdown selections (the dropdowns may not exist yet
+                // on the very first call, before filterContainer is inserted).
+                const getActiveFilterState = () => {
+                    const c  = document.getElementById('countryFilter');
+                    const ci = document.getElementById('cityFilter');
+                    const v  = document.getElementById('versionFilter');
+                    const u  = document.getElementById('uptimeSortFilter');
+                    return {
+                        country: c  ? c.value  : '',
+                        city:    ci ? ci.value : '',
+                        version: v  ? v.value  : '',
+                        sort:    userChoseSort && u ? u.value : intent,
+                    };
+                };
+
+                const detailMatchesFilter = (detail, f) => {
+                    if (f.country && detail.location.country.name !== f.country) return false;
+                    if (f.city) {
+                        const cityKey = `${detail.location.city}${detail.location.region?.name ? `, ${detail.location.region.name}` : ''}`;
+                        if (cityKey !== f.city) return false;
+                    }
+                    if (f.version && String(detail.location.placeVersion) !== f.version) return false;
+                    return true;
+                };
+
+                // Insert a card into the grid at the correct sorted position based on the
+                // active sort mode (intent or user override). Skips banned regions, cards
+                // that don't match the active filters, and (for Player Count routing)
+                // cards that exceed the requested player cap.
+                const streamCardSorted = (detail) => {
+                    const regionKey = `${detail.location.city}_${detail.location.country?.code}`;
+                    if (serverRegionsPrefs[regionKey] === 'banned') return;
+
+                    if (playerCountFilter !== undefined && detail.server.playing > playerCountFilter) return;
+
+                    const f = getActiveFilterState();
+                    if (!detailMatchesFilter(detail, f)) return; // user filtered out
+
+                    const newKey = computeSortKey(detail, f.sort);
+                    const card = buildServerCardElement(detail);
+                    card.setAttribute('data-sort-key', String(newKey));
+
+                    let inserted = false;
+                    for (const sibling of Array.from(serverListContainer.children)) {
+                        const siblingKey = parseFloat(sibling.getAttribute('data-sort-key'));
+                        if (!isNaN(siblingKey) && newKey < siblingKey) {
+                            serverListContainer.insertBefore(card, sibling);
+                            inserted = true;
+                            break;
+                        }
+                    }
+                    if (!inserted) serverListContainer.appendChild(card);
+                };
+
+                // === FILTER BAR + RE-RENDER PIPELINE (set up BEFORE the fetch loop so it's
+                // visible while servers are still being discovered) ===
+                const filterContainer = createFilterDropdowns(serverDetails);
+                serverListContainer.parentNode.insertBefore(filterContainer, serverListContainer);
+
+                // displayFilteredServers fully rebuilds the visible grid. Used when the
+                // user changes country/city/version/sort while the list already has cards.
+                const displayFilteredServers = (country, city, version, sortUptime = 'distance') => {
+                    serverListContainer.innerHTML = "";
+
+                    // Inline filter so it correctly handles every combination, including
+                    // city-without-country, and isn't broken by the stale-cache issue in
+                    // the older `filterServers()` helper (which keys its cache on the
+                    // serverDetails array reference and never sees new entries pushed in).
+                    const filteredServers = serverDetails.filter(d => {
+                        if (country && d.location.country.name !== country) return false;
+                        if (city) {
+                            const cityKey = `${d.location.city}${d.location.region?.name ? `, ${d.location.region.name}` : ''}`;
+                            if (cityKey !== city) return false;
+                        }
+                        if (version && String(d.location.placeVersion) !== version) return false;
+                        // Also drop banned regions so a re-render after a filter change
+                        // matches what streamCardSorted shows during live streaming.
+                        const regionKey = `${d.location.city}_${d.location.country?.code}`;
+                        if (serverRegionsPrefs[regionKey] === 'banned') return false;
+                        // Honor the player-count cap when Player Count routed through here.
+                        if (playerCountFilter !== undefined && d.server.playing > playerCountFilter) return false;
+                        return true;
+                    });
+
+                    // Sort using the unified computeSortKey so newest/oldest/smallest/
+                    // largest/random/distance all go through the same logic.
+                    const sortedServers = filteredServers.slice().sort((a, b) => {
+                        return computeSortKey(a, sortUptime) - computeSortKey(b, sortUptime);
+                    });
+
+                    sortedServers.forEach(detail => {
+                        const card = buildServerCardElement(detail);
+                        card.setAttribute('data-sort-key', String(computeSortKey(detail, sortUptime)));
+                        serverListContainer.appendChild(card);
+                    });
+                };
+
+                // Wire dropdown change handlers up front. The handlers fire as the user
+                // interacts; before any cards exist, they're effectively no-ops.
+                const countryFilter = document.getElementById('countryFilter');
+                const cityFilter    = document.getElementById('cityFilter');
+                const versionFilter = document.getElementById('versionFilter');
+                const uptimeFilter  = document.getElementById('uptimeSortFilter');
+                const redrawthedropdowns = () => {
+                    // Once the user picks a sort from the dropdown, that overrides intent.
+                    displayFilteredServers(
+                        countryFilter.value,
+                        cityFilter.value,
+                        versionFilter.value,
+                        userChoseSort ? uptimeFilter.value : intent
+                    );
+                };
+                countryFilter.addEventListener('change', redrawthedropdowns);
+                cityFilter.addEventListener('change',    redrawthedropdowns);
+                versionFilter.addEventListener('change', redrawthedropdowns);
+                uptimeFilter.addEventListener('change',  () => {
+                    userChoseSort = true;
+                    redrawthedropdowns();
+                });
 
                 // process servers to get location data (WITHOUT waiting for thumbnails)
                 if (useBatching) {
@@ -18960,6 +19590,13 @@ select:hover, select:focus {
                             } = server;
 
                             if (playing >= maxPlayers) {
+                                skippedServers++;
+                                return null;
+                            }
+
+                            // Short-circuit Player Count: skip the rate-limited location
+                            // lookup for servers that already exceed the cap.
+                            if (playerCountFilter !== undefined && playing > playerCountFilter) {
                                 skippedServers++;
                                 return null;
                             }
@@ -18996,6 +19633,13 @@ select:hover, select:focus {
                         const previousProcessedCount = processedCount;
                         const validResults = batchResults.filter(result => result !== null);
                         serverDetails.push(...validResults);
+                        // Live-stream each card into the grid as soon as the batch resolves.
+                        for (const detail of validResults) {
+                            streamCardSorted(detail);
+                        }
+                        // Refresh the dropdown options so newly discovered country/city/version
+                        // entries appear in the filter bar in real time.
+                        if (validResults.length > 0) filterContainer.refresh();
                         processedCount += batch.length;
 
                         // smoothly update the processed count
@@ -19026,6 +19670,13 @@ select:hover, select:focus {
                             maxPlayers,
                             playing
                         } = server;
+
+                        // Short-circuit Player Count: skip the rate-limited location lookup
+                        // for servers that already exceed the cap.
+                        if (playerCountFilter !== undefined && playing > playerCountFilter) {
+                            skippedServers++;
+                            continue;
+                        }
 
                         let location;
                         try {
@@ -19070,10 +19721,12 @@ select:hover, select:focus {
                             continue;
                         }
 
-                        serverDetails.push({
-                            server,
-                            location
-                        });
+                        const detail = { server, location };
+                        serverDetails.push(detail);
+                        // Live-stream this single card into the grid right away, then update
+                        // the filter bar so the new country/city/version is selectable.
+                        streamCardSorted(detail);
+                        filterContainer.refresh();
 
                         if (premium_message) {
                             premium_message.textContent = `Filtering servers, please do not leave this page...\n${totalServers} servers found, ${i + 1} server locations found`;
@@ -19081,9 +19734,10 @@ select:hover, select:focus {
                     }
                 }
 
-                // filter out servers from banned regions
+                // Server Region / Auto Server Regions never apply saved bans, so this
+                // block is intentionally a no-op and left only for try/catch shape parity.
                 try {
-                    const serverRegionsPrefs = JSON.parse(localStorage.getItem('ROLOCATE_serverRegions') || '{}');
+                    const serverRegionsPrefs = {};
                     const beforeFilterCount = serverDetails.length;
                     const allowed = serverDetails.filter(d => {
                         const key = `${d.location.city}_${d.location.country?.code}`;
@@ -19134,302 +19788,26 @@ select:hover, select:focus {
                 showMessage("END");
                 Loadingbar(false);
 
-                // Add filter dropdowns
-                const filterContainer = createFilterDropdowns(serverDetails);
-                serverListContainer.parentNode.insertBefore(filterContainer, serverListContainer);
-
-                // Style the server list container
-                serverListContainer.style.display = "grid";
-                serverListContainer.style.gridTemplateColumns = "repeat(4, 1fr)";
-                serverListContainer.style.gap = "0px";
-
-                // compacted code to save some space. still readable tho. for server version labels (New) and (Old)
+                // Compute final min/max version now that all servers are in. minVersion and
+                // maxVersion are the closure-scope `let`s declared before the fetch loop, so
+                // assigning here also updates the OLD/NEW badge logic in buildServerCardElement.
                 const serverVersions = serverDetails.map(d => d.location.placeVersion).filter(v => v != null && v !== 'N/A').map(Number);
-                const minVersion = serverVersions.length > 0 ? Math.min(...serverVersions) : null;
-                const maxVersion = serverVersions.length > 0 ? Math.max(...serverVersions) : null;
-                const displayFilteredServers = (country, city, version, sortUptime = 'distance') => {
-                    serverListContainer.innerHTML = "";
+                minVersion = serverVersions.length > 0 ? Math.min(...serverVersions) : null;
+                maxVersion = serverVersions.length > 0 ? Math.max(...serverVersions) : null;
 
-                    const filteredServers = filterServers(serverDetails, country, city, version);
+                // Patch OLD/NEW badges on already-streamed cards in place (no re-render).
+                serverListContainer.querySelectorAll('.rolocate-version-display').forEach(span => {
+                    const card = span.closest('[data-place-version]');
+                    if (!card) return;
+                    const raw = card.getAttribute('data-place-version');
+                    const v = raw === '' || raw == null ? null : Number(raw);
+                    span.innerHTML = renderVersionDisplay(isNaN(v) ? raw : v, latestPublishedVersion, minVersion, maxVersion);
+                });
 
-                    // Helper: total uptime in minutes (handles missing / N/A)
-                    const getUptimeMinutes = (s) => {
-                        const u = s.location.serverUptime;
-                        if (!u || u.days === 999999) return null; // N/A or missing
-                        return (u.days * 24 * 60) + (u.hours * 60) + (u.minutes || 0);
-                    };
-
-                    // Sort based on selected mode
-                    let sortedServers;
-                    if (sortUptime === 'newest') {
-                        // Newest first = smallest uptime (recently started)
-                        sortedServers = filteredServers.sort((a, b) => {
-                            const uA = getUptimeMinutes(a);
-                            const uB = getUptimeMinutes(b);
-                            if (uA === null && uB === null) return 0;
-                            if (uA === null) return 1;       // push N/A to end
-                            if (uB === null) return -1;
-                            return uA - uB;
-                        });
-                    } else if (sortUptime === 'oldest') {
-                        // Oldest first = largest uptime (long running)
-                        sortedServers = filteredServers.sort((a, b) => {
-                            const uA = getUptimeMinutes(a);
-                            const uB = getUptimeMinutes(b);
-                            if (uA === null && uB === null) return 0;
-                            if (uA === null) return 1;       // push N/A to end
-                            if (uB === null) return -1;
-                            return uB - uA;
-                        });
-                    } else {
-                        // Default: sort by distance
-                        sortedServers = filteredServers.sort((a, b) => {
-                            const distanceA = calculateDistance(userLocation.latitude, userLocation.longitude, a.location.latitude, a.location.longitude);
-                            const distanceB = calculateDistance(userLocation.latitude, userLocation.longitude, b.location.latitude, b.location.longitude);
-                            return distanceA - distanceB;
-                        });
-                    }
-
-                    // create server cards immediately
-                    sortedServers.forEach(({
-                        server,
-                        location
-                    }) => {
-                        const serverCard = document.createElement("li");
-                        serverCard.className = "rbx-game-server-item col-md-3 col-sm-4 col-xs-6";
-                        serverCard.style.width = "100%";
-                        serverCard.style.minHeight = "400px";
-                        serverCard.style.display = "flex";
-                        serverCard.style.flexDirection = "column";
-                        serverCard.style.justifyContent = "space-between";
-                        serverCard.style.boxSizing = "border-box";
-                        serverCard.style.outline = 'none';
-
-                        serverCard.setAttribute('data-server-id', server.id);
-
-                        // Create ping label
-                        const pingLabel = document.createElement("div");
-                        pingLabel.style.marginBottom = "8px";
-                        pingLabel.style.padding = "8px 12px";
-                        pingLabel.style.borderRadius = "8px";
-                        pingLabel.style.fontWeight = "bold";
-                        pingLabel.style.textAlign = "center";
-                        pingLabel.style.fontSize = "13px !important";
-                        pingLabel.style.textTransform = "uppercase !important";
-                        pingLabel.style.letterSpacing = "0.5px !important";
-
-                        // calculate distance and ping
-                        const distance = calculateDistance(
-                            userLocation.latitude,
-                            userLocation.longitude,
-                            location.latitude,
-                            location.longitude
-                        );
-
-                        // formula derived from regression of 382 data points. restricted domain of distance >= 0
-                        // distance is km
-                        const calculatedPing = 2.05816 * Math.sqrt((1/0.700042) * (Math.max(distance,0) + 2479.47383)) - 72.29266;
-
-
-                        if (Math.max(distance, 0) < 1250) {
-                            pingLabel.textContent = "⚡ Fast";
-                            pingLabel.style.backgroundColor = "#1a4a3a";
-                            pingLabel.style.color = "#4ade80";
-                            pingLabel.style.border = "1px solid #22c55e";
-                        } else if (Math.max(distance, 0) < 5000) {
-                            pingLabel.textContent = "⏳ OK";
-                            pingLabel.style.backgroundColor = "#4a3a1a";
-                            pingLabel.style.color = "#fbbf24";
-                            pingLabel.style.border = "1px solid #f59e0b";
-                        } else {
-                            pingLabel.textContent = "🐌 Slow";
-                            pingLabel.style.backgroundColor = "#4a1a1a";
-                            pingLabel.style.color = "#f87171";
-                            pingLabel.style.border = "1px solid #ef4444";
-                        }
-
-                        // create thumbnails
-                        let thumbnailsContainer;
-                        const cachedThumbnails = thumbnailCache.get(server.id);
-                        if (cachedThumbnails && cachedThumbnails !== 'loading') {
-                            thumbnailsContainer = createThumbnailContainer(cachedThumbnails, server.maxPlayers, server.playing, false);
-                        } else {
-                            thumbnailsContainer = createThumbnailContainer(null, server.maxPlayers, server.playing, true);
-                        }
-
-                        // calculate server health
-                        const healthPercentage = Math.min(100, Math.round((server.fps / 60) * 100));
-                        let healthBg, healthIcon;
-                        if (healthPercentage >= 90) {
-                            healthBg = '#1a4a3a';
-                            healthIcon = '🟢';
-                        } else if (healthPercentage >= 80) {
-                            healthBg = '#4a3a1a';
-                            healthIcon = '🟡';
-                        } else if (healthPercentage >= 70) {
-                            healthBg = '#4a2a1a';
-                            healthIcon = '🟠';
-                        } else {
-                            healthBg = '#4a1a1a'; // yea bad server
-                            healthIcon = '🔴';
-                        }
-
-                        const cardItem = document.createElement("div");
-                        cardItem.className = "card-item";
-                        cardItem.style.display = "flex";
-                        cardItem.style.flexDirection = "column";
-                        cardItem.style.justifyContent = "space-between";
-                        cardItem.style.height = "100%";
-                        cardItem.style.color = "#e5e5e5";
-
-                        const versionDisplay = location.placeVersion && location.placeVersion !== 'N/A'
-                            ? (location.placeVersion === latestPublishedVersion
-                                ? `${location.placeVersion} <span style="display: inline-block; background: rgba(34, 197, 94, 0.12); color: #22c55e; font-weight: 600; font-size: 10px; padding: 3px 10px; border-radius: 6px; margin-left: 8px; text-transform: uppercase; letter-spacing: 0.8px; border: 1px solid rgba(34, 197, 94, 0.25);">NEW</span>`
-                                : location.placeVersion === minVersion
-                                    ? `${location.placeVersion} <span style="display: inline-block; background: rgba(239, 68, 68, 0.12); color: #ef4444; font-weight: 600; font-size: 10px; padding: 3px 10px; border-radius: 6px; margin-left: 8px; text-transform: uppercase; letter-spacing: 0.8px; border: 1px solid rgba(239, 68, 68, 0.25);">OLD</span>`
-                                    : location.placeVersion)
-                            : 'N/A';
-
-                        cardItem.innerHTML = `
-                        ${thumbnailsContainer.outerHTML}
-                        <div class="rbx-game-server-details game-server-details" style="margin-top: 12px;">
-                            <div class="text-info rbx-game-status rbx-game-server-status text-overflow" style="color: #b3b3b3; font-size: 16px; margin-bottom: 8px; text-align: center;">
-                                ${server.playing} of ${server.maxPlayers} people max
-                            </div>
-                            <div class="server-player-count-gauge border" style="background: #1a1a1a; border: 1px solid #404040; border-radius: 6px; height: 8px; overflow: hidden; margin-bottom: 12px;">
-                                <div class="gauge-inner-bar border" style="background: linear-gradient(90deg, #bcbec8, #bcbec8); height: 100%; border: none; transition: width 0.3s ease; width: ${(server.playing / server.maxPlayers) * 100}%;"></div>
-                            </div>
-                            <span data-placeid="${gameId}">
-                                <button type="button" class="btn-full-width btn-control-xs rbx-game-server-join game-server-join-btn btn-primary-md btn-min-width" style="background: #404040; border: 1px solid #555555; color: #e5e5e5; border-radius: 8px; padding: 10px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; width: 100%; text-transform: uppercase; letter-spacing: 0.5px; font-size: 12px;">Join</button>
-                            </span>
-                        </div>
-                            <div style="margin-top: 12px; text-align: center; color: #b3b3b3;">
-                                ${pingLabel.outerHTML}
-                                <div style="margin-top: 10px; background: #1f1f1f; border-radius: 8px; padding: 12px; border: 1px solid #333333;">
-                                    <div style="margin-bottom: 6px; font-size: 14px; color: #888888;">
-                                        <span style="color: #e5e5e5; font-weight: 600;">Estimated Ping:</span> ${calculatedPing.toFixed(1)}ms
-                                    </div>
-                                    <hr style="margin: 6px 0; border: none; height: 1px; background: #333333;">
-                                    <div style="margin-bottom: 6px; font-size: 14px; color: #888888;">
-                                        <span style="color: #e5e5e5; font-weight: 600;">Distance:</span> ${distance.toFixed(1)}km
-                                    </div>
-                                    <hr style="margin: 6px 0; border: none; height: 1px; background: #333333;">
-                                    <div style="margin-bottom: 6px; font-size: 14px; color: #888888;">
-                                        <span style="color: #e5e5e5; font-weight: 600;">Location:</span> ${location.city}, ${location.country.name}
-                                    </div>
-                                    <hr style="margin: 6px 0; border: none; height: 1px; background: #333333;">
-                                    <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
-                                        <span style="color: #e5e5e5; font-weight: 600; font-size: 14px;">Server Health:</span>
-                                        <div style="display: flex; align-items: center; gap: 4px; background: ${healthBg}; padding: 3px 8px; border-radius: 6px;">
-                                            <span style="font-size: 12px;">${healthIcon}</span>
-                                            <span style="font-weight: 700; font-size: 13px;">${healthPercentage}%</span>
-                                        </div>
-                                    </div>
-                                    <hr style="margin: 6px 0; border: none; height: 1px; background: #333333;">
-                                    <div style="margin-bottom: 6px; font-size: 14px; color: #888888;">
-                                            <span style="color: #e5e5e5; font-weight: 600;">Version:</span> ${versionDisplay}
-                                    </div>
-                                    ${location.serverUptime ? `
-                                        <hr style="margin: 6px 0; border: none; height: 1px; background: #333333;">
-                                        <div style="margin-bottom: 6px; font-size: 14px; color: #888888;">
-                                            <span style="color: #e5e5e5; font-weight: 600;">Server Uptime:</span>
-                                            ${location.serverUptime.days === 999999
-                                                ? 'N/A'
-                                                : `${location.serverUptime.days}d ${location.serverUptime.hours}h ${location.serverUptime.minutes}m`}
-                                        </div>
-                                    ` : ''}
-                                </div>
-                            </div>
-                        </div>
-                        `;
-
-                        const joinButton = cardItem.querySelector(".rbx-game-server-join");
-                        joinButton.addEventListener('mouseenter', () => {
-                            joinButton.style.background = '#4a4a4a';
-                            joinButton.style.borderColor = '#666666';
-                            joinButton.style.transform = 'translateY(-1px)';
-                        });
-                        joinButton.addEventListener('mouseleave', () => {
-                            joinButton.style.background = '#404040';
-                            joinButton.style.borderColor = '#555555';
-                            joinButton.style.transform = 'translateY(0)';
-                        });
-
-                        joinButton.addEventListener("click", () => {
-                            ConsoleLogEnabled(`Roblox.GameLauncher.joinGameInstance(${gameId}, "${server.id}")`); // not anymore
-                            JoinServer(gameId, server.id);
-                        });
-
-                        const container = adjustJoinButtonContainer(joinButton);
-                        const inviteButton = createInviteButton(gameId, server.id);
-
-                        inviteButton.style.background = '#404040';
-                        inviteButton.style.border = '1px solid #555555';
-                        inviteButton.style.color = '#e5e5e5';
-                        inviteButton.style.borderRadius = '8px';
-                        inviteButton.style.fontWeight = '600';
-                        inviteButton.style.transition = 'all 0.2s ease';
-                        inviteButton.style.textTransform = 'uppercase';
-                        inviteButton.style.letterSpacing = '0.5px';
-                        inviteButton.style.fontSize = '12px';
-
-                        inviteButton.addEventListener('mouseenter', () => {
-                            inviteButton.style.background = '#4a4a4a';
-                            inviteButton.style.borderColor = '#666666';
-                            inviteButton.style.transform = 'translateY(-1px)';
-                        });
-                        inviteButton.addEventListener('mouseleave', () => {
-                            inviteButton.style.background = '#404040';
-                            inviteButton.style.borderColor = '#555555';
-                            inviteButton.style.transform = 'translateY(0)';
-                        });
-
-                        container.appendChild(inviteButton);
-
-                        serverCard.appendChild(cardItem);
-                        serverListContainer.appendChild(serverCard);
-
-                        // load real thumbnails in background if not cached and not already being fetched
-                        // added another condition so that finding thumbnails only occurs if mobilemode = false. This is a performance upgrade for mobile users.
-                        if (server.playerTokens && server.playerTokens.length > 0 && !thumbnailCache.has(server.id) && localStorage.ROLOCATE_mobilemode === "false") {
-                            // mark as being fetched to prevent duplicate requests
-                            thumbnailCache.set(server.id, 'loading');
-                            fetchPlayerThumbnails(server.playerTokens)
-                                .then(thumbnails => {
-                                    thumbnailCache.set(server.id, thumbnails);
-                                    updateServerCardThumbnails(server.id, thumbnails, server.maxPlayers, server.playing);
-                                })
-                                .catch(error => {
-                                    ConsoleLogEnabled(`Failed to load thumbnails for server ${server.id}:`, error);
-                                    // remove the 'loading' marker on error so it can be retried
-                                    thumbnailCache.delete(server.id);
-                                });
-                        }
-                    });
-                };
-
-                // Add event listeners to dropdowns
-                const countryFilter = document.getElementById('countryFilter');
-                const cityFilter = document.getElementById('cityFilter');
-                const versionFilter = document.getElementById('versionFilter');
-                const uptimeFilter = document.getElementById('uptimeSortFilter');
-
-                const redrawthedropdowns = () => {
-                    displayFilteredServers(
-                        countryFilter.value,
-                        cityFilter.value,
-                        versionFilter.value,
-                        uptimeFilter.value   // yep pass the sort
-                    );
-                };
-
-                countryFilter.addEventListener('change', redrawthedropdowns);
-                cityFilter.addEventListener('change', redrawthedropdowns);
-                versionFilter.addEventListener('change', redrawthedropdowns);
-                uptimeFilter.addEventListener('change', redrawthedropdowns);
-
-                // Initial draw with default sort (distance)
-                displayFilteredServers("", "", "", "distance"); // show closest distance servers by default
+                // Final dropdown refresh now that all servers are in (counts & banned annotations
+                // become accurate). Filter bar, displayFilteredServers, and listeners were all
+                // wired up before the fetch loop started.
+                filterContainer.refresh();
 
             } catch (error) {
                 if (error === 'purchase_required') {
