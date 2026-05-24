@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RoLocate
 // @namespace    https://oqarshi.github.io/
-// @version      46.8
+// @version      46.9
 // @description  Adds filter options to roblox server page. Alternative to paid extensions like RoPro, RoGold®, RoQol, and RoKit.
 // @author       Oqarshi
 // @match        https://www.roblox.com/*
@@ -14,7 +14,7 @@
 // @grant        GM_setValue
 // @grant        GM_deleteValue
 // @require      https://update.greasyfork.org/scripts/535590/1586769/Rolocate%20Base64%20Image%20Library%2020.js
-// @require      https://update.greasyfork.org/scripts/547134/1813490/Rolocate%20Server%20Region%20Data%20%28Data%20Saving%29.js
+// @require      https://update.greasyfork.org/scripts/547134/1833171/Rolocate%20Server%20Region%20Data%20%28Data%20Saving%29.js
 // @require      https://update.greasyfork.org/scripts/540553/1648593/Rolocate%20Flag%20Base64%20Data.js
 // @require      https://update.greasyfork.org/scripts/544437/1642116/Rolocate%20Restore%20Classic%20Terms%20All%20Languages.js
 // @connect      thumbnails.roblox.com
@@ -27,6 +27,8 @@
 // @connect      groups.roblox.com
 // @connect      users.roblox.com
 // @connect      catalog.roblox.com
+// @downloadURL https://update.greasyfork.org/scripts/523727/RoLocate.user.js
+// @updateURL https://update.greasyfork.org/scripts/523727/RoLocate.meta.js
 // ==/UserScript==
 
 
@@ -823,9 +825,10 @@
         localStorage.removeItem('ROLOCATE_compactprivateservers');
         localStorage.removeItem('ROLOCATE_mutualfriends');
 
-        const VERSION = "V46.8", PREV_VERSION = "V46.7";
+        const VERSION = "V46.9", PREV_VERSION = "V46.8";
         const changelog = {
-            serverfiltersregions:  ["⏰","Server Age/Uptime","You can now sort by server uptime/age when finding server regions! Roblox has recently provided this info in their api. May not be present for all servers.","New"],
+            smallerrobloxsidebar: ["⚙️","Smaller Roblox Sidebar."," Brings it back to its original size. Available in settings -> appearance. Not enabled by default.","New"],
+            serverregions : ["🌎","Server Regions","More datacenters added. So, servers in India should be found again.","Updated"]
         };
 
         const cur = localStorage.getItem('version') || "V0.0";
@@ -1141,7 +1144,6 @@
         document.body.appendChild(el);
     }
 
-
     // default settings.
     const defaultSettings = {
         enableLogs: false, removeads: true, togglefilterserversbutton: true,
@@ -1153,14 +1155,14 @@
         betterfriends: true, restoreclassicterms: true, betterprivateservers: true,
         custombackgrounds: false, btrobloxfix: false, mobilemode: false,
         joinconfirmation: true, forcedarkmode: false, responsivegamecards: true,
-        bettergamestats: false
+        bettergamestats: false, smallerrobloxsidebar: false
     };
 
     // presets in settings
     const presetConfigurations = {
       default: { name: "Default", settings: {} },
       mobilesettings: { name: "Mobile Settings", settings: {"loadbetterprofileinfo": false, "disablechat": true, "smartjoinpopup": false, "mobilemode": true, "responsivegamecards": false} },
-      developerpref: { name: "Dev Settings", settings: {"enableLogs": true, "disablechat": true, "bettergamestats": true} },
+      developerpref: { name: "Dev Settings", settings: {"enableLogs": true, "disablechat": true, "bettergamestats": true, "smallerrobloxsidebar": true} },
       serverfiltersonly: { name: "Server Filters Only", settings: {"removeads": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "disabletrailer": false, "loadbetterprofileinfo": false, "smartsearch": false, "quicklaunchgames": false, "betterfriends": false, "restoreclassicterms": false, "betterprivateservers": false, "responsivegamecards": false} },
       smartsearchonly: { name: "Smart Search Only", settings: {"removeads": false, "togglefilterserversbutton": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "fastservers": false, "disabletrailer": false, "loadbetterprofileinfo": false, "quicklaunchgames": false, "smartjoinpopup": false, "betterfriends": false, "restoreclassicterms": false, "betterprivateservers": false, "joinconfirmation": false, "responsivegamecards": false} },
       disablerolocate: { name: "Disable RoLocate", settings: {"removeads": false, "togglefilterserversbutton": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "fastservers": false, "disabletrailer": false, "loadbetterprofileinfo": false, "smartsearch": false, "quicklaunchgames": false, "smartjoinpopup": false, "betterfriends": false, "restoreclassicterms": false, "betterprivateservers": false, "joinconfirmation": false, "responsivegamecards": false} },
@@ -1175,7 +1177,6 @@
             }
         });
     }
-
 
     /*******************************************************
     name of function: initializeCoordinatesStorage
@@ -1222,7 +1223,7 @@
                 <div style="text-align:left;">
                     <div style="font-size:22px;font-weight:700;color:#fff;letter-spacing:0.5px;line-height:1.1;">RoLocate</div>
                     <div style="margin-top:8px;display:inline-block;background:rgba(220,53,69,0.08);border:1.5px solid rgba(220,53,69,0.35);padding:3px 10px;border-radius:8px;">
-                        <span style="font-size:13px;font-weight:700;color:#e8566a;letter-spacing:1.5px;">V 46.8</span>
+                        <span style="font-size:13px;font-weight:700;color:#e8566a;letter-spacing:1.5px;">V 46.9</span>
                     </div>
                 </div>
             </div>
@@ -1341,6 +1342,23 @@
                 </span>
                 <button id="edit-betterprivateservers-btn" class="edit-button" type="button" style="display: none;">Edit</button>
                 <span class="help-icon" data-help="Better Private Servers">?</span>
+            </label>
+
+            <label class="toggle-slider">
+                <input type="checkbox" id="responsivegamecards">
+                <span class="slider"></span>
+                Responsive Game Cards
+                <span class="help-icon" data-help="Responsive Game Cards">?</span>
+            </label>
+
+            <label class="toggle-slider new_label">
+                <input type="checkbox" id="smallerrobloxsidebar">
+                <span class="slider"></span>
+                Smaller Roblox Sidebar
+                <span class="new">New
+                    <span class="tooltip">Just Released/Updated</span>
+                </span>
+                <span class="help-icon" data-help="Smaller Roblox Sidebar">?</span>
             </label>
 
             <label class="toggle-slider experiment_label">
@@ -1804,6 +1822,7 @@
                 <li id="help-Restore Classic Terms"><strong>Restore Classic Terms:</strong> <span>Reverts corporate buzzwords Roblox has added. Example: “Connections” becomes “Friends”. May not be translated into all languages yet.</span></li>
                 <li id="help-Better Private Servers"><strong>Better Private Servers:</strong> <span>Compacts private servers on game pages, so that they do not take up so much space.</span></li>
                 <li id="help-Responsive Game Cards"><strong>Responsive Game Cards:</strong> <span>Makes game cards on the website more responsive when hovering over them.</span></li>
+                <li id="help-Smaller Roblox Sidebar"><strong>Smaller Roblox Sidebar:</strong> <span>Shrinks/compacts the Roblox Side Bar.</span></li>
                 <li id="help-Backgrounds"><strong>Backgrounds:</strong> <span>Allows you to change the background of your roblox page and customize the colors of other stuff on the page. Still very experimental as there could be UI and storage issues.</span></li>
             </ul>
 
@@ -3150,6 +3169,7 @@ li a.about-link:hover::after {
             ["Restore Classic Terms", "appearance", "restoreclassicterms", "classic terms restore friends groups catalog connections communities marketplace"],
             ["Responsive Game Cards", "appearance", "responsivegamecards", "game cards responsive"],
             ["Better Private Servers", "appearance", "betterprivateservers", "small private server compact"],
+            ["Smaller Roblox Sidebar", "appearance", "smallerrobloxsidebar", "smaller sidebar compact minimize icons"],
             ["Custom Backgrounds", "appearance", "custombackgrounds", "custom background custom theme"],
             ["Enable Console Logs", "advanced", "enableLogs", "console log debug"],
             ["Enable Server Filters", "advanced", "togglefilterserversbutton", "server filter server regions best connection small server"],
@@ -11480,7 +11500,7 @@ li a.about-link:hover::after {
     *******************************************************/
     // WARNING: Do not republish this script. Licensed for personal use only.
     // oneday I will change the variable names from ip to datacenters
-async function fetchServerDetails(gameId, jobId) { //here!
+    async function fetchServerDetails(gameId, jobId) { //here!
         const useBatching = localStorage.ROLOCATE_fastservers === "true";
 
         if (!useBatching) {
@@ -14201,6 +14221,50 @@ async function fetchServerDetails(gameId, jobId) { //here!
     }
 
     /*******************************************************
+    name of function: setSidebarMode
+    description: does sidebar stuff shinrks yea
+    *******************************************************/
+    function setSidebarMode(mode) {
+      if (localStorage.getItem("ROLOCATE_smallerrobloxsidebar") === "false") {
+        return;
+      }
+      const sidebarContainer = document.getElementById('left-navigation-container');
+      const contentDiv = document.getElementById('content');
+      if (!sidebarContainer || !contentDiv) return;
+
+      // communits = groups
+      const isCommunities = window.location.pathname.startsWith('/communities/');
+
+      const ORIGINAL_WIDTH = 289;
+      const COMPACT_WIDTH = 210;
+
+      const widthContainers = sidebarContainer.querySelectorAll(
+        '.left-nav, .width-\\[289px\\], .width-\\[288px\\]'
+      );
+
+      // original margin)
+      if (!isCommunities && !contentDiv.dataset.originalMarginLeft) {
+        contentDiv.dataset.originalMarginLeft =
+          parseInt(getComputedStyle(contentDiv).marginLeft, 10) || 0;
+      }
+
+      const originalMarginLeft = isCommunities ? 0 : parseInt(contentDiv.dataset.originalMarginLeft, 10);
+
+      // compact mode only. future might add icons
+      const targetWidth = mode === 'compact' ? COMPACT_WIDTH : ORIGINAL_WIDTH;
+
+      // width change
+      widthContainers.forEach(el => {
+        el.style.width = `${targetWidth}px`;
+      });
+
+      // bro groups are like dumb idk.
+      if (!isCommunities) {
+        const moveAmount = ORIGINAL_WIDTH - targetWidth;
+        contentDiv.style.marginLeft = `${originalMarginLeft - moveAmount}px`;
+      }
+    }
+    /*******************************************************
     name of function: getCsrfToken
     description: get crsf token
     *******************************************************/
@@ -14299,6 +14363,7 @@ async function fetchServerDetails(gameId, jobId) { //here!
         showOldRobloxGreeting(); // shows old greeting
         validateManualMode(); // checks for manual mode
         qualityfilterRobloxGames(); // filters roblox game if it is on
+        setSidebarMode('compact'); // shirnk sidebar if enabled
 
         // start observing URL changes cuase its cool
         observeURLChanges();
