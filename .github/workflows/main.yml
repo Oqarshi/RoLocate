@@ -21,7 +21,7 @@ jobs:
 
       - name: Check userscript metadata
         run: |
-          HEADER=$(head -n 50 RoLocate.userscript.js)
+          HEADER=$(head -n 50 RoLocate.user.js)
           MISSING=""
           for FIELD in "@name" "@namespace" "@version" "@description" "@match" "@author" "@license" "@grant"; do
             echo "$HEADER" | grep -q "$FIELD" || MISSING="$MISSING $FIELD"
