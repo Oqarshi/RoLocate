@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RoLocate
 // @namespace    https://oqarshi.github.io/
-// @version      46.10
+// @version      46.11
 // @description  Adds filter options to roblox server page. Alternative to paid extensions like RoPro, RoGold®, RoQol, and RoKit.
 // @author       Oqarshi
 // @match        https://www.roblox.com/*
@@ -11514,7 +11514,9 @@ li a.about-link:hover::after {
                     withCredentials: true,
                     data: JSON.stringify({
                         placeId: gameId,
-                        gameId: jobId
+                        gameId: jobId,
+                        gameJoinAttemptId: crypto.randomUUID(),
+                        joinOrigin: 'RoLocate_Fetch_Server_Region'
                     }),
                     onload: function(response) {
                         const json = JSON.parse(response.responseText);
@@ -11625,7 +11627,12 @@ li a.about-link:hover::after {
                         "X-CSRF-TOKEN": csrfToken, // why send this now roblox?
                     },
                     withCredentials: true,
-                    data: JSON.stringify({ placeId: gameId, gameId: jobId }),
+                    data: JSON.stringify({
+                        placeId: gameId,
+                        gameId: jobId,
+                        gameJoinAttemptId: crypto.randomUUID(),
+                        joinOrigin: 'RoLocate_Fetch_Server_Region'
+                    }),
                     onload: function(response) {
                         const json = JSON.parse(response.responseText);
                         ConsoleLogEnabled("API Response:", json);
