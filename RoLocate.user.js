@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RoLocate
 // @namespace    https://oqarshi.github.io/
-// @version      46.9
+// @version      46.10
 // @description  Adds filter options to roblox server page. Alternative to paid extensions like RoPro, RoGold®, RoQol, and RoKit.
 // @author       Oqarshi
 // @match        https://www.roblox.com/*
@@ -27,8 +27,6 @@
 // @connect      groups.roblox.com
 // @connect      users.roblox.com
 // @connect      catalog.roblox.com
-// @downloadURL https://update.greasyfork.org/scripts/523727/RoLocate.user.js
-// @updateURL https://update.greasyfork.org/scripts/523727/RoLocate.meta.js
 // ==/UserScript==
 
 
@@ -825,10 +823,9 @@
         localStorage.removeItem('ROLOCATE_compactprivateservers');
         localStorage.removeItem('ROLOCATE_mutualfriends');
 
-        const VERSION = "V46.9", PREV_VERSION = "V46.8";
+        const VERSION = "V46.10", PREV_VERSION = "V46.9";
         const changelog = {
-            smallerrobloxsidebar: ["⚙️","Smaller Roblox Sidebar."," Brings it back to its original size. Available in settings -> appearance. Not enabled by default.","New"],
-            serverregions : ["🌎","Server Regions","More datacenters added. So, servers in India should be found again.","Updated"]
+            Bugfix: ["🐛","Fix Roblox Server Regions"," Fix Roblox Server Regions","fixed"]
         };
 
         const cur = localStorage.getItem('version') || "V0.0";
@@ -1223,7 +1220,7 @@
                 <div style="text-align:left;">
                     <div style="font-size:22px;font-weight:700;color:#fff;letter-spacing:0.5px;line-height:1.1;">RoLocate</div>
                     <div style="margin-top:8px;display:inline-block;background:rgba(220,53,69,0.08);border:1.5px solid rgba(220,53,69,0.35);padding:3px 10px;border-radius:8px;">
-                        <span style="font-size:13px;font-weight:700;color:#e8566a;letter-spacing:1.5px;">V 46.9</span>
+                        <span style="font-size:13px;font-weight:700;color:#e8566a;letter-spacing:1.5px;">V 46.10</span>
                     </div>
                 </div>
             </div>
@@ -11501,6 +11498,7 @@ li a.about-link:hover::after {
     // WARNING: Do not republish this script. Licensed for personal use only.
     // oneday I will change the variable names from ip to datacenters
     async function fetchServerDetails(gameId, jobId) { //here!
+        const csrfToken = await getCsrfToken(); // calling this
         const useBatching = localStorage.ROLOCATE_fastservers === "true";
 
         if (!useBatching) {
@@ -11511,7 +11509,9 @@ li a.about-link:hover::after {
                     headers: {
                         "Content-Type": "application/json",
                         "User-Agent": "Roblox/WinInet",
+                        "X-CSRF-TOKEN": csrfToken, // why send this now roblox?
                     },
+                    withCredentials: true,
                     data: JSON.stringify({
                         placeId: gameId,
                         gameId: jobId
@@ -11565,9 +11565,9 @@ li a.about-link:hover::after {
                         const serverClaimedTimeMs = json.joinScript.ServerClaimedTime;
 
                         if (serverClaimedTimeMs === 0) {
-                            // The "Ancient Server" exception
+                            // the "Ancient Server" exception
                             location.serverClaimedTimeMs = 0;
-                            location.serverUptime = { days: 999999, hours: 0, minutes: 0 };
+                            location.serverUptime = { days: 999999, hours: 0, minutes: 0 }; // ik this is bad but its ok for now
                         } else if (serverClaimedTimeMs) {
                             // Normal calculation
                             location.serverClaimedTimeMs = serverClaimedTimeMs;
@@ -11621,7 +11621,8 @@ li a.about-link:hover::after {
                     url: "https://gamejoin.roblox.com/v1/join-game-instance",
                     headers: {
                         "Content-Type": "application/json",
-                        "User-Agent": "Roblox/WinInet"
+                        "User-Agent": "Roblox/WinInet",
+                        "X-CSRF-TOKEN": csrfToken, // why send this now roblox?
                     },
                     withCredentials: true,
                     data: JSON.stringify({ placeId: gameId, gameId: jobId }),
@@ -11676,7 +11677,7 @@ li a.about-link:hover::after {
                         const serverClaimedTimeMs = json.joinScript.ServerClaimedTime;
 
                         if (serverClaimedTimeMs === 0) {
-                            // will fix dont put into production
+                            // will fix dont put into production, holy this went into production, but lowkey it works so keepin it
                             location.serverClaimedTimeMs = 0;
                             location.serverUptime = { days: 999999, hours: 0, minutes: 0 };
                         } else if (serverClaimedTimeMs) {
