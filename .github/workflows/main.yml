@@ -17,7 +17,7 @@ jobs:
           node-version: 24
 
       - name: Check JS syntax
-        run: node --check RoLocate.userscript.js
+        run: node --check RoLocate.user.js
 
       - name: Check userscript metadata
         run: |
