@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RoLocate
 // @namespace    https://oqarshi.github.io/
-// @version      46.11
+// @version      47.0
 // @description  Adds filter options to roblox server page. Alternative to paid extensions like RoPro, RoGold®, RoQol, and RoKit.
 // @author       Oqarshi
 // @match        https://www.roblox.com/*
@@ -13,8 +13,8 @@
 // @grant        GM_listValues
 // @grant        GM_setValue
 // @grant        GM_deleteValue
-// @require      https://update.greasyfork.org/scripts/535590/1586769/Rolocate%20Base64%20Image%20Library%2020.js
-// @require      https://update.greasyfork.org/scripts/547134/1833171/Rolocate%20Server%20Region%20Data%20%28Data%20Saving%29.js
+// @require      https://update.greasyfork.org/scripts/535590/1882014/Rolocate%20Base64%20Image%20Library%2020.js
+// @require      https://update.greasyfork.org/scripts/547134/1886819/Rolocate%20Server%20Region%20Data%20%28Data%20Saving%29.js
 // @require      https://update.greasyfork.org/scripts/540553/1648593/Rolocate%20Flag%20Base64%20Data.js
 // @require      https://update.greasyfork.org/scripts/544437/1642116/Rolocate%20Restore%20Classic%20Terms%20All%20Languages.js
 // @connect      thumbnails.roblox.com
@@ -52,11 +52,11 @@
  * Violations may result in takedown notices under DMCA or applicable law.
  *
  * --- Dependencies --------------------------------------
- * * Base64 Images & Icons:
- *   https://update.greasyfork.org/scripts/535590/1586769/Rolocate%20Base64%20Image%20Library%2020.js
+ * * Base64 Images & SVG Icons:
+ *   https://update.greasyfork.org/scripts/535590/1882014/Rolocate%20Base64%20Image%20Library%2020.js
  *
  * * Server Regions Data:
- *   https://update.greasyfork.org/scripts/547134/1652105/Rolocate%20Server%20Region%20Data%20%28Data%20Saving%29.js
+ *   https://update.greasyfork.org/scripts/547134/1886819/Rolocate%20Server%20Region%20Data%20%28Data%20Saving%29.js
  *
  * * Flag Icons (Base64):
  *   https://update.greasyfork.org/scripts/540553/1648593/Rolocate%20Flag%20Base64%20Data.js
@@ -283,7 +283,7 @@
                     throw new Error("No data returned.");
                 }
 
-                // MULTIPLE → return map
+                // MULTIPLE -> return map
                 if (!isSingle) {
                     const map = {};
                     combined.forEach(item => {
@@ -294,7 +294,7 @@
                     return map;
                 }
 
-                // SINGLE → return single URL (unchanged behavior)
+                // SINGLE -> return single URL (unchanged behavior)
                 const item = combined.find(d => d.targetId == universeIds);
                 if (item && item.imageUrl) {
                     ConsoleLogEnabled(`Game icon URL for universe ${universeIds}: ${item.imageUrl}`);
@@ -404,7 +404,7 @@
                     return map;
                 }
 
-                // SINGLE → return one object (backward compatible)
+                // SINGLE -> return one object (backward compatible)
                 const item = combined.find(d => d.id == universeIds);
                 if (item) {
                     ConsoleLogEnabled(`Votes for universe ${universeIds}: 👍 ${item.upVotes} | 👎 ${item.downVotes}`);
@@ -669,12 +669,59 @@
 
         return {
             userInfo,
+            hasVerifiedBadge: userInfo?.hasVerifiedBadge ?? false,
             friendCount:   friendCount?.count   ?? 0,
             followerCount: followerCount?.count  ?? 0,
             followingCount: followingCount?.count ?? 0,
             favoriteGames:  favoriteGames?.data  ?? [],
         };
     }
+
+    /*******************************************************
+    name of function: fetchGroupStatsBatch
+    description: Fetches group data directly using GM_xmlhttpRequest
+    *******************************************************/
+    async function fetchGroupStatsBatch(groupId) {
+        return new Promise((resolve) => {
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: `https://groups.roblox.com/v1/groups/${groupId}`,
+                headers: {
+                    "Accept": "application/json"
+                },
+                onload: function(response) {
+                    if (response.status === 200) {
+                        try {
+                            const data = JSON.parse(response.responseText);
+
+                            // Assigning specific parts of the response to variables
+                            const id = data.id;
+                            const name = data.name;
+                            const description = data.description;
+                            // Use optional chaining in case the group has no owner (abandoned)
+                            const ownerName = data.owner?.username || "No Owner";
+                            const memberCount = data.memberCount;
+                            const isVerified = data.hasVerifiedBadge;
+
+                            // Return the cleanly formatted object
+                            resolve({ id, name, description, ownerName, memberCount, isVerified });
+                        } catch (error) {
+                            console.error("Error parsing group data:", error);
+                            resolve(null); // Resolve null so the UI logic can handle the failure gracefully
+                        }
+                    } else {
+                        console.warn(`Failed to fetch group ${groupId}. Status: ${response.status}`);
+                        resolve(null);
+                    }
+                },
+                onerror: function(error) {
+                    console.error("Network error fetching group:", error);
+                    resolve(null);
+                }
+            });
+        });
+    }
+
     //---------------End of Gets the users stats from apis--------------------
 
     /*******************************************************
@@ -823,9 +870,21 @@
         localStorage.removeItem('ROLOCATE_compactprivateservers');
         localStorage.removeItem('ROLOCATE_mutualfriends');
 
-        const VERSION = "V46.10", PREV_VERSION = "V46.9";
+        const VERSION = "V47.0", PREV_VERSION = "V46.9";
         const changelog = {
-            Bugfix: ["🐛","Fix Roblox Server Regions"," Fix Roblox Server Regions","fixed"]
+            searchhistory: ["🔎","Search History","Smart Search now saves your search history.","New"],
+            detailedpreview: ["👤","Detailed Preview","Hover over users and groups to view extra information. Off by default.","New"],
+            smallerrobloxsidebar: ["⚙️","Smaller Roblox Sidebar","Brings back the original Roblox sidebar size. Off by default.","New"],
+            serverregions: ["🌎","Server Regions","Added more datacenters for improved region detection.","Updated"],
+            recentservers: ["🖥️","Recent Servers","Now shows server uptime and only displays 5 servers by default. Expand to see more.","Updated"],
+            adblocker: ["🚫","Ad Blocker","Now blocks all Roblox Plus advertisements. On by Default.","Updated"],
+            joinpopup: ["🚀","Join Experience","Join Confirmation and Smart Join Popup have been improved.","Updated"],
+            quicklaunch: ["⚡","Quick Launch Games","Smoother animations and faster drag-to-reorder.","Updated"],
+            settingsmenu: ["🛠️","Settings","Revamped settings menu with smoother animations.","Updated"],
+            logo: ["🎨","RoLocate Logo","Now uses SVG for a sharper image.","Updated"],
+            oldgreeting: ["👋","Show Old Greeting","Now displays user status and game join status.","Updated"],
+            bugfixes: ["🐛","Bug Fixes","Various bug fixes and performance improvements. Full changelog: https://oqarshi.github.io/Invite/rolocate/changelog/","Fixed"],
+            removedfeatures: ["🗑️","Removed Features","Removed Better Private Servers and Estimated Revenue.","Removed"]
         };
 
         const cur = localStorage.getItem('version') || "V0.0";
@@ -1128,7 +1187,7 @@
                             </div>
                             <div class="rup-help">
                                 <b>Need Help?</b>
-                                <a href="https://oqarshi.github.io/Invite/rolocate/docs/" target="_blank" class="rup-link"><span>📖</span><span>Documentation</span></a>
+                                <a href="https://oqarshi.github.io/Invite/rolocate/changelog/" target="_blank" class="rup-link"><span>📜</span><span>Full Changelog</span></a>
                                 <a href="https://greasyfork.org/en/scripts/523727-rolocate/feedback" target="_blank" class="rup-link"><span>🛡️</span><span>Support</span></a>
                             </div>
                         </div>
@@ -1149,20 +1208,20 @@
         invertplayercount: false, enablenotifications: true, disabletrailer: true,
         gamequalityfilter: false, loadbetterprofileinfo: true, disablechat: false,
         smartsearch: true, quicklaunchgames: true, smartjoinpopup: true,
-        betterfriends: true, restoreclassicterms: true, betterprivateservers: true,
+        betterfriends: true, restoreclassicterms: true,
         custombackgrounds: false, btrobloxfix: false, mobilemode: false,
         joinconfirmation: true, forcedarkmode: false, responsivegamecards: true,
-        bettergamestats: false, smallerrobloxsidebar: false
+        bettergamestats: false, smallerrobloxsidebar: false, detailedpreview: false
     };
 
     // presets in settings
     const presetConfigurations = {
       default: { name: "Default", settings: {} },
       mobilesettings: { name: "Mobile Settings", settings: {"loadbetterprofileinfo": false, "disablechat": true, "smartjoinpopup": false, "mobilemode": true, "responsivegamecards": false} },
-      developerpref: { name: "Dev Settings", settings: {"enableLogs": true, "disablechat": true, "bettergamestats": true, "smallerrobloxsidebar": true} },
-      serverfiltersonly: { name: "Server Filters Only", settings: {"removeads": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "disabletrailer": false, "loadbetterprofileinfo": false, "smartsearch": false, "quicklaunchgames": false, "betterfriends": false, "restoreclassicterms": false, "betterprivateservers": false, "responsivegamecards": false} },
-      smartsearchonly: { name: "Smart Search Only", settings: {"removeads": false, "togglefilterserversbutton": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "fastservers": false, "disabletrailer": false, "loadbetterprofileinfo": false, "quicklaunchgames": false, "smartjoinpopup": false, "betterfriends": false, "restoreclassicterms": false, "betterprivateservers": false, "joinconfirmation": false, "responsivegamecards": false} },
-      disablerolocate: { name: "Disable RoLocate", settings: {"removeads": false, "togglefilterserversbutton": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "fastservers": false, "disabletrailer": false, "loadbetterprofileinfo": false, "smartsearch": false, "quicklaunchgames": false, "smartjoinpopup": false, "betterfriends": false, "restoreclassicterms": false, "betterprivateservers": false, "joinconfirmation": false, "responsivegamecards": false} },
+      developerpref: { name: "Dev Settings", settings: {"enableLogs": true, "disablechat": true, "bettergamestats": true, "smallerrobloxsidebar": true, "detailedpreview": true} },
+      serverfiltersonly: { name: "Server Filters Only", settings: {"removeads": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "disabletrailer": false, "loadbetterprofileinfo": false, "smartsearch": false, "quicklaunchgames": false, "betterfriends": false, "restoreclassicterms": false, "responsivegamecards": false} },
+      smartsearchonly: { name: "Smart Search Only", settings: {"removeads": false, "togglefilterserversbutton": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "fastservers": false, "disabletrailer": false, "loadbetterprofileinfo": false, "quicklaunchgames": false, "smartjoinpopup": false, "betterfriends": false, "restoreclassicterms": false, "joinconfirmation": false, "responsivegamecards": false} },
+      disablerolocate: { name: "Disable RoLocate", settings: {"removeads": false, "togglefilterserversbutton": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "fastservers": false, "disabletrailer": false, "loadbetterprofileinfo": false, "smartsearch": false, "quicklaunchgames": false, "smartjoinpopup": false, "betterfriends": false, "restoreclassicterms": false, "joinconfirmation": false, "responsivegamecards": false} },
     };
 
     function initializeLocalStorage() {
@@ -1213,30 +1272,55 @@
     *******************************************************/
     function getSettingsContent(section) {
         if (section === "home") {
+            let updateStatusHtml = "";
+
+            // Check if the userscript manager handles auto-updates
+            if (typeof GM_info !== "undefined" && "scriptWillUpdate" in GM_info && GM_info.scriptWillUpdate) {
+                // if auto update is true
+                updateStatusHtml = `
+                <div style="display: flex; align-items: center; justify-content: center; gap: 6px; color: #8e8e93; font-size: 13px; font-weight: 500; margin-top: 4px;">
+                    <span style="font-size: 14px; font-weight: 800;">✓</span>
+                    Auto Update is enabled.
+                </div>`;
+            } else {
+                // if auto update is false
+                updateStatusHtml = `
+                <div style="display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; margin-top: 4px;">
+                    <span style="color: #8e8e93; font-weight: 500;">Auto Update disabled</span>
+                    <div style="width: 3px; height: 3px; border-radius: 50%; background: #666;"></div>
+                      <button id="rolocate-update-btn" onclick="window.open('https://oqarshi.github.io/Invite/rolocate/docs/documentations/updating-scripts', '_blank')" style="background: transparent; border: none; color: #d1d1d6; font-size: 13px; font-weight: 600; cursor: pointer; padding: 0; outline: none; text-decoration: underline; text-underline-offset: 3px; transition: color 0.2s;">
+                          Why?
+                      </button>
+                </div>`;
+            }
+
             return `
-        <div class="home-section">
-            <div style="display:flex;align-items:center;justify-content:center;gap:18px;margin-bottom:4px;">
-                <img class="rolocate-logo" src="${window.Base64Images.logo}" alt="ROLOCATE Logo" style="margin:0;">
-                <div style="text-align:left;">
-                    <div style="font-size:22px;font-weight:700;color:#fff;letter-spacing:0.5px;line-height:1.1;">RoLocate</div>
-                    <div style="margin-top:8px;display:inline-block;background:rgba(220,53,69,0.08);border:1.5px solid rgba(220,53,69,0.35);padding:3px 10px;border-radius:8px;">
-                        <span style="font-size:13px;font-weight:700;color:#e8566a;letter-spacing:1.5px;">V 46.10</span>
-                    </div>
-                </div>
+        <div class="home-section" style="display:flex; flex-direction:column; align-items:center; text-align:center; padding-top: 12px;">
+            <img class="rolocate-logo" src="${window.Base64Images.logo}" alt="ROLOCATE Logo" style="width: 112px !important; height: 112px !important; margin-bottom: 16px; border-radius: 18px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08); margin: 0 auto;">
+
+            <div style="font-size: 26px; font-weight: 700; color: #f5f5f7; letter-spacing: -0.3px; line-height: 1.2; margin-top: 14px;">RoLocate</div>
+
+            <div style="margin-top: 4px; margin-bottom: 24px; display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                <span style="font-size: 16px; font-weight: 600; color: #d1d1d6; letter-spacing: 0.5px;">Version 47.0</span>
+
+                ${updateStatusHtml}
             </div>
-            <div class="section-separator"></div>
-            <p>Rolocate by Oqarshi.</p>
-            <p class="license-note">
+
+            <div class="section-separator" style="width: 100%; margin: 0 0 20px 0;"></div>
+
+            <p style="color: #c0c0c0; font-size: 14px; margin: 0 0 4px 0;">Developed by Oqarshi.</p>
+            <p class="license-note" style="margin-top: 0; color: #888;">
                 Licensed under a <strong>Custom License – Personal Use Only</strong>. No redistribution.
             </p>
+
             <div class="home-links">
                 <a class="home-link-btn github-greasyfork-btn" href="https://github.com/Oqarshi/RoLocate" target="_blank">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    View on GitHub
+                    GitHub
                 </a>
                 <a class="home-link-btn github-greasyfork-btn" href="https://greasyfork.org/en/scripts/523727-rolocate" target="_blank">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M5.89 2.227a0.28 0.28 0 0 1 0.266 0.076l5.063 5.062c0.54 0.54 0.509 1.652 -0.031 2.192l8.771 8.77c1.356 1.355 -0.36 3.097 -1.73 1.728l-8.772 -8.77c-0.54 0.54 -1.651 0.571 -2.191 0.031l-5.063 -5.06c-0.304 -0.304 0.304 -0.911 0.608 -0.608l3.714 3.713L7.59 8.297 3.875 4.582c-0.304 -0.304 0.304 -0.911 0.607 -0.607l3.715 3.714 1.067 -1.066L5.549 2.91c-0.228 -0.228 0.057 -0.626 0.342 -0.683ZM12 0C5.374 0 0 5.375 0 12s5.374 12 12 12c6.625 0 12 -5.375 12 -12S18.625 0 12 0Z"/></svg>
-                    View on GreasyFork
+                    GreasyFork
                 </a>
             </div>
         </div>
@@ -1305,6 +1389,19 @@
                 <span class="help-icon" data-help="Smart Join Popup">?</span>
             </label>
 
+            <label class="toggle-slider experiment_label new_label">
+                <input type="checkbox" id="detailedpreview">
+                <span class="slider"></span>
+                Detailed Preview
+                <span class="experimental">EXP
+                    <span class="tooltip">Experimental: Still being tested</span>
+                </span>
+                <span class="new">New
+                    <span class="tooltip">Just Released/Updated</span>
+                </span>
+                <span class="help-icon" data-help="Detailed Preview">?</span>
+            </label>
+
             <label class="toggle-slider">
                 <input type="checkbox" id="removeads">
                 <span class="slider"></span>
@@ -1318,27 +1415,6 @@
                 <span class="slider"></span>
                 Restore Classic Terms
                 <span class="help-icon" data-help="Restore Classic Terms">?</span>
-            </label>
-
-            <label class="toggle-slider new_label">
-                <input type="checkbox" id="responsivegamecards">
-                <span class="slider"></span>
-                Responsive Game Cards
-                <span class="new">New
-                    <span class="tooltip">Just Released/Updated</span>
-                </span>
-                <span class="help-icon" data-help="Responsive Game Cards">?</span>
-            </label>
-
-            <label class="toggle-slider new_label">
-                <input type="checkbox" id="betterprivateservers">
-                <span class="slider"></span>
-                Better Private Servers
-                <span class="new">New
-                    <span class="tooltip">Just Released/Updated</span>
-                </span>
-                <button id="edit-betterprivateservers-btn" class="edit-button" type="button" style="display: none;">Edit</button>
-                <span class="help-icon" data-help="Better Private Servers">?</span>
             </label>
 
             <label class="toggle-slider">
@@ -1547,13 +1623,14 @@
             const contributors = [
                 { name: "Oqarshi", id: 545334824, role: "Creator & Maintainer", url: "https://www.roblox.com/users/545334824/profile" },
                 { name: "Waivy", id: 3795846072, role: "Contributor", url: "https://www.roblox.com/users/3795846072/profile" },
-                { name: "Akira", id: 797399348, role: "Contributor", url: "https://www.roblox.com/users/797399348/profile" }
+                { name: "Akira", id: 797399348, role: "Contributor", url: "https://www.roblox.com/users/797399348/profile" },
+                { name: "AandA510", id: 2333236354, role: "Contributor", url: "https://www.roblox.com/users/2333236354/profile" },
             ];
 
             // update profile pictures after the HTML is injected. lazy loda cause too lazy for async
             setTimeout(() => {
                 // get userid
-                const contributorIds = contributors.map(user => user.id);
+                const contributorIds = contributors.map(user => user.id).filter(id => id !== undefined);
 
                 // fetch in batch
                 fetchPlayerThumbnailsBatch(contributorIds).then(results => {
@@ -1578,8 +1655,8 @@
                     <ul>
                         ${contributors.map(user => `
                             <li style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-                                <img data-id="${user.id}" width="24" height="24" style="border-radius:50%; background:#333;" />
-                                <a href="${user.url}" target="_blank">${user.name}</a>
+                                ${user.id ? `<img data-id="${user.id}" width="24" height="24" style="border-radius:50%; background:#333;" />` : ""}
+                                ${user.url ? `<a href="${user.url}" target="_blank">${user.name}</a>` : `<span style="color: #60a5fa; font-weight: bold;">${user.name}</span>`}
                                 <span style="color:#888;">• ${user.role}</span>
                             </li>
                         `).join("")}
@@ -1593,7 +1670,7 @@
                         <li><strong>Rolocate Source Code:</strong> <a href="https://greasyfork.org/en/scripts/523727-rolocate/code" target="_blank">GreasyFork</a> | <a href="https://github.com/Oqarshi/RoLocate" target="_blank">Github</a></li>
                         <li><strong>Invite & FAQ Source Code:</strong> <a href="https://github.com/Oqarshi/Invite" target="_blank">GitHub</a></li>
                         <li><strong>Official Website:</strong> <a href="https://oqarshi.github.io/Invite/rolocate/index.html" target="_blank">RoLocate Website</a></li>
-                        <li><strong>Suggest or Report Issues:</strong> <a href="https://greasyfork.org/en/scripts/523727-rolocate/feedback" target="_blank">Submit Feedback</a></li>
+                        <li><strong>Suggestions & Issues:</strong> <a href="https://greasyfork.org/en/scripts/523727-rolocate/feedback" target="_blank">Submit Feedback</a></li>
                         <li><strong>Inspiration:</strong> <a href="https://chromewebstore.google.com/detail/btroblox-making-roblox-be/hbkpclpemjeibhioopcebchdmohaieln" target="_blank">Btroblox Team</a></li>
                     </ul>
                 </div>
@@ -1794,7 +1871,6 @@
                 </div>`;
         }
 
-
         if (section === "help") {
             return `
         <div class="help-section">
@@ -1802,11 +1878,11 @@
             <ul>
                 <li id="help-Smart Search"><strong>SmartSearch:</strong> <span>Improves the Roblox website’s search bar by enabling instant searches for games, users, and groups.</span></li>
                 <li id="help-Auto Server Regions"><strong>Auto Server Regions:</strong> <span>Replaces Roblox's 8 default servers with at least 8 servers, providing detailed info such as location and ping.</span></li>
-                <li id="help-Fast Server Search"><strong>Fast Server Search:</strong> <span>Boosts server search speed up to 100x (experimental). Replaces player thumbnails with Builderman/Roblox icons to bypass rate limits.</span></li>
+                <li id="help-Fast Server Search"><strong>Fast Server Search:</strong> <span>Boosts server search speed up to 10x (experimental). Replaces player thumbnails with Builderman/Roblox icons to bypass rate limits.</span></li>
                 <li id="help-Invert Player Count"><strong>Invert Player Count:</strong> <span>For server regions: shows low-player servers when enabled, high-player servers when disabled. You can also control this on the Roblox server popup.</span></li>
                 <li id="help-Recent Servers"><strong>Recent Servers:</strong> <span>Shows the most recent servers you have joined in the past 3 days.</span></li>
                 <li id="help-Join Confirmation"><strong>Join Confirmation:</strong> <span>Shows a popup when the user is trying to join a server/game when the user is already in a game.</span></li>
-                <li id="help-Better Game Stats"><strong>Better Game Stats:</strong> <span>For now only shows estimated revenue of a Roblox game. Its in the place where all other stats in games are.</span></li>
+                <li id="help-Better Game Stats"><strong>Better Game Stats:</strong> <span>Does nothing for now. Maybe will add something in the future.</span></li>
             </ul>
 
             <div class="section-separator"></div>
@@ -1815,11 +1891,12 @@
             <ul>
                 <li id="help-Disable Trailer Autoplay"><strong>Disable Trailer Autoplay:</strong> <span>Prevents trailers from autoplaying on Roblox game pages.</span></li>
                 <li id="help-Smart Join Popup"><strong>Smart Join Popup:</strong> <span>Shows a custom join popup that displays server location about the server before joining it.</span></li>
+                <li id="help-Detailed Preview"><strong>Detailed Preview:</strong> <span>When hovering over games, groups, or other profiles, you get a detailed preview before clicking it.</span></li>
                 <li id="help-Remove All Roblox Ads"><strong>Remove All Roblox Ads:</strong> <span>Blocks most ads on the Roblox site. You can customize what it blocks.</span></li>
                 <li id="help-Restore Classic Terms"><strong>Restore Classic Terms:</strong> <span>Reverts corporate buzzwords Roblox has added. Example: “Connections” becomes “Friends”. May not be translated into all languages yet.</span></li>
                 <li id="help-Better Private Servers"><strong>Better Private Servers:</strong> <span>Compacts private servers on game pages, so that they do not take up so much space.</span></li>
                 <li id="help-Responsive Game Cards"><strong>Responsive Game Cards:</strong> <span>Makes game cards on the website more responsive when hovering over them.</span></li>
-                <li id="help-Smaller Roblox Sidebar"><strong>Smaller Roblox Sidebar:</strong> <span>Shrinks/compacts the Roblox Side Bar.</span></li>
+                <li id="help-Smaller Roblox Sidebar"><strong>Smaller Roblox Sidebar:</strong> <span>Shrinks/compacts the Roblox Side Bar to its original size before the new roblox sidebar update.</span></li>
                 <li id="help-Backgrounds"><strong>Backgrounds:</strong> <span>Allows you to change the background of your roblox page and customize the colors of other stuff on the page. Still very experimental as there could be UI and storage issues.</span></li>
             </ul>
 
@@ -2007,23 +2084,24 @@
 }
 .highlight-setting {
     animation: highlightPulse 2s ease;
-    background: rgba(76, 175, 80, 0.2) !important;
+    background: rgba(76, 175, 80, 0.1) !important;
     border-left: 4px solid #4CAF50 !important;
     border-radius: 8px !important;
-    box-shadow: 0 0 20px rgba(76, 175, 80, 0.4) !important;
+    box-shadow: 0 0 10px rgba(76, 175, 80, 0.2) !important;
 }
+
 @keyframes highlightPulse {
     0% {
-        background: rgba(76, 175, 80, 0.3);
-        box-shadow: 0 0 30px rgba(76, 175, 80, 0.6);
-    }
-    50% {
-        background: rgba(76, 175, 80, 0.25);
-        box-shadow: 0 0 25px rgba(76, 175, 80, 0.5);
-    }
-    100% {
         background: rgba(76, 175, 80, 0.15);
         box-shadow: 0 0 15px rgba(76, 175, 80, 0.3);
+    }
+    50% {
+        background: rgba(76, 175, 80, 0.1);
+        box-shadow: 0 0 10px rgba(76, 175, 80, 0.2);
+    }
+    100% {
+        background: rgba(76, 175, 80, 0);
+        box-shadow: 0 0 0px rgba(76, 175, 80, 0);
     }
 }
 .search-container {
@@ -2044,8 +2122,8 @@
 #settings-search:focus {
     outline: none;
     background: rgba(255, 255, 255, 0.08);
-    border-color: #4CAF50;
-    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.15);
+    border-color: #b3b3b3;
+    box-shadow: 0 0 0 3px rgba(179, 179, 179, 0.15);
 }
 #search-suggestions {
     position: absolute;
@@ -2080,13 +2158,13 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     font-size: 13px;
     opacity: 0;
-    animation: fadeInItem 0.3s ease forwards;
+    animation: fadeInItem 0.6s ease forwards;
     position: relative;
     overflow: hidden;
 }
 .search-suggestion-item.matched {
-    background: rgba(76, 175, 80, 0.08);
-    border-left: 3px solid #4CAF50;
+    background: rgba(179, 179, 179, 0.08);
+    border-left: 3px solid #b3b3b3;
 }
 .search-suggestion-item.unmatched {
     background: rgba(255, 255, 255, 0.02);
@@ -2096,12 +2174,12 @@
     border-bottom: none;
 }
 .search-suggestion-item:hover {
-    background: rgba(76, 175, 80, 0.15);
+    background: rgba(179, 179, 179, 0.15);
     transform: translateX(2px);
     padding-left: 16px;
 }
 .search-suggestion-item.matched:hover {
-    background: rgba(76, 175, 80, 0.2);
+    background: rgba(179, 179, 179, 0.2);
 }
 .search-suggestion-item:active {
     transform: translateX(5px) scale(0.98);
@@ -2115,6 +2193,9 @@
 }
 .search-suggestion-item.unmatched .suggestion-title {
     color: #999;
+}
+.search-suggestion-item.unmatched:hover .suggestion-title {
+    color: #c2c2c2;
 }
 .search-suggestion-item:hover .suggestion-title {
     color: #5fd663;
@@ -2513,6 +2594,10 @@ li a.about-link:hover::after {
     z-index: 10000;
     animation: fadeIn 0.7s cubic-bezier(0.19, 1, 0.22, 1);
 }
+@keyframes popoutRight {
+    from { opacity: 0; transform: translateX(-40px); }
+    to { opacity: 1; transform: translateX(0); }
+}
 .settings-container {
     display: flex;
     position: relative;
@@ -2624,15 +2709,15 @@ li a.about-link:hover::after {
     border-radius: 3px;
 }
 .settings-sidebar::-webkit-scrollbar-thumb {
-    background: darkgreen;
+    background: #888;
     border-radius: 3px;
 }
 .settings-sidebar::-webkit-scrollbar-thumb:hover {
-    background: #006400;
+    background: #666;
 }
 .settings-sidebar {
     scrollbar-width: thin;
-    scrollbar-color: darkgreen black;
+    scrollbar-color: #888 black;
 }
 .settings-content {
     flex: 1;
@@ -2745,9 +2830,6 @@ li a.about-link:hover::after {
     transition: all 0.5s ease;
     border: 2px solid rgba(220, 53, 69, 0.4);
 }
-.rolocate-logo:hover {
-    transform: scale(1.05);
-}
 .settings-content ul {
     text-align: left;
     list-style-type: none;
@@ -2763,7 +2845,7 @@ li a.about-link:hover::after {
 }
 .settings-content ul li:hover {
     background: rgba(255, 255, 255, 0.05);
-    border-left: 3px solid #4CAF50;
+    border-left: 3px solid #b3b3b3;
     transform: translateX(5px);
 }
 .settings-content ul li strong {
@@ -3028,12 +3110,6 @@ li a.about-link:hover::after {
                         });
 
                         bindToggle({
-                            checkboxId: "betterprivateservers",
-                            buttonId: "edit-betterprivateservers-btn",
-                            storageKey: "ROLOCATE_betterprivateservers"
-                        });
-
-                        bindToggle({
                             checkboxId: "custombackgrounds",
                             buttonId: "edit-backgrounds-btn",
                             storageKey: "ROLOCATE_custombackgrounds"
@@ -3165,9 +3241,9 @@ li a.about-link:hover::after {
             ["Remove All Roblox Ads", "appearance", "removeads", "ads remove block ad blocker recommend recommended standout sitin for you recomend"],
             ["Restore Classic Terms", "appearance", "restoreclassicterms", "classic terms restore friends groups catalog connections communities marketplace"],
             ["Responsive Game Cards", "appearance", "responsivegamecards", "game cards responsive"],
-            ["Better Private Servers", "appearance", "betterprivateservers", "small private server compact"],
             ["Smaller Roblox Sidebar", "appearance", "smallerrobloxsidebar", "smaller sidebar compact minimize icons"],
             ["Custom Backgrounds", "appearance", "custombackgrounds", "custom background custom theme"],
+            ["Detailed Preview", "appearance", "detailedpreview", "detailed preview preview details detailed game info enhanced extended tooltip"],
             ["Enable Console Logs", "advanced", "enableLogs", "console log debug"],
             ["Enable Server Filters", "advanced", "togglefilterserversbutton", "server filter server regions best connection small server"],
             ["Enable Server Hop Button", "advanced", "toggleserverhopbutton", "server hop button random server"],
@@ -3205,10 +3281,9 @@ li a.about-link:hover::after {
                                s.keywords.some(k => k.includes(q))
                     })).sort((a, b) => b.match - a.match);
 
-                    suggestionsBox.innerHTML = results.map((r, i) => `
+                    suggestionsBox.innerHTML = results.map((r) => `
                         <div class="search-suggestion-item ${r.match && q ? 'matched' : 'unmatched'}"
-                             data-section="${r.section}" data-setting="${r.name}"
-                             style="animation-delay: ${i * 0.05}s">
+                             data-section="${r.section}" data-setting="${r.name}">
                             <span class="suggestion-title">${r.name}</span>
                             <span class="suggestion-section">${r.section[0].toUpperCase() + r.section.slice(1)}</span>
                         </div>
@@ -3222,7 +3297,7 @@ li a.about-link:hover::after {
                             suggestionsBox.style.transform = 'translateY(0)';
                         });
                     });
-                }, 100);
+                }, 300);
             });
 
             // also show all suggestions when search box is focused & nothing is shown
@@ -3433,13 +3508,6 @@ li a.about-link:hover::after {
         if (editServerfilters) {
             editServerfilters.addEventListener("click", () => {
                 editserverregions();
-            });
-        }
-
-        const editBetterPrivateServers = document.getElementById("edit-betterprivateservers-btn");
-        if (editBetterPrivateServers) {
-            editBetterPrivateServers.addEventListener("click", () => {
-                editprivateserversettings();
             });
         }
 
@@ -3705,11 +3773,12 @@ li a.about-link:hover::after {
     name of function: editremoveads
     description: popup for customizing the ads
     *******************************************************/
-    function editremoveads () {
+function editremoveads () {
       // don't open it twice
       if (document.getElementById('rolocate-ad-settings-modal')) return;
 
-      // default toggle values
+      document.querySelectorAll('#userscript-settings-menu > div:not(:first-child)').forEach(m => m.remove()); // plz work
+
       const defaultSettings = {
         adIframes: true,
         sponsoredGames: true,
@@ -3719,38 +3788,52 @@ li a.about-link:hover::after {
         feedItems: true,
         standoutGames: true,
         sitdownGames: true,
-        robloxPlus: true // New: On by default
+        robloxPlus: true
       };
 
-      // load saved settings and fall back to defaults
       const savedSettings = JSON.parse(
         localStorage.getItem('ROLOCATE_editremoveads') || '{}'
       );
       const settings = { ...defaultSettings, ...savedSettings };
 
-      // dark background overlay
-      const overlay = document.createElement('div');
-      overlay.id = 'rolocate-ad-settings-modal';
-      overlay.style.cssText = `
-        position:fixed;inset:0;display:flex;justify-content:center;align-items:center;
-        background:rgba(0,0,0,.45);z-index:10000;opacity:0;transition:.2s;
+      const modal = document.createElement('div');
+      modal.id = 'rolocate-ad-settings-modal';
+      modal.style.cssText = `
+        background:#1e1e1e;
+        border-radius: 0 14px 14px 0;
+        border:1px solid #2f2f2f;
+        border-left: none;
+        box-shadow: 10px 10px 30px rgba(0,0,0,.6);
+        width: 0px;
+        opacity: 0;
+        overflow: hidden;
+        transition: width 0.5s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.2s ease-in;
+        display:flex;
+        flex-direction:column;
+        box-sizing:border-box;
       `;
 
-      // main modal box
-      const modal = document.createElement('div');
-      modal.style.cssText = `
-        background:#181818;border-radius:14px;padding:18px;width:340px;max-width:92vw;
-        color:#fff;border:1px solid #2f2f2f;box-shadow:0 10px 30px rgba(0,0,0,.6);
-        transform:scale(.96) translateY(12px);transition:.2s;
+      // INNER WRAPPER (Locks the contents to 340px so text doesn't squish during animation)
+      const innerWrapper = document.createElement('div');
+      innerWrapper.style.cssText = `
+        width: 340px;
+        min-width: 340px;
+        padding: 18px;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        box-sizing: border-box;
       `;
 
       // title + subtitle
-      modal.innerHTML = `
+      const headerDiv = document.createElement('div');
+      headerDiv.innerHTML = `
         <h2 style="margin:0;font-size:18px;text-align:center">Ad Settings</h2>
-        <p style="margin:6px 0 0px;text-align:center;font-size:12px;color:#aaa">
+        <p style="margin:6px 0 10px;text-align:center;font-size:12px;color:#aaa">
           Choose what you want hidden
         </p>
       `;
+      innerWrapper.appendChild(headerDiv);
 
       // toggle definitions
       const toggleOptions = [
@@ -3762,13 +3845,14 @@ li a.about-link:hover::after {
         ['feedItems', 'Feed Posts (Home Page)'],
         ['standoutGames', 'Standout Games (Home Page)'],
         ['sitdownGames', 'Sitdown Games (Home Page)'],
-        ['robloxPlus', 'Roblox Plus Subscription Ad'], // New Toggle
+        ['robloxPlus', 'All Roblox Plus Subscription Ads']
       ];
 
       // container for all toggles
       const togglesContainer = document.createElement('div');
       togglesContainer.style.cssText = `
         background:#222;padding:10px;border-radius:10px;display:grid;gap:8px;
+        flex-grow:1;overflow-y:auto;align-content:start;
       `;
 
       // build each toggle row
@@ -3780,7 +3864,6 @@ li a.about-link:hover::after {
           transition:.15s;background:#262626;
         `;
 
-        // hover effect
         row.onmouseenter = () => (row.style.background = '#2d2d2d');
         row.onmouseleave = () => (row.style.background = '#262626');
 
@@ -3805,7 +3888,6 @@ li a.about-link:hover::after {
         const toggle = row.querySelector('.tgl');
         const knob = toggle.querySelector('div');
 
-        // handle toggle click
         row.onclick = (e) => {
           e.preventDefault();
           checkbox.checked = !checkbox.checked;
@@ -3822,14 +3904,24 @@ li a.about-link:hover::after {
         display:flex;justify-content:flex-end;gap:8px;margin-top:14px;
       `;
 
-      // close animation + cleanup
+      const mainMenu = document.getElementById("userscript-settings-menu");
+      let originalGap = "0px";
+      let mainPanel; // defined up here so the close animation can access it
+
+      // close animation slide in
       const closeModal = () => {
-        modal.style.transform = 'scale(.96) translateY(12px)';
-        overlay.style.opacity = '0';
-        setTimeout(() => overlay.remove(), 200);
+        modal.style.width = '0px';
+        modal.style.opacity = '0';
+        setTimeout(() => {
+            modal.remove();
+            if (mainMenu) mainMenu.style.gap = originalGap;
+            if (mainPanel) {
+                mainPanel.style.borderTopRightRadius = '';
+                mainPanel.style.borderBottomRightRadius = '';
+            }
+        }, 500);
       };
 
-      // reusable button factory
       const createButton = (text, bgColor, onClick) => {
         const button = document.createElement('button');
         button.textContent = text;
@@ -3844,7 +3936,6 @@ li a.about-link:hover::after {
         return button;
       };
 
-      // add buttons
       buttonRow.append(
         createButton('Cancel', '#333', closeModal),
         createButton('Save', '#16a34a', () => {
@@ -3858,23 +3949,40 @@ li a.about-link:hover::after {
             JSON.stringify(newSettings)
           );
 
-          // feedback stuff
-          ConsoleLogEnabled('Ad settings saved:', newSettings);
-          notifications('Settings saved', 'success', '👍', '5000');
+          if (typeof ConsoleLogEnabled === "function") ConsoleLogEnabled('Ad settings saved:', newSettings);
+          if (typeof notifications === "function") notifications('Settings saved', 'success', '👍', '5000');
 
           closeModal();
         })
       );
 
-      // assemble modal
-      modal.append(togglesContainer, buttonRow);
-      overlay.append(modal);
-      document.body.append(overlay);
+      // Assemble: everything goes into the fixed-width wrapper, wrapper goes into modal
+      innerWrapper.append(togglesContainer, buttonRow);
+      modal.appendChild(innerWrapper);
 
-      // animate in
+      // Append directly to the main menu and sync heights
+      if (mainMenu) {
+          // Force gap to 0 so they physically connect seamlessly
+          originalGap = mainMenu.style.gap || "0px";
+          mainMenu.style.gap = "0px";
+
+          mainMenu.append(modal);
+
+          mainPanel = mainMenu.querySelector('div');
+          if (mainPanel && mainPanel !== modal) {
+              modal.style.height = mainPanel.offsetHeight + 'px';
+              // Force straight right corners while the modal is open
+              mainPanel.style.borderTopRightRadius = '0';
+              mainPanel.style.borderBottomRightRadius = '0';
+          }
+      } else {
+          document.body.append(modal);
+      }
+
+      // animate in (slides drawer out to 340px)
       requestAnimationFrame(() => {
-        overlay.style.opacity = '1';
-        modal.style.transform = 'scale(1) translateY(0)';
+        modal.style.opacity = '1';
+        modal.style.width = '340px';
       });
     }
 
@@ -3958,11 +4066,21 @@ li a.about-link:hover::after {
                     });
                 }
 
-                // block "Roblox Plus" side/menu ad
+                // block "Roblox Plus" side/menu ad and promo banners
                 if (settings.robloxPlus) {
-                    document.querySelectorAll('a[href="/plus"]').forEach(adLink => {
+                    document.querySelectorAll('a[href="/plus"], a[href="https://www.roblox.com/plus"]').forEach(adLink => {
                         const listItem = adLink.closest('li');
                         if (listItem) hide(listItem);
+                    });
+
+                    document.querySelectorAll('.icon-regular-roblox-plus').forEach(icon => {
+                        const promoBannerRobloxPlus = icon.closest(
+                            'div.stroke-standard.stroke-default.radius-medium.width-full'
+                        );
+
+                        if (promoBannerRobloxPlus) {
+                            hide(promoBannerRobloxPlus);
+                        }
                     });
                 }
 
@@ -4015,110 +4133,134 @@ li a.about-link:hover::after {
         // im a master at glitch fixing ikr
         setTimeout(removeElements, 100);
     }
-    /*******************************************************
-    name of function: changeServerCount
-    description: gui to cyhange autoservergion count
+/*******************************************************
+    name of function: ChangeAutoServerRegionCount
+    description: gui to change autoserverregion count
     *******************************************************/
-    function ChangeAutoServerRegionCount () {
-      const currentCount = localStorage.getItem('ROLOCATE_AutoRunServerRegionsnumber') || '16';
+    function ChangeAutoServerRegionCount() {
+      // don't open it twice
+      if (document.getElementById('rolocate-server-count-modal')) return;
 
-      // create dark overlay
-      const overlay = document.createElement('div');
-      overlay.id = 'rolocate-server-count-modal';
-      overlay.style.cssText = `
-        position:fixed;inset:0;display:flex;justify-content:center;align-items:center;
-        background:rgba(0,0,0,.45);z-index:10000;opacity:0;transition:.2s;
-      `;
+      document.querySelectorAll('#userscript-settings-menu > div:not(:first-child)').forEach(m => m.remove()); // plz work
 
-      // main modal box
+      const currentCount = localStorage.getItem('ROLOCATE_AutoRunServerRegionsnumber') || '10';
+      const mainMenu = document.getElementById("userscript-settings-menu");
+      let originalGap = mainMenu ? (mainMenu.style.gap || "0px") : "0px";
+      let mainPanel; // Track main panel so close animation can access it
+
+      // outer model
       const modal = document.createElement('div');
+      modal.id = 'rolocate-server-count-modal';
       modal.style.cssText = `
-        background:#181818;border-radius:14px;padding:18px;width:340px;max-width:92vw;
-        color:#fff;border:1px solid #2f2f2f;box-shadow:0 10px 30px rgba(0,0,0,.6);
-        transform:scale(.96) translateY(12px);transition:.2s;
+        background: #1e1e1e;
+        border-radius: 0 14px 14px 0;
+        border: 1px solid #2f2f2f;
+        border-left: none;
+        box-shadow: 10px 10px 30px rgba(0,0,0,.6);
+        width: 0px;
+        opacity: 0;
+        overflow: hidden;
+        transition: width 0.5s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.2s ease-in;
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
       `;
 
-      // title + input + buttons
+      // Build the entire interior in one shot
       modal.innerHTML = `
-        <h2 style="margin:0;font-size:18px;text-align:center"># of Servers to Search</h2>
-        <h4 style="margin:0;font-size:13px;color:#888;text-align:center">Default is 16 (Range: 1–700)</h4>
-        <input type="number" value="${currentCount}" min="1" max="700"
-          style="
-            width:100%;padding:8px;margin:12px 0 14px;
-            border-radius:8px;border:1px solid #444;background:#222;color:#fff;
-            font-size:14px;
-          "
-        >
+        <div style="width: 340px; min-width: 340px; padding: 18px; display: flex; flex-direction: column; height: 100%; box-sizing: border-box;">
+          <h2 style="margin: 0; font-size: 18px; text-align: center; color: #fff;"># of Servers to Search</h2>
+          <h4 style="margin: 0; font-size: 13px; color: #888; text-align: center">Default is 10 (Range: 1–700)</h4>
+
+          <input type="number" id="server-count-input" value="${currentCount}" min="1" max="700"
+            style="width: 100%; padding: 8px; margin: 12px 0 14px; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff; font-size: 14px; box-sizing: border-box;">
+
+          <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: auto;">
+            <button id="cancel-server-btn" style="padding: 8px 14px; border-radius: 8px; border: 1px solid #333; background: #333; color: #fff; font-size: 13px; cursor: pointer; transition: .15s;">Cancel</button>
+            <button id="save-server-btn" style="padding: 8px 14px; border-radius: 8px; border: 1px solid #16a34a; background: #16a34a; color: #fff; font-size: 13px; cursor: pointer; transition: .15s;">Save</button>
+          </div>
+        </div>
       `;
 
-      const input = modal.querySelector('input');
+      // Append directly to the main menu and sync heights
+      if (mainMenu) {
+          mainMenu.style.gap = "0px";
+          mainMenu.append(modal);
+          mainPanel = mainMenu.querySelector('div');
+          if (mainPanel && mainPanel !== modal) {
+              modal.style.height = mainPanel.offsetHeight + 'px';
+              // Force straight right corners while the modal is open
+              mainPanel.style.borderTopRightRadius = '0';
+              mainPanel.style.borderBottomRightRadius = '0';
+          }
+      } else {
+          document.body.append(modal);
+      }
 
-      // buttons container
-      const btnRow = document.createElement('div');
-      btnRow.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;';
+      // Element references
+      const input = modal.querySelector('#server-count-input');
+      const closeBtn = modal.querySelector('#cancel-server-btn');
+      const saveBtn = modal.querySelector('#save-server-btn');
 
-      // helper to make buttons
-      const makeBtn = (text, bg, fn) => {
-        const b = document.createElement('button');
-        b.textContent = text;
-        b.style.cssText = `
-          padding:8px 14px;border-radius:8px;border:1px solid ${bg};
-          background:${bg};color:#fff;font-size:13px;cursor:pointer;transition:.15s;
-        `;
-        b.onmouseenter = () => b.style.opacity = .85;
-        b.onmouseleave = () => b.style.opacity = 1;
-        b.onclick = fn;
-        return b;
-      };
-
-      // fade out modal
+      // Close animation logic
       const closeModal = () => {
-        modal.style.transform = 'scale(.96) translateY(12px)';
-        overlay.style.opacity = '0';
-        setTimeout(() => overlay.remove(), 200);
+        modal.style.width = '0px';
+        modal.style.opacity = '0';
+        setTimeout(() => {
+            modal.remove();
+            if (mainMenu) mainMenu.style.gap = originalGap;
+            // border radius remove
+            if (mainPanel) {
+                mainPanel.style.borderTopRightRadius = '';
+                mainPanel.style.borderBottomRightRadius = '';
+            }
+        }, 500); // 500 ms
       };
 
-      // add cancel + save buttons
-      const cancelBtn = makeBtn('Cancel', '#333', closeModal);
-      const saveBtn = makeBtn('Save', '#16a34a', () => {
+      // buttons
+      closeBtn.onclick = closeModal;
+
+      saveBtn.onclick = () => {
         const val = parseInt(input.value);
+
         if (val >= 1 && val <= 700) {
           localStorage.setItem('ROLOCATE_AutoRunServerRegionsnumber', val.toString());
-          saveBtn.textContent = '✓ Saved!';
-          saveBtn.style.background = '#10b981';
-          setTimeout(() => closeModal(), 1000);
+
+          if (typeof notifications === "function") {
+            notifications("Settings saved!", "success", "👍", 4000);
+          }
+
+          closeModal();
         } else {
-          notifications("Please enter a valid number from 1-700", "warning", "", 4000);
+          if (typeof notifications === "function") {
+            notifications("Enter a number between 1 and 700.", "warning", "", 4000);
+          }
         }
-      });
-
-      btnRow.append(cancelBtn, saveBtn);
-      modal.append(btnRow);
-      overlay.append(modal);
-      document.body.append(overlay);
-
-      // animate in like editRemoveAds
-      requestAnimationFrame(() => {
-        overlay.style.opacity = '1';
-        modal.style.transform = 'scale(1) translateY(0)';
-      });
-
-      // focus input
-      input.focus();
-
-      // click outside closes
-      overlay.onclick = (e) => {
-        if (e.target === overlay) closeModal();
       };
+
+      // Simple hover effects for the buttons
+      [closeBtn, saveBtn].forEach(btn => {
+        btn.onmouseenter = () => btn.style.opacity = .85;
+        btn.onmouseleave = () => btn.style.opacity = 1;
+      });
+
+      // Animate in
+      requestAnimationFrame(() => {
+        modal.style.opacity = '1';
+        modal.style.width = '340px';
+        input.focus();
+      });
     }
 
-    /*******************************************************
+/*******************************************************
     name of function: editserverregions
-    description: popup for customizing allowed/banned server regions
+    description: sliding drawer panel for customizing allowed/banned server regions
     *******************************************************/
     function editserverregions() {
       // don't open it twice
       if (document.getElementById('rolocate-region-settings-modal')) return;
+
+      document.querySelectorAll('#userscript-settings-menu > div:not(:first-child)').forEach(m => m.remove()); // plz work
 
       // ensure server regions are loaded
       if (typeof window.loadServerRegions === 'function') {
@@ -4146,23 +4288,42 @@ li a.about-link:hover::after {
 
       const settings = { ...defaultSettings };
 
-      // dark background overlay
-      const overlay = document.createElement('div');
-      overlay.id = 'rolocate-region-settings-modal';
-      overlay.style.cssText = `
-        position:fixed;inset:0;display:flex;justify-content:center;align-items:center;
-        background:rgba(0,0,0,.45);z-index:10000;opacity:0;transition:.2s;
+      const mainMenu = document.getElementById("userscript-settings-menu");
+      let originalGap = mainMenu ? (mainMenu.style.gap || "0px") : "0px";
+      let mainPanel; // Track main panel so close animation can access it
+
+      // main drawer element (sliding style matching game quality settings)
+      const modal = document.createElement('div');
+      modal.id = 'rolocate-region-settings-modal';
+      modal.className = 'dummy-class-for-server-region-edit-so-restoreclassicterms-can-target-this';
+      modal.style.cssText = `
+        background: #1e1e1e;
+        border-radius: 0 14px 14px 0;
+        border: 1px solid #2f2f2f;
+        border-left: none;
+        box-shadow: 10px 10px 30px rgba(0,0,0,.6);
+        width: 0px;
+        opacity: 0;
+        overflow: hidden;
+        transition: width 0.5s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.2s ease-in;
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        color: #fff;
       `;
 
-      // main modal box
-      const modal = document.createElement('div');
-      modal.className = 'dummy-class-for-server-region-edit-so-restoreclassicterms-can-target-this'; // yea ik im the best at naming stuff
-      modal.style.cssText = `
-        background:#181818;border-radius:14px;padding:18px;width:420px;max-width:92vw;
-        max-height:85vh;color:#fff;border:1px solid #2f2f2f;
-        box-shadow:0 10px 30px rgba(0,0,0,.6);
-        transform:scale(.96) translateY(12px);transition:.2s;
-        display:flex;flex-direction:column;
+      // inner wrapper to keep content fixed-width during expansion
+      const innerWrapper = document.createElement('div');
+      innerWrapper.style.cssText = `
+        width: 420px;
+        min-width: 420px;
+        padding: 18px;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        box-sizing: border-box;
+        overflow-y: hidden;
       `;
 
       // title + subtitle
@@ -4172,7 +4333,7 @@ li a.about-link:hover::after {
         <p style="margin:0px 0 0px;text-align:center;font-size:12px;color:#aaa">
           Only join servers from enabled regions
         </p>
-        <p style="margin:0px 0 6px;text-align:center;font-size:12px;color:#aaa">
+        <p style="margin:0px 0 10px;text-align:center;font-size:12px;color:#aaa">
           Affects ServerHop, Server Regions, and Best Connection
         </p>
       `;
@@ -4180,7 +4341,10 @@ li a.about-link:hover::after {
       // scrollable container for toggles
       const scrollContainer = document.createElement('div');
       scrollContainer.style.cssText = `
-        overflow-y:auto;max-height:50vh;
+        overflow-y: auto;
+        max-height: 45vh;
+        flex: 1;
+        border-radius: 10px;
       `;
 
       // container for all toggles
@@ -4207,6 +4371,7 @@ li a.about-link:hover::after {
       sortedKeys.forEach(key => {
         const location = uniqueRegions[key];
         const isAllowed = settings[key] === 'allowed';
+        const domId = 'reg_' + key.replace(/[^a-zA-Z0-9_]/g, '_');
 
         const row = document.createElement('label');
         row.style.cssText = `
@@ -4243,10 +4408,10 @@ li a.about-link:hover::after {
         `;
         leftContainer.appendChild(textContainer);
 
-        // create checkbox (hidden)
+        // create checkbox (hidden) with sanitized DOM ID
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
-        checkbox.id = key;
+        checkbox.id = domId;
         checkbox.checked = isAllowed;
         checkbox.style.display = 'none';
 
@@ -4288,7 +4453,7 @@ li a.about-link:hover::after {
       // buttons container
       const buttonRow = document.createElement('div');
       buttonRow.style.cssText = `
-        display:flex;justify-content:space-between;gap:8px;margin-top:14px;
+        display:flex;justify-content:space-between;gap:8px;margin-top:14px;flex-shrink:0;
       `;
 
       // reusable button factory
@@ -4296,7 +4461,7 @@ li a.about-link:hover::after {
         const button = document.createElement('button');
         button.textContent = text;
         button.style.cssText = `
-          padding:8px 14px;border-radius:8px;border:1px solid ${bgColor};
+          padding:8px 12px;border-radius:8px;border:1px solid ${bgColor};
           background:${bgColor};color:#fff;font-size:13px;cursor:pointer;
           transition:.15s;flex:1;
         `;
@@ -4308,22 +4473,32 @@ li a.about-link:hover::after {
 
       // close animation & cleanup
       const closeModal = () => {
-        modal.style.transform = 'scale(.96) translateY(12px)';
-        overlay.style.opacity = '0';
-        setTimeout(() => overlay.remove(), 200);
+        modal.style.width = '0px';
+        modal.style.opacity = '0';
+        setTimeout(() => {
+          if (document.body.contains(modal)) modal.remove();
+          if (mainMenu) mainMenu.style.gap = originalGap;
+          // again border
+          if (mainPanel) {
+              mainPanel.style.borderTopRightRadius = '';
+              mainPanel.style.borderBottomRightRadius = '';
+          }
+        }, 500);
       };
 
       // add buttons
       const leftButtons = document.createElement('div');
-      leftButtons.style.cssText = 'display:flex;gap:8px;';
+      leftButtons.style.cssText = 'display:flex;gap:6px;flex:1;';
 
       const rightButtons = document.createElement('div');
-      rightButtons.style.cssText = 'display:flex;gap:8px;';
+      rightButtons.style.cssText = 'display:flex;gap:6px;flex:1;';
 
       leftButtons.append(
         createButton('Reset', '#0ea5e9', () => {
           sortedKeys.forEach(key => {
-            const checkbox = document.getElementById(key);
+            const domId = 'reg_' + key.replace(/[^a-zA-Z0-9_]/g, '_');
+            const checkbox = document.getElementById(domId);
+            if (!checkbox) return;
             const row = checkbox.closest('label');
             const toggle = row.querySelector('.tgl');
             const knob = toggle.querySelector('div');
@@ -4332,10 +4507,12 @@ li a.about-link:hover::after {
             toggle.style.background = '#16a34a';
             knob.style.left = '18px';
           });
-        }, true),
+        }),
         createButton('Disable All', '#bf7c0a', () => {
           sortedKeys.forEach(key => {
-            const checkbox = document.getElementById(key);
+            const domId = 'reg_' + key.replace(/[^a-zA-Z0-9_]/g, '_');
+            const checkbox = document.getElementById(domId);
+            if (!checkbox) return;
             const row = checkbox.closest('label');
             const toggle = row.querySelector('.tgl');
             const knob = toggle.querySelector('div');
@@ -4344,7 +4521,7 @@ li a.about-link:hover::after {
             toggle.style.background = '#dc2626';
             knob.style.left = '2px';
           });
-        }, true)
+        })
       );
 
       rightButtons.append(
@@ -4352,7 +4529,9 @@ li a.about-link:hover::after {
         createButton('Save', '#16a34a', () => {
           const newSettings = {};
           sortedKeys.forEach(key => {
-            const isChecked = document.getElementById(key).checked;
+            const domId = 'reg_' + key.replace(/[^a-zA-Z0-9_]/g, '_');
+            const checkbox = document.getElementById(domId);
+            const isChecked = checkbox ? checkbox.checked : true;
             newSettings[key] = isChecked ? 'allowed' : 'banned';
           });
 
@@ -4375,193 +4554,31 @@ li a.about-link:hover::after {
 
       buttonRow.append(leftButtons, rightButtons);
 
-      // assemble modal
-      modal.append(header, scrollContainer, buttonRow);
-      overlay.append(modal);
-      document.body.append(overlay);
+      // assemble inner wrapper & modal
+      innerWrapper.append(header, scrollContainer, buttonRow);
+      modal.append(innerWrapper);
 
-      // animate in
-      requestAnimationFrame(() => {
-        overlay.style.opacity = '1';
-        modal.style.transform = 'scale(1) translateY(0)';
-      });
-    }
-
-    /*******************************************************
-    name of function: editprivateserversettings
-    description: popup for customizing better private server settings
-    *******************************************************/
-    function editprivateserversettings() {
-      const bpsEnabled = localStorage.getItem('ROLOCATE_betterprivateservers');
-      if (bpsEnabled !== 'true') return;
-
-      if (document.getElementById('rolocate-ps-settings-modal')) return;
-
-      const defaultSettings = {
-        compactPrivateServers: true,
-        onlyYourPrivateServers: false,
-        privateServerSearch: false
-      };
-
-      const savedSettings = JSON.parse(
-        localStorage.getItem('ROLOCATE_editprivateserversettings') || '{}'
-      );
-      const settings = { ...defaultSettings, ...savedSettings };
-
-      // Compact Private Servers is always on
-      settings.compactPrivateServers = true;
-
-      const overlay = document.createElement('div');
-      overlay.id = 'rolocate-ps-settings-modal';
-      overlay.style.cssText = `
-        position:fixed;inset:0;display:flex;justify-content:center;align-items:center;
-        background:rgba(0,0,0,.45);z-index:10000;opacity:0;transition:.2s;
-      `;
-
-      const modal = document.createElement('div');
-      modal.style.cssText = `
-        background:#181818;border-radius:14px;padding:18px;width:340px;max-width:92vw;
-        color:#fff;border:1px solid #2f2f2f;box-shadow:0 10px 30px rgba(0,0,0,.6);
-        transform:scale(.96) translateY(12px);transition:.2s;
-      `;
-
-      modal.innerHTML = `
-        <h2 style="margin:0;font-size:18px;text-align:center">Private Server Settings</h2>
-        <p style="margin:6px 0 0px;text-align:center;font-size:12px;color:#aaa">
-          Change Settings for Private Servers
-        </p>
-      `;
-
-      const toggleOptions = [
-        ['compactPrivateServers', 'Compact Private Servers'],
-        ['onlyYourPrivateServers', 'Only Your Private Servers'],
-        ['privateServerSearch', 'Private Server Search']
-      ];
-
-      const togglesContainer = document.createElement('div');
-      togglesContainer.style.cssText = `
-        background:#222;padding:10px;border-radius:10px;display:grid;gap:8px;
-      `;
-
-      const toggleElements = {};
-
-      toggleOptions.forEach(([key, label]) => {
-        const isDisabled = key === 'compactPrivateServers';
-
-        const row = document.createElement('label');
-        row.style.cssText = `
-          display:flex;justify-content:space-between;align-items:center;
-          padding:8px 10px;border-radius:8px;
-          cursor:${isDisabled ? 'not-allowed' : 'pointer'};
-          transition:.15s;background:${isDisabled ? '#1a1a1a' : '#262626'};
-          opacity:${isDisabled ? '0.6' : '1'};
-        `;
-
-        if (!isDisabled) {
-          row.onmouseenter = () => (row.style.background = '#2d2d2d');
-          row.onmouseleave = () => (row.style.background = '#262626');
+      // Append to menu and sync height
+      if (mainMenu) {
+        mainMenu.style.gap = "0px";
+        mainMenu.append(modal);
+        mainPanel = mainMenu.querySelector('div');
+        if (mainPanel && mainPanel !== modal) {
+          modal.style.height = mainPanel.offsetHeight + 'px';
+          // Force straight right corners while the modal is open
+          mainPanel.style.borderTopRightRadius = '0';
+          mainPanel.style.borderBottomRightRadius = '0';
         }
+      } else {
+        document.body.append(modal);
+      }
 
-        row.innerHTML = `
-          <span style="font-size:13px;color:${isDisabled ? '#888' : '#fff'}">${label}</span>
-          <input type="checkbox" id="${key}" ${settings[key] ? 'checked' : ''} style="display:none">
-          <div class="tgl" style="
-            width:36px;height:20px;border-radius:20px;
-            background:${settings[key] ? (isDisabled ? '#0d7a34' : '#16a34a') : '#444'};
-            position:relative;transition:.15s;
-          ">
-            <div style="
-              width:16px;height:16px;border-radius:50%;background:${isDisabled ? '#ccc' : '#fff'};
-              position:absolute;top:2px;left:${settings[key] ? '18px' : '2px'};
-              transition:.15s;
-            "></div>
-          </div>
-        `;
-
-        const checkbox = row.querySelector('input');
-        const toggle = row.querySelector('.tgl');
-        const knob = toggle.querySelector('div');
-
-        toggleElements[key] = { checkbox, toggle, knob };
-
-        if (!isDisabled) row.onclick = (e) => {
-          e.preventDefault();
-          const willBeChecked = !checkbox.checked;
-          checkbox.checked = willBeChecked;
-          toggle.style.background = willBeChecked ? '#16a34a' : '#444';
-          knob.style.left = willBeChecked ? '18px' : '2px';
-
-          // mutual exclusion between onlyYourPrivateServers and privateServerSearch
-          const opposite = key === 'onlyYourPrivateServers' ? 'privateServerSearch' :
-                           key === 'privateServerSearch' ? 'onlyYourPrivateServers' : null;
-          if (opposite && willBeChecked && toggleElements[opposite]) {
-            const o = toggleElements[opposite];
-            o.checkbox.checked = false;
-            o.toggle.style.background = '#444';
-            o.knob.style.left = '2px';
-          }
-        };
-
-        togglesContainer.appendChild(row);
-      });
-
-      const buttonRow = document.createElement('div');
-      buttonRow.style.cssText = `
-        display:flex;justify-content:flex-end;gap:8px;margin-top:14px;
-      `;
-
-      const createButton = (text, bgColor, onClick) => {
-        const button = document.createElement('button');
-        button.textContent = text;
-        button.style.cssText = `
-          padding:8px 14px;border-radius:8px;border:1px solid ${bgColor};
-          background:${bgColor};color:#fff;font-size:13px;cursor:pointer;
-          transition:.15s;
-        `;
-        button.onmouseenter = () => (button.style.opacity = 0.85);
-        button.onmouseleave = () => (button.style.opacity = 1);
-        button.onclick = onClick;
-        return button;
-      };
-
-      const closeModal = () => {
-        modal.style.transform = 'scale(.96) translateY(12px)';
-        overlay.style.opacity = '0';
-        setTimeout(() => overlay.remove(), 200);
-      };
-
-      buttonRow.append(
-        createButton('Cancel', '#333', closeModal),
-        createButton('Save', '#16a34a', () => {
-          const newSettings = {};
-          toggleOptions.forEach(([key]) => {
-            newSettings[key] = key === 'compactPrivateServers'
-              ? true
-              : document.getElementById(key).checked;
-          });
-
-          localStorage.setItem(
-            'ROLOCATE_editprivateserversettings',
-            JSON.stringify(newSettings)
-          );
-
-          ConsoleLogEnabled('Private server settings saved:', newSettings);
-          notifications('Settings saved', 'success', '👍', '5000');
-
-          closeModal();
-        })
-      );
-
-      modal.append(togglesContainer, buttonRow);
-      overlay.append(modal);
-      document.body.append(overlay);
-
+      // Animate drawer open
       requestAnimationFrame(() => {
-        overlay.style.opacity = '1';
-        modal.style.transform = 'scale(1) translateY(0)';
+        modal.style.opacity = '1';
+        modal.style.width = '420px';
       });
     }
-
     /*******************************************************
      * Storage helpers
      * All non-file settings live in ONE localStorage key.
@@ -4672,7 +4689,7 @@ li a.about-link:hover::after {
             const fallback = 'rgba(45,45,45,0.85)';
             const selectorMap = [
                 ['#header,#header.rbx-header,.rbx-header,#header .container-fluid', 'header-bar'],
-                ['#navigation,#navigation.rbx-left-col,#left-navigation-container,.rbx-left-col,.left-col-list,.simplebar-content', 'left-sidebar'],
+                ['#navigation,#navigation.rbx-left-col,#left-navigation-container,.rbx-left-col,.left-col-list,.simplebar-content,.left-nav', 'left-sidebar'],
                 ['#navigation-container', 'sidebar-wrapper'],
                 ...(hasBG ? [] : [
                     ['#container-main,main.container-main,#content', 'main-content'],
@@ -4726,7 +4743,11 @@ li a.about-link:hover::after {
                 .left-col-list li:not(.rbx-upgrade-now),
                 .left-col-list li:not(.rbx-upgrade-now):hover,
                 .left-col-list a:not(#upgrade-now-button),
-                .left-col-list li:not(.rbx-upgrade-now):hover > a
+                .left-col-list li:not(.rbx-upgrade-now):hover > a,
+                .left-nav nav ul li a,
+                .left-nav nav ul li button,
+                .left-nav nav ul li span,
+                .left-nav nav ul li div
                 {background:transparent!important;color:${sidebarText}!important}
             `;
         }
@@ -5658,479 +5679,227 @@ li a.about-link:hover::after {
     }
 
 
-    /*******************************************************
+/*******************************************************
     name of function: openGameQualitySettings
-    description: opens game quality settings
+    description: opens game quality settings drawer
     *******************************************************/
     function openGameQualitySettings() {
         if (document.getElementById('game-settings-modal')) return;
 
-        // make the dark overlay thing
-        const overlay = document.createElement('div');
-        overlay.id = 'game-settings-modal';
-        overlay.setAttribute('role', 'dialog');
-        overlay.setAttribute('aria-modal', 'true');
-        overlay.setAttribute('aria-labelledby', 'modal-title');
-        overlay.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0, 0, 0, 0.6);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        z-index: 10000;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        opacity: 0;
-        transition: opacity 0.2s ease;
-    `;
+      document.querySelectorAll('#userscript-settings-menu > div:not(:first-child)').forEach(m => m.remove()); // plz work
 
-        // the actual modal box
-        const modal = document.createElement('div');
-        modal.style.cssText = `
-        background: #1a1a1a;
-        border-radius: 16px;
-        padding: 32px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-        width: 480px;
-        max-width: 90vw;
-        max-height: 90vh;
-        overflow-y: auto;
-        transform: scale(0.95) translateY(20px);
-        transition: all 0.2s ease;
-        color: #ffffff;
-        border: 1px solid #404040;
-    `;
-
-        const form = document.createElement('form');
-        form.setAttribute('novalidate', '');
-
-        // title text
-        const title = document.createElement('h2');
-        title.id = 'modal-title';
-        title.textContent = 'Game Quality Settings';
-        title.style.cssText = `
-        margin: 0 0 24px 0;
-        font-size: 24px;
-        font-weight: 600;
-        color: #e0e0e0;
-        text-align: center;
-        line-height: 1.3;
-    `;
-
-        // rating slider section
-        const ratingSection = document.createElement('div');
-        ratingSection.style.cssText = `
-        margin-bottom: 32px;
-        padding: 24px;
-        background: #2a2a2a;
-        border-radius: 10px;
-        border: 1px solid #404040;
-    `;
-
-        const ratingFieldset = document.createElement('fieldset');
-        ratingFieldset.style.cssText = `
-        border: none;
-        padding: 0;
-        margin: 0;
-    `;
-
-        const ratingLegend = document.createElement('legend');
-        ratingLegend.textContent = 'Game Rating Threshold';
-        ratingLegend.style.cssText = `
-        font-weight: 600;
-        color: #e0e0e0;
-        font-size: 16px;
-        margin-bottom: 16px;
-        padding: 0;
-    `;
-
-        const ratingContainer = document.createElement('div');
-        ratingContainer.style.cssText = `
-        display: flex;
-        align-items: center;
-        gap: 16px;
-    `;
-
-        const ratingSlider = document.createElement('input');
-        ratingSlider.type = 'range';
-        ratingSlider.id = 'game-rating-slider';
-        ratingSlider.name = 'gameRating';
-        ratingSlider.min = '1';
-        ratingSlider.max = '100';
-        ratingSlider.step = '1';
-        ratingSlider.value = localStorage.getItem('ROLOCATE_gamerating') || '75';
-        ratingSlider.setAttribute('aria-label', 'Game rating threshold percentage');
-        ratingSlider.style.cssText = `
-        flex: 1;
-        height: 6px;
-        border-radius: 3px;
-        background: #333333;
-        outline: none;
-        cursor: pointer;
-        -webkit-appearance: none;
-        appearance: none;
-    `;
-
-        // slider thumb styles
-        const sliderStyles = document.createElement('style');
-        sliderStyles.textContent = `
-        #game-rating-slider::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: #166534;
-            cursor: pointer;
-            border: 2px solid #ffffff;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        #game-rating-slider::-moz-range-thumb {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: #166534;
-            cursor: pointer;
-            border: 2px solid #ffffff;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        #game-rating-slider:focus::-webkit-slider-thumb {
-            box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.25);
-        }
-        #game-rating-slider:focus::-moz-range-thumb {
-            box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.25);
-        }
-    `;
-        document.head.appendChild(sliderStyles);
-
-        const ratingDisplay = document.createElement('div');
-        ratingDisplay.style.cssText = `
-        min-width: 60px;
-        text-align: center;
-        font-weight: 600;
-        color: #cccccc;
-        font-size: 16px;
-    `;
-
-        const ratingValue = document.createElement('span');
-        ratingValue.id = 'rating-value';
-        ratingValue.textContent = `${ratingSlider.value}%`;
-        ratingValue.setAttribute('aria-live', 'polite');
-
-        const ratingDescription = document.createElement('p');
-        ratingDescription.style.cssText = `
-        margin: 12px 0 0 0;
-        font-size: 14px;
-        color: #b0b0b0;
-        line-height: 1.4;
-    `;
-        ratingDescription.textContent = 'Show games with ratings at or above this threshold';
-
-        ratingSlider.addEventListener('input', function() {
-            ratingValue.textContent = `${this.value}%`;
-        });
-
-        ratingDisplay.appendChild(ratingValue);
-        ratingContainer.appendChild(ratingSlider);
-        ratingContainer.appendChild(ratingDisplay);
-        ratingFieldset.appendChild(ratingLegend);
-        ratingFieldset.appendChild(ratingContainer);
-        ratingFieldset.appendChild(ratingDescription);
-        ratingSection.appendChild(ratingFieldset);
-
-        // player count section
-        const playerSection = document.createElement('div');
-        playerSection.style.cssText = `
-        margin-bottom: 32px;
-        padding: 24px;
-        background: #2a2a2a;
-        border-radius: 10px;
-        border: 1px solid #404040;
-    `;
-
-        const playerFieldset = document.createElement('fieldset');
-        playerFieldset.style.cssText = `
-        border: none;
-        padding: 0;
-        margin: 0;
-    `;
-
-        const playerLegend = document.createElement('legend');
-        playerLegend.textContent = 'Player Count Range';
-        playerLegend.style.cssText = `
-        font-weight: 600;
-        color: #e0e0e0;
-        font-size: 16px;
-        margin-bottom: 16px;
-        padding: 0;
-    `;
-
-        const inputGrid = document.createElement('div');
-        inputGrid.style.cssText = `
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 16px;
-        margin-bottom: 12px;
-    `;
-
-        // get existing player count or defaults
+        const ratingVal = localStorage.getItem('ROLOCATE_gamerating') || '75';
+        let minPlayerVal = '2500', maxPlayerVal = 'unlimited';
         const existingPlayerCount = localStorage.getItem('ROLOCATE_playercount');
-        let minPlayerValue = '2500',
-            maxPlayerValue = 'unlimited';
-
         if (existingPlayerCount) {
             try {
-                const playerCountData = JSON.parse(existingPlayerCount);
-                minPlayerValue = playerCountData.min || '2500';
-                maxPlayerValue = playerCountData.max || 'unlimited';
+                const data = JSON.parse(existingPlayerCount);
+                minPlayerVal = data.min || '2500';
+                maxPlayerVal = data.max || 'unlimited';
             } catch (e) {
-                ConsoleLogEnabled('Failed to parse player count data, using defaults');
+                if (typeof ConsoleLogEnabled === "function") ConsoleLogEnabled('Failed to parse player count data, using defaults');
             }
         }
 
-        // function to create input containers
-        function createInputContainer(labelText, inputType, inputId, inputName, inputValue, extraAttrs = {}) {
-            const container = document.createElement('div');
-            const label = document.createElement('label');
-            label.textContent = labelText;
-            label.setAttribute('for', inputId);
-            label.style.cssText = `
-            display: block;
-            margin-bottom: 6px;
-            font-weight: 500;
-            color: #e0e0e0;
-            font-size: 14px;
-        `;
+        const mainMenu = document.getElementById("userscript-settings-menu");
+        let originalGap = mainMenu ? (mainMenu.style.gap || "0px") : "0px";
+        let mainPanel; // Track main panel so close animation can access it
 
-            const input = document.createElement('input');
-            input.type = inputType;
-            input.id = inputId;
-            input.name = inputName;
-            input.value = inputValue;
-            input.setAttribute('aria-describedby', 'player-count-desc');
-            input.style.cssText = `
-            width: 100%;
-            padding: 12px;
-            background: #333333;
-            border: 2px solid #555555;
-            border-radius: 8px;
-            color: #ffffff;
-            font-size: 14px;
-            transition: border-color 0.15s ease;
-            outline: none;
+        // Slider thumb custom styles
+        const sliderStyles = document.createElement('style');
+        sliderStyles.id = 'game-rating-slider-styles';
+        sliderStyles.textContent = `
+            #game-rating-slider::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                width: 20px; height: 20px; border-radius: 50%;
+                background: #166534; cursor: pointer; border: 2px solid #ffffff;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }
+            #game-rating-slider::-moz-range-thumb {
+                width: 20px; height: 20px; border-radius: 50%;
+                background: #166534; cursor: pointer; border: 2px solid #ffffff;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }
+            #game-rating-slider:focus::-webkit-slider-thumb {
+                box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.25);
+            }
+            #game-rating-slider:focus::-moz-range-thumb {
+                box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.25);
+            }
+        `;
+        document.head.appendChild(sliderStyles);
+
+        // outer modal
+        const modal = document.createElement('div');
+        modal.id = 'game-settings-modal';
+        modal.style.cssText = `
+            background: #1e1e1e;
+            border-radius: 0 14px 14px 0;
+            border: 1px solid #2f2f2f;
+            border-left: none;
+            box-shadow: 10px 10px 30px rgba(0,0,0,.6);
+            width: 0px;
+            opacity: 0;
+            overflow: hidden;
+            transition: width 0.5s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.2s ease-in;
+            display: flex;
+            flex-direction: column;
             box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: #ffffff;
         `;
 
-            // add extra attributes
-            Object.entries(extraAttrs).forEach(([key, value]) => {
-                input.setAttribute(key, value);
-            });
+        // Clean template interior to reduce code bloat while keeping all options
+        modal.innerHTML = `
+            <div style="width: 480px; min-width: 480px; padding: 24px; display: flex; flex-direction: column; height: 100%; box-sizing: border-box; overflow-y: auto;">
+                <h2 style="margin: 0 0 20px 0; font-size: 22px; font-weight: 600; color: #e0e0e0; text-align: center;">Game Quality Settings</h2>
 
-            container.appendChild(label);
-            container.appendChild(input);
-            return {
-                container,
-                input
-            };
+                <!-- Rating Section -->
+                <div style="margin-bottom: 24px; padding: 20px; background: #262626; border-radius: 10px; border: 1px solid #333;">
+                    <label style="font-weight: 600; color: #e0e0e0; font-size: 15px; display: block; margin-bottom: 12px;">Game Rating Threshold</label>
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                        <input type="range" id="game-rating-slider" min="1" max="100" step="1" value="${ratingVal}" style="flex: 1; height: 6px; border-radius: 3px; background: #333333; outline: none; cursor: pointer; -webkit-appearance: none; appearance: none;">
+                        <div style="min-width: 50px; text-align: center; font-weight: 600; color: #cccccc; font-size: 15px;">
+                            <span id="rating-value">${ratingVal}%</span>
+                        </div>
+                    </div>
+                    <p style="margin: 10px 0 0 0; font-size: 13px; color: #aaa; line-height: 1.4;">Show games with ratings at or above this threshold</p>
+                </div>
+
+                <!-- Player Count Section -->
+                <div style="margin-bottom: 20px; padding: 20px; background: #262626; border-radius: 10px; border: 1px solid #333;">
+                    <label style="font-weight: 600; color: #e0e0e0; font-size: 15px; display: block; margin-bottom: 12px;">Player Count Range</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+                        <div>
+                            <label for="min-players" style="display: block; margin-bottom: 4px; font-weight: 500; color: #ccc; font-size: 13px;">Minimum Players</label>
+                            <input type="number" id="min-players" min="0" max="1000000" value="${minPlayerVal}" style="width: 100%; padding: 10px; background: #333; border: 1px solid #444; border-radius: 8px; color: #fff; font-size: 14px; outline: none; box-sizing: border-box;">
+                        </div>
+                        <div>
+                            <label for="max-players" style="display: block; margin-bottom: 4px; font-weight: 500; color: #ccc; font-size: 13px;">Maximum Players</label>
+                            <input type="text" id="max-players" value="${maxPlayerVal}" placeholder="Number or unlimited" style="width: 100%; padding: 10px; background: #333; border: 1px solid #444; border-radius: 8px; color: #fff; font-size: 14px; outline: none; box-sizing: border-box;">
+                        </div>
+                    </div>
+                    <p style="margin: 0; font-size: 13px; color: #aaa; line-height: 1.4;">Filter games by active player count. Use "unlimited" for no upper limit.</p>
+                    <div id="game-error-container" style="margin-top: 10px; padding: 8px 12px; background: #3a1c1c; color: #ff6b6b; border: 1px solid #ff4757; border-radius: 6px; font-size: 13px; display: none;"></div>
+                </div>
+
+                <!-- Buttons -->
+                <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: auto;">
+                    <button id="cancel-game-btn" style="padding: 10px 18px; background: #333; color: #ccc; border: 1px solid #444; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; transition: .15s;">Cancel</button>
+                    <button id="save-game-btn" style="padding: 10px 18px; background: #16a34a; color: #fff; border: 1px solid #16a34a; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; transition: .15s;">Save Settings</button>
+                </div>
+            </div>
+        `;
+
+        // Append to menu and sync height
+        if (mainMenu) {
+            mainMenu.style.gap = "0px";
+            mainMenu.append(modal);
+            mainPanel = mainMenu.querySelector('div');
+            if (mainPanel && mainPanel !== modal) {
+                modal.style.height = mainPanel.offsetHeight + 'px';
+                // Force straight right corners while the modal is open
+                mainPanel.style.borderTopRightRadius = '0';
+                mainPanel.style.borderBottomRightRadius = '0';
+            }
+        } else {
+            document.body.append(modal);
         }
 
-        // min player input
-        const minData = createInputContainer('Minimum Players', 'number', 'min-players', 'minPlayers', minPlayerValue, {
-            min: '0',
-            max: '1000000'
+        // Element references & event handlers
+        const slider = modal.querySelector('#game-rating-slider');
+        const ratingValueDisplay = modal.querySelector('#rating-value');
+        const minInput = modal.querySelector('#min-players');
+        const maxInput = modal.querySelector('#max-players');
+        const errorContainer = modal.querySelector('#game-error-container');
+        const cancelBtn = modal.querySelector('#cancel-game-btn');
+        const saveBtn = modal.querySelector('#save-game-btn');
+
+        slider.addEventListener('input', function() {
+            ratingValueDisplay.textContent = `${this.value}%`;
         });
 
-        // max player input
-        const maxData = createInputContainer('Maximum Players', 'text', 'max-players', 'maxPlayers', maxPlayerValue, {
-            placeholder: 'Enter number or "unlimited"'
-        });
-
-        // fix max label color
-        maxData.container.querySelector('label').style.color = '#495057';
-
-        const playerDescription = document.createElement('p');
-        playerDescription.id = 'player-count-desc';
-        playerDescription.style.cssText = `
-        margin: 0;
-        font-size: 14px;
-        color: #b0b0b0;
-        line-height: 1.4;
-    `;
-        playerDescription.textContent = 'Filter games by active player count. Use "unlimited" for no upper limit.';
-
-        // error message thing
-        const errorContainer = document.createElement('div');
-        errorContainer.style.cssText = `
-        margin-top: 12px;
-        padding: 8px 12px;
-        background: #2a2a2a;
-        color: #ff4757;
-        border: 1px solid #ff6b6b;
-        border-radius: 8px;
-        font-size: 14px;
-        display: none;
-    `;
-
-        // validation and focus effects for inputs
-        [minData.input, maxData.input].forEach(input => {
-            input.addEventListener('focus', function() {
-                this.style.borderColor = '#166534';
-                this.style.boxShadow = '0 0 0 3px rgba(22, 101, 52, 0.25)';
-            });
-
-            input.addEventListener('blur', function() {
-                this.style.borderColor = '#555555';
-                this.style.boxShadow = 'none';
-                validateInputs();
-            });
-
-            input.addEventListener('input', validateInputs);
-        });
-
-        function validateInputs() {
+        const validateInputs = () => {
             errorContainer.style.display = 'none';
-            const minValue = parseInt(minData.input.value);
-            const maxValue = maxData.input.value.toLowerCase() === 'unlimited' ? Infinity : parseInt(maxData.input.value);
+            const minValue = parseInt(minInput.value);
+            const maxValue = maxInput.value.toLowerCase() === 'unlimited' ? Infinity : parseInt(maxInput.value);
 
             if (isNaN(minValue) || minValue < 0) {
-                errorContainer.textContent = 'Minimum player count must be a valid number greater than or equal to 0.';
+                errorContainer.textContent = 'Minimum player count must be a valid number >= 0.';
                 errorContainer.style.display = 'block';
                 return false;
             }
-            if (maxData.input.value.toLowerCase() !== 'unlimited' && (isNaN(maxValue) || maxValue < 0)) {
+            if (maxInput.value.toLowerCase() !== 'unlimited' && (isNaN(maxValue) || maxValue < 0)) {
                 errorContainer.textContent = 'Maximum player count must be a valid number or "unlimited".';
                 errorContainer.style.display = 'block';
                 return false;
             }
             if (maxValue !== Infinity && minValue > maxValue) {
-                errorContainer.textContent = 'Minimum player count cannot be greater than maximum player count.';
+                errorContainer.textContent = 'Minimum player count cannot exceed maximum player count.';
                 errorContainer.style.display = 'block';
                 return false;
             }
             return true;
-        }
+        };
 
-        inputGrid.appendChild(minData.container);
-        inputGrid.appendChild(maxData.container);
-        playerFieldset.appendChild(playerLegend);
-        playerFieldset.appendChild(inputGrid);
-        playerFieldset.appendChild(playerDescription);
-        playerFieldset.appendChild(errorContainer);
-        playerSection.appendChild(playerFieldset);
+        [minInput, maxInput].forEach(input => {
+            input.addEventListener('blur', validateInputs);
+            input.addEventListener('input', validateInputs);
+        });
 
-        // buttons
-        const buttonContainer = document.createElement('div');
-        buttonContainer.style.cssText = `
-        display: flex;
-        justify-content: flex-end;
-        gap: 12px;
-        margin-top: 32px;
-    `;
+        const closeModal = () => {
+            modal.style.width = '0px';
+            modal.style.opacity = '0';
+            setTimeout(() => {
+                if (document.body.contains(modal)) modal.remove();
+                if (document.head.contains(sliderStyles)) document.head.removeChild(sliderStyles);
+                if (mainMenu) mainMenu.style.gap = originalGap;
+                // again border
+                if (mainPanel) {
+                    mainPanel.style.borderTopRightRadius = '';
+                    mainPanel.style.borderBottomRightRadius = '';
+                }
+            }, 500); // Wait the full 500ms transition
+        };
 
-        // helper for button creation
-        function createButton(text, type, bgColor, borderColor, hoverBg, hoverBorder) {
-            const button = document.createElement('button');
-            button.type = type;
-            button.textContent = text;
-            button.style.cssText = `
-            padding: 12px 24px;
-            background: ${bgColor};
-            color: ${type === 'submit' ? 'white' : '#cccccc'};
-            border: 2px solid ${borderColor};
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.15s ease;
-            outline: none;
-        `;
+        cancelBtn.onclick = closeModal;
 
-            button.addEventListener('mouseenter', function() {
-                this.style.backgroundColor = hoverBg;
-                this.style.borderColor = hoverBorder;
-            });
-
-            button.addEventListener('mouseleave', function() {
-                this.style.backgroundColor = bgColor;
-                this.style.borderColor = borderColor;
-            });
-
-            button.addEventListener('focus', function() {
-                this.style.boxShadow = type === 'submit' ? '0 0 0 3px rgba(22, 101, 52, 0.25)' : '0 0 0 3px rgba(108, 117, 125, 0.25)';
-            });
-
-            button.addEventListener('blur', function() {
-                this.style.boxShadow = 'none';
-            });
-
-            return button;
-        }
-
-        const cancelButton = createButton('Cancel', 'button', '#333333', '#555555', '#404040', '#666666');
-        const saveButton = createButton('Save Settings', 'submit', '#166534', '#166534', '#14532d', '#14532d');
-
-        // form submit handler
-        form.addEventListener('submit', function(e) {
-            e.preventDefault();
+        saveBtn.onclick = () => {
             if (!validateInputs()) return;
-
             try {
                 const playerCountData = {
-                    min: minData.input.value,
-                    max: maxData.input.value
+                    min: minInput.value,
+                    max: maxInput.value
                 };
-
-                localStorage.setItem('ROLOCATE_gamerating', ratingSlider.value);
+                localStorage.setItem('ROLOCATE_gamerating', slider.value);
                 localStorage.setItem('ROLOCATE_playercount', JSON.stringify(playerCountData));
+
+                if (typeof notifications === "function") {
+                    notifications('Game quality settings saved', 'success', '👍', '4000');
+                }
                 closeModal();
             } catch (error) {
-                ConsoleLogEnabled('Failed to save settings:', error);
+                if (typeof ConsoleLogEnabled === "function") ConsoleLogEnabled('Failed to save settings:', error);
                 errorContainer.textContent = 'Failed to save settings. Please try again.';
                 errorContainer.style.display = 'block';
             }
+        };
+
+        [cancelBtn, saveBtn].forEach(btn => {
+            btn.onmouseenter = () => btn.style.opacity = .85;
+            btn.onmouseleave = () => btn.style.opacity = 1;
         });
 
-        cancelButton.addEventListener('click', closeModal);
-
-        // close modal with animation
-        function closeModal() {
-            modal.style.transform = 'scale(0.95) translateY(20px)';
-            overlay.style.opacity = '0';
-            setTimeout(() => {
-                if (document.body.contains(overlay)) document.body.removeChild(overlay);
-                if (document.head.contains(sliderStyles)) document.head.removeChild(sliderStyles);
-            }, 200);
-        }
-
-        buttonContainer.appendChild(cancelButton);
-        buttonContainer.appendChild(saveButton);
-
-        // put it all together
-        form.appendChild(title);
-        form.appendChild(ratingSection);
-        form.appendChild(playerSection);
-        form.appendChild(buttonContainer);
-        modal.appendChild(form);
-        overlay.appendChild(modal);
-
-        document.body.appendChild(overlay);
-
-        // show modal with animation
+        // Animate drawer open
         requestAnimationFrame(() => {
-            overlay.style.opacity = '1';
-            modal.style.transform = 'scale(1) translateY(0)';
+            modal.style.opacity = '1';
+            modal.style.width = '480px';
+            slider.focus();
         });
-
-        // focus first input
-        setTimeout(() => ratingSlider.focus(), 250);
     }
 
-
-
+    // the function to do it. this sucks tbh
     function qualityfilterRobloxGames() {
-
         // exit if on home page or filter disabled
         if (/^https?:\/\/(www\.)?roblox\.com(\/[a-z]{2})?\/home\/?$/i.test(window.location.href)) {
             ConsoleLogEnabled("On roblox.com/home. Gamequalityfilter Exiting function.");
@@ -6400,6 +6169,17 @@ li a.about-link:hover::after {
                     color: ${dark ? "#fff" : "#000"};
                     font-family: "Segoe UI", Roboto, sans-serif;
                 }
+                .rolocate-user-name {
+                    font-size: 2em; font-weight: 600; margin: 0;
+                    color: ${dark ? "#fff" : "#000"};
+                    font-family: "Segoe UI", Roboto, sans-serif;
+                }
+                .rolocate-status-text {
+                    font-size: 0.85em; font-weight: 500; margin-top: 6px;
+                    color: ${dark ? "#aaa" : "#777"};
+                    font-family: "Segoe UI", Roboto, sans-serif;
+                    display: flex; align-items: flex-start; gap: 8px; line-height: 1.4;
+                }
                 .rolocate-most-played-wrapper {
                     margin-left: auto; flex-shrink: 0;
                     width: 520px; height: 205px;
@@ -6647,6 +6427,19 @@ li a.about-link:hover::after {
 
             const details = make('div');
             details.appendChild(make('h1', 'rolocate-user-name', { textContent: greeting }));
+
+            // badge to show users current status
+            const statusText = make('div', 'rolocate-status-text', { id: 'rolocate-status-text' });
+            const sLabel = make('span', '', { id: 'rolocate-status-text-label' });
+
+            const onLabel = ONLINE_OPTS.find(o => o.value === curOnline)?.label ?? curOnline;
+            const joinLabel = JOIN_OPTS.find(o => o.value === curJoin)?.label ?? curJoin;
+
+            sLabel.innerHTML = `Online: ${onLabel} <br> Joins: ${joinLabel}`;
+
+            statusText.appendChild(sLabel);
+            details.appendChild(statusText);
+
             header.appendChild(details);
 
             return { header, settingsBtn, frame, dot };
@@ -6694,8 +6487,13 @@ li a.about-link:hover::after {
                         dot.style.background    = col;
                         frame.style.borderColor = col;
                         dot.classList.remove('ping');
-                        void dot.offsetWidth;
-                        dot.classList.add('ping');
+                        // update it when user clicks on the button statuses
+                        const newOn = ONLINE_OPTS.find(o => o.value === curOnline)?.label ?? curOnline;
+                        const newJoin = JOIN_OPTS.find(o => o.value === curJoin)?.label ?? curJoin;
+                        const tLabel = document.getElementById('rolocate-status-text-label');
+                        if (tLabel) tLabel.innerHTML = `Online: ${newOn} <br> Joins: ${newJoin}`;
+
+                        // this refreshes the css cool little trick :)
                         render();
                     });
 
@@ -6768,7 +6566,7 @@ li a.about-link:hover::after {
             await new Promise(res => setTimeout(res, 500));
 
             const homeContainer = await waitForEl("#HomeContainer .section:first-child");
-            const userNameEl    = document.querySelector("#navigation.rbx-left-col > ul > li > a .font-header-2");
+            const userNameEl    = document.querySelector(".age-bracket-label-username");
             const username      = userNameEl?.innerText ?? "Robloxian";
             const avatarSrc     = await fetchAvatar(
                 "#navigation.rbx-left-col > ul > li > a img",
@@ -7070,7 +6868,7 @@ li a.about-link:hover::after {
 
         let avatarCache = {};
 
-        // -- api helpers --
+        // api helpers
 
         const postJson = (url, body) => new Promise(resolve => {
             GM_xmlhttpRequest({
@@ -7104,7 +6902,7 @@ li a.about-link:hover::after {
             : Promise.resolve([]);
         const fetchFriends      = id  => getJson(`https://friends.roblox.com/v1/users/${id}/friends`).then(r => r?.data || null);
 
-        // -- formatting utils --
+        // formatting stuff
 
         const formatAccountAge = created => {
             const days = Math.floor((Date.now() - new Date(created)) / 86400000);
@@ -7119,7 +6917,7 @@ li a.about-link:hover::after {
 
         const formatNum = n => n === null || n === undefined ? '—' : Number(n).toLocaleString();
 
-        // -- styles --
+        // styles
 
         const injectStyles = () => {
             if (document.querySelector('#bpi-styles')) return;
@@ -7773,6 +7571,7 @@ li a.about-link:hover::after {
     *******************************************************/
     function SmartSearch() {
         if (localStorage.ROLOCATE_smartsearch !== "true") return;
+
         // set friend list so later on in the user tab if a friend is found add friend label
         let friendList = [], friendIdSet = new Set(), friendListFetched = false, friendListFetching = false;
 
@@ -7994,7 +7793,7 @@ li a.about-link:hover::after {
                         const quickLaunchEnabled = isQuickLaunchEnabled(); // yea im cool for making a variable to calla function
                         return `
                         <div class="ROLOCATE_SMARTSEARCH_game-card-container">
-                            <a href="https://www.roblox.com/games/${game.rootPlaceId}" class="ROLOCATE_SMARTSEARCH_game-card-link" target="_self">
+                            <a href="https://www.roblox.com/games/${game.rootPlaceId}" class="ROLOCATE_SMARTSEARCH_universal-card-link" target="_self">
                                 <div class="ROLOCATE_SMARTSEARCH_game-card">
                                     <div class="ROLOCATE_SMARTSEARCH_thumbnail-loading" data-universe-id="${game.universeId}"></div>
                                     <div class="ROLOCATE_SMARTSEARCH_game-info">
@@ -8212,10 +8011,10 @@ li a.about-link:hover::after {
                     // yes ik i used my profile :)
                     contentArea.innerHTML = users.map(user => `
                         <div class="ROLOCATE_SMARTSEARCH_user-card-container">
-                            <a href="${user.isBanned ? `https://www.roblox.com/users/545334824/profile#ROLOCATE_BANNED_USER_${user.contentId}` : `https://www.roblox.com/users/${user.contentId}/profile`}" class="ROLOCATE_SMARTSEARCH_user-card-link" target="_self">
-                                <div class="ROLOCATE_SMARTSEARCH_user-card">
+                            <a href="${user.isBanned ? `https://www.roblox.com/users/545334824/profile#ROLOCATE_BANNED_USER_${user.contentId}` : `https://www.roblox.com/users/${user.contentId}/profile`}" class="ROLOCATE_SMARTSEARCH_universal-card-link" target="_self">
+                                <div class="ROLOCATE_SMARTSEARCH_universal-card">
                                     <div class="ROLOCATE_SMARTSEARCH_thumbnail-loading" data-user-id="${user.contentId}"></div>
-                                    <div class="ROLOCATE_SMARTSEARCH_user-info">
+                                    <div class="ROLOCATE_SMARTSEARCH_universal-info">
                                         <h3 class="ROLOCATE_SMARTSEARCH_user-display-name">
                                             ${user.displayName || user.username}
                                             ${user.hasVerifiedBadge ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 28 28" fill="none"><g clip-path="url(#a)"><path fill="#06f" d="m5.888 0 22.11 5.924-5.924 22.11-22.11-5.924z"/><path fill-rule="evenodd" clip-rule="evenodd" d="m20.543 8.75.006.007a1.54 1.54 0 0 1 0 2.176l-8.732 8.732-4.367-4.368a1.54 1.54 0 0 1 0-2.175l.007-.007a1.54 1.54 0 0 1 2.176 0l2.184 2.185 6.55-6.55a1.54 1.54 0 0 1 2.176 0" fill="#fff"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h28v28H0z"/></clipPath></defs></svg>' : ''}
@@ -8316,10 +8115,10 @@ li a.about-link:hover::after {
                         return;
                     }
                     contentArea.innerHTML = groups.map(group => `
-                        <a href="https://www.roblox.com/groups/${group.id}" class="ROLOCATE_SMARTSEARCH_group-card-link" target="_self">
-                            <div class="ROLOCATE_SMARTSEARCH_group-card">
+                        <a href="https://www.roblox.com/groups/${group.id}" class="ROLOCATE_SMARTSEARCH_universal-card-link" target="_self">
+                            <div class="ROLOCATE_SMARTSEARCH_universal-card">
                                 <div class="ROLOCATE_SMARTSEARCH_thumbnail-loading" data-group-id="${group.id}"></div>
-                                <div class="ROLOCATE_SMARTSEARCH_group-info">
+                                <div class="ROLOCATE_SMARTSEARCH_universal-info">
                                     <h3 class="ROLOCATE_SMARTSEARCH_group-name">
                                         ${group.name}
                                         ${group.hasVerifiedBadge ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 28 28" fill="none"><g clip-path="url(#a)"><path fill="#06f" d="m5.888 0 22.11 5.924-5.924 22.11-22.11-5.924z"/><path fill-rule="evenodd" clip-rule="evenodd" d="m20.543 8.75.006.007a1.54 1.54 0 0 1 0 2.176l-8.732 8.732-4.367-4.368a1.54 1.54 0 0 1 0-2.175l.007-.007a1.54 1.54 0 0 1 2.176 0l2.184 2.185 6.55-6.55a1.54 1.54 0 0 1 2.176 0" fill="#fff"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h28v28H0z"/></clipPath></defs></svg>' : ''}
@@ -8406,10 +8205,10 @@ li a.about-link:hover::after {
                         return;
                     }
                     contentArea.innerHTML = detailedItems.map(item => `
-                        <a href="https://www.roblox.com/${item.__itemType === 'Bundle' ? 'bundles' : 'catalog'}/${item.id}" class="ROLOCATE_SMARTSEARCH_catalog-card-link" target="_self">
-                            <div class="ROLOCATE_SMARTSEARCH_catalog-card">
+                        <a href="https://www.roblox.com/${item.__itemType === 'Bundle' ? 'bundles' : 'catalog'}/${item.id}" class="ROLOCATE_SMARTSEARCH_universal-card-link" target="_self">
+                            <div class="ROLOCATE_SMARTSEARCH_universal-card">
                                 <div class="ROLOCATE_SMARTSEARCH_thumbnail-loading" data-asset-id="${item.id}" data-item-type="${item.__itemType}"></div>
-                                <div class="ROLOCATE_SMARTSEARCH_catalog-info">
+                                <div class="ROLOCATE_SMARTSEARCH_universal-info">
                                 <h3 class="ROLOCATE_SMARTSEARCH_catalog-name">${item.name}</h3>
                                 <p class="ROLOCATE_SMARTSEARCH_catalog-price">
                                     ${item.priceStatus === "Free"
@@ -8462,6 +8261,124 @@ li a.about-link:hover::after {
             }
         }
 
+        function getTimeAgo(timestamp) {
+            if (!timestamp) return '';
+            const seconds = Math.floor((Date.now() - timestamp) / 1000);
+            if (seconds < 60) return 'Just now';
+            const minutes = Math.floor(seconds / 60);
+            if (minutes < 60) return `${minutes}m ago`;
+            const hours = Math.floor(minutes / 60);
+            if (hours < 24) return `${hours}h ago`;
+            const days = Math.floor(hours / 24);
+            return `${days}d ago`;
+        }
+
+        function saveClickedItemHistory(tab, item) {
+            if (!item || !item.id) return;
+            item.timestamp = Date.now();
+            let history = JSON.parse(localStorage.getItem('ROLOCATE_SMARTSEARCH_HISTORY') || '{"games":[], "users":[], "groups":[], "catalog":[]}');
+            if (!history[tab]) history[tab] = [];
+            history[tab] = history[tab].filter(i => i.id !== item.id);
+            history[tab].unshift(item);
+            history[tab] = history[tab].slice(0, 5);
+            localStorage.setItem('ROLOCATE_SMARTSEARCH_HISTORY', JSON.stringify(history));
+        }
+
+        function saveTextSearchHistory(tab, query) {
+            if (!query) return;
+            const item = {
+                isTextOnly: true,
+                id: 'text_' + query.toLowerCase(),
+                name: query,
+                timestamp: Date.now()
+            };
+            let history = JSON.parse(localStorage.getItem('ROLOCATE_SMARTSEARCH_HISTORY') || '{"games":[], "users":[], "groups":[], "catalog":[]}');
+            if (!history[tab]) history[tab] = [];
+            history[tab] = history[tab].filter(i => i.id !== item.id);
+            history[tab].unshift(item);
+            history[tab] = history[tab].slice(0, 5);
+            localStorage.setItem('ROLOCATE_SMARTSEARCH_HISTORY', JSON.stringify(history));
+        }
+
+        // when loading get search history
+        function getSearchHistory(tab) {
+            let history = JSON.parse(localStorage.getItem('ROLOCATE_SMARTSEARCH_HISTORY') || '{"games":[], "users":[], "groups":[], "catalog":[]}');
+
+            const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+            const now = Date.now();
+            let hasChanges = false;
+
+            for (let key in history) {
+                const originalLength = history[key].length;
+                history[key] = history[key].filter(item => {
+                    // Keep the item if it has no timestamp (legacy) or if it's within the 30-day window
+                    return !item.timestamp || (now - item.timestamp <= thirtyDaysMs);
+                });
+
+                if (history[key].length !== originalLength) {
+                    hasChanges = true;
+                }
+            }
+
+            if (hasChanges) {
+                localStorage.setItem('ROLOCATE_SMARTSEARCH_HISTORY', JSON.stringify(history));
+            }
+
+            return history[tab] || [];
+        }
+
+        function renderEmptyState(tabName) {
+            const tabKey = tabName.toLowerCase();
+            const history = getSearchHistory(tabKey);
+
+            if (history.length > 0) {
+                const historyHtml = history.map(item => {
+                    const timeStr = getTimeAgo(item.timestamp);
+                    if (item.isTextOnly) {
+                        return `
+                            <div class="ROLOCATE_SMARTSEARCH_history-card ROLOCATE_SMARTSEARCH_history-text-only" data-query="${item.name.replace(/"/g, '&quot;')}">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="ROLOCATE_SMARTSEARCH_history-search-icon">
+                                    <path d="M21 21l-4.35-4.35M19 10.5a8.5 8.5 0 11-17 0 8.5 8.5 0 0117 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                <div class="ROLOCATE_SMARTSEARCH_universal-info">
+                                    <div class="ROLOCATE_SMARTSEARCH_history-name">"${item.name}"</div>
+                                </div>
+                                ${timeStr ? `<div class="ROLOCATE_SMARTSEARCH_history-time">${timeStr}</div>` : ''}
+                            </div>
+                        `;
+                    }
+                    return `
+                        <a href="${item.url}" class="ROLOCATE_SMARTSEARCH_history-card-link" target="_self">
+                            <div class="ROLOCATE_SMARTSEARCH_history-card">
+                                ${item.iconUrl ? `<img src="${item.iconUrl}" class="ROLOCATE_SMARTSEARCH_history-icon" alt="" />` : '<div class="ROLOCATE_SMARTSEARCH_history-icon-placeholder"></div>'}
+                                <div class="ROLOCATE_SMARTSEARCH_universal-info">
+                                    <div class="ROLOCATE_SMARTSEARCH_history-name">${item.name}</div>
+                                    ${item.subtext ? `<div class="ROLOCATE_SMARTSEARCH_history-subtext">${item.subtext}</div>` : ''}
+                                </div>
+                                ${timeStr ? `<div class="ROLOCATE_SMARTSEARCH_history-time">${timeStr}</div>` : ''}
+                            </div>
+                        </a>
+                    `;
+                }).join('');
+
+                return `
+                    <div class="ROLOCATE_SMARTSEARCH_history-container">
+                        <div class="ROLOCATE_SMARTSEARCH_history-header">
+                            <div class="ROLOCATE_SMARTSEARCH_history-title">Recent History (Last 30 Days)</div>
+                            <button class="ROLOCATE_SMARTSEARCH_history-clear-all" title="Clear all search history">Clear All</button>
+                        </div>
+                        ${historyHtml}
+                    </div>
+                `;
+            }
+
+            if (tabName === "Games") return '<div class="ROLOCATE_SMARTSEARCH_content-text">Quickly search for <strong>games</strong> above!</div>';
+            else if (tabName === "Users") return '<div class="ROLOCATE_SMARTSEARCH_content-text">Instantly find the <strong>user</strong> you\'re looking for!</div>';
+            else if (tabName === "Groups") return '<div class="ROLOCATE_SMARTSEARCH_content-text">Search for <strong>groups</strong> rapidly.</div>';
+            else if (tabName === "Catalog") return '<div class="ROLOCATE_SMARTSEARCH_content-text">Browse the <strong>catalog</strong> for items!</div>';
+            return '';
+        }
+
         const originalSearchContainer = document.querySelector('[data-testid="navigation-search-input"]');
         if (!originalSearchContainer) {
             ConsoleLogEnabled('Search container not found');
@@ -8481,7 +8398,8 @@ li a.about-link:hover::after {
             e.preventDefault();
             const query = searchInput.value.trim();
             if (!query) return;
-            const activeTab = document.querySelector('.ROLOCATE_SMARTSEARCH_dropdown-tab.ROLOCATE_SMARTSEARCH_active')?.dataset.tab;
+            const activeTab = document.querySelector('.ROLOCATE_SMARTSEARCH_dropdown-tab.ROLOCATE_SMARTSEARCH_active')?.dataset.tab || 'games';
+            saveTextSearchHistory(activeTab, query);
             let url = '';
             switch (activeTab) {
                 case 'games': url = `https://www.roblox.com/discover/?Keyword=${encodeURIComponent(query)}`; break;
@@ -8538,7 +8456,7 @@ li a.about-link:hover::after {
 
         const contentArea = document.createElement('div');
         contentArea.className = 'ROLOCATE_SMARTSEARCH_dropdown-content';
-        contentArea.innerHTML = '<div class="ROLOCATE_SMARTSEARCH_content-text">Quickly search for <strong>games</strong> above!</div>';
+        contentArea.innerHTML = renderEmptyState("Games");
 
         dropdownMenu.appendChild(navTabs);
         dropdownMenu.appendChild(contentArea);
@@ -8569,10 +8487,7 @@ li a.about-link:hover::after {
                     else if (button.textContent === "Groups") fetchGroupSearchResults(query);
                     else if (button.textContent === "Catalog") fetchCatalogSearchResults(query);
                 } else {
-                    if (button.textContent === "Games") contentArea.innerHTML = `<div class="ROLOCATE_SMARTSEARCH_content-text">Quickly search for <strong>games</strong> above!</div>`;
-                    else if (button.textContent === "Users") contentArea.innerHTML = `<div class="ROLOCATE_SMARTSEARCH_content-text">Instantly find the <strong>user</strong> you're looking for!</div>`;
-                    else if (button.textContent === "Groups") contentArea.innerHTML = `<div class="ROLOCATE_SMARTSEARCH_content-text">Search for <strong>groups</strong> rapidly.</div>`;
-                    else if (button.textContent === "Catalog") contentArea.innerHTML = `<div class="ROLOCATE_SMARTSEARCH_content-text">Browse the <strong>catalog</strong> for items!</div>`;
+                    contentArea.innerHTML = renderEmptyState(button.textContent);
                 }
             });
         });
@@ -8581,6 +8496,72 @@ li a.about-link:hover::after {
             if (!customSearchContainer.contains(e.target)) hideDropdownMenu();
         });
         dropdownMenu.addEventListener('click', (e) => { e.stopPropagation(); });
+
+        contentArea.addEventListener('click', (e) => {
+            const clearBtn = e.target.closest('.ROLOCATE_SMARTSEARCH_history-clear-all');
+            if (clearBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                if (clearBtn.classList.contains('ROLOCATE_SMARTSEARCH_confirming')) {
+                    const activeTabNode = document.querySelector('.ROLOCATE_SMARTSEARCH_dropdown-tab.ROLOCATE_SMARTSEARCH_active');
+                    const activeTab = (activeTabNode?.dataset.tab || 'games').toLowerCase();
+
+                    let history = JSON.parse(localStorage.getItem('ROLOCATE_SMARTSEARCH_HISTORY') || '{"games":[], "users":[], "groups":[], "catalog":[]}');
+                    history[activeTab] = [];
+                    localStorage.setItem('ROLOCATE_SMARTSEARCH_HISTORY', JSON.stringify(history));
+
+                    contentArea.innerHTML = renderEmptyState(activeTabNode ? activeTabNode.textContent : "Games");
+                } else {
+                    clearBtn.classList.add('ROLOCATE_SMARTSEARCH_confirming');
+                    clearBtn.textContent = "Confirm?";
+
+                    setTimeout(() => {
+                        if (document.body.contains(clearBtn)) {
+                            clearBtn.classList.remove('ROLOCATE_SMARTSEARCH_confirming');
+                            clearBtn.textContent = "Clear All";
+                        }
+                    }, 2500);
+                }
+                return;
+            }
+
+            const textCard = e.target.closest('.ROLOCATE_SMARTSEARCH_history-text-only');
+            if (textCard) {
+                const query = textCard.dataset.query;
+                const activeTabNode = document.querySelector('.ROLOCATE_SMARTSEARCH_dropdown-tab.ROLOCATE_SMARTSEARCH_active');
+                const activeTab = (activeTabNode?.dataset.tab || 'games').toLowerCase();
+
+                saveTextSearchHistory(activeTab, query);
+
+                // for manual search hsitory this opens the website search
+                const encodedQuery = encodeURIComponent(query);
+                if (activeTab === "games") window.location.href = `https://www.roblox.com/discover/?Keyword=${encodedQuery}`;
+                else if (activeTab === "users") window.location.href = `https://www.roblox.com/search/users?keyword=${encodedQuery}`;
+                else if (activeTab === "groups") window.location.href = `https://www.roblox.com/search/groups?keyword=${encodedQuery}`;
+                else if (activeTab === "catalog") window.location.href = `https://www.roblox.com/catalog?Keyword=${encodedQuery}&Category=1`;
+                return;
+            }
+
+            const cardLink = e.target.closest('a');
+            if (!cardLink || cardLink.classList.contains('ROLOCATE_SMARTSEARCH_history-card-link')) return;
+
+            const activeTab = document.querySelector('.ROLOCATE_SMARTSEARCH_dropdown-tab.ROLOCATE_SMARTSEARCH_active')?.dataset.tab || 'games';
+            const nameEl = cardLink.querySelector('.ROLOCATE_SMARTSEARCH_game-name, .ROLOCATE_SMARTSEARCH_user-display-name, .ROLOCATE_SMARTSEARCH_group-name, .ROLOCATE_SMARTSEARCH_catalog-name');
+            const imgEl = cardLink.querySelector('img');
+            const subtextEl = cardLink.querySelector('.ROLOCATE_SMARTSEARCH_game-stats, .ROLOCATE_SMARTSEARCH_user-username, .ROLOCATE_SMARTSEARCH_group-members, .ROLOCATE_SMARTSEARCH_catalog-price');
+
+            if (nameEl) {
+                const itemData = {
+                    id: cardLink.href,
+                    url: cardLink.href,
+                    name: nameEl.innerText.trim(),
+                    iconUrl: imgEl ? imgEl.src : '',
+                    subtext: subtextEl ? subtextEl.innerText.trim() : ''
+                };
+                saveClickedItemHistory(activeTab, itemData);
+            }
+        });
 
         function showDropdownMenu() {
             isMenuOpen = true;
@@ -8591,9 +8572,9 @@ li a.about-link:hover::after {
             const query = searchInput.value.trim();
             if (query) {
                 if (activeTab === "Games" && contentArea.querySelector('.ROLOCATE_SMARTSEARCH_game-card') === null && contentArea.querySelector('.ROLOCATE_SMARTSEARCH_no-results') === null) fetchGameSearchResults(query);
-                else if (activeTab === "Users" && contentArea.querySelector('.ROLOCATE_SMARTSEARCH_user-card') === null && contentArea.querySelector('.ROLOCATE_SMARTSEARCH_no-results') === null) fetchUserSearchResults(query);
-                else if (activeTab === "Groups" && contentArea.querySelector('.ROLOCATE_SMARTSEARCH_group-card') === null && contentArea.querySelector('.ROLOCATE_SMARTSEARCH_no-results') === null) fetchGroupSearchResults(query);
-                else if (activeTab === "Catalog" && contentArea.querySelector('.ROLOCATE_SMARTSEARCH_catalog-card') === null && contentArea.querySelector('.ROLOCATE_SMARTSEARCH_no-results') === null) fetchCatalogSearchResults(query);
+                else if (activeTab === "Users" && contentArea.querySelector('.ROLOCATE_SMARTSEARCH_universal-card') === null && contentArea.querySelector('.ROLOCATE_SMARTSEARCH_no-results') === null) fetchUserSearchResults(query);
+                else if (activeTab === "Groups" && contentArea.querySelector('.ROLOCATE_SMARTSEARCH_universal-card') === null && contentArea.querySelector('.ROLOCATE_SMARTSEARCH_no-results') === null) fetchGroupSearchResults(query);
+                else if (activeTab === "Catalog" && contentArea.querySelector('.ROLOCATE_SMARTSEARCH_universal-card') === null && contentArea.querySelector('.ROLOCATE_SMARTSEARCH_no-results') === null) fetchCatalogSearchResults(query);
             }
         }
 
@@ -8615,10 +8596,7 @@ li a.about-link:hover::after {
                 const query = searchInput.value.trim();
                 const activeTab = document.querySelector('.ROLOCATE_SMARTSEARCH_dropdown-tab.ROLOCATE_SMARTSEARCH_active')?.textContent;
                 if (!query) {
-                    if (activeTab === "Games") contentArea.innerHTML = '<div class="ROLOCATE_SMARTSEARCH_content-text">Quickly search for <strong>games</strong> above!</div>';
-                    else if (activeTab === "Users") contentArea.innerHTML = '<div class="ROLOCATE_SMARTSEARCH_content-text">Instantly find the <strong>user</strong> you\'re looking for!</div>';
-                    else if (activeTab === "Groups") contentArea.innerHTML = '<div class="ROLOCATE_SMARTSEARCH_content-text">Search for <strong>groups</strong> rapidly.</div>';
-                    else if (activeTab === "Catalog") contentArea.innerHTML = '<div class="ROLOCATE_SMARTSEARCH_content-text">Browse the <strong>catalog</strong> for items!</div>';
+                    contentArea.innerHTML = renderEmptyState(activeTab || "Games");
                     return;
                 }
                 if (activeTab === "Games") fetchGameSearchResults(query);
@@ -8631,6 +8609,8 @@ li a.about-link:hover::after {
         const style = document.createElement('style');
         // one day i gotta clean this up cause ik some of these styles arnt needed
         style.textContent = `
+.search-overlay.search-overlay-show { display: none !important; }
+
 .ROLOCATE_SMARTSEARCH_form-has-feedback {
             position: relative !important;
             display: flex !important;
@@ -8760,14 +8740,14 @@ li a.about-link:hover::after {
             z-index: 1001 !important;
             position: relative !important;
         }
-        .ROLOCATE_SMARTSEARCH_game-card-container {
-            position: relative;
-            margin: 6px 0;
-        }
-        .ROLOCATE_SMARTSEARCH_game-card-link {
+        .ROLOCATE_SMARTSEARCH_universal-card-link {
             display: block;
             text-decoration: none;
             color: inherit;
+        }
+        .ROLOCATE_SMARTSEARCH_game-card-container {
+            position: relative;
+            margin: 6px 0;
         }
         .ROLOCATE_SMARTSEARCH_game-card {
             display: flex;
@@ -8927,12 +8907,7 @@ li a.about-link:hover::after {
             width: 18px;
             height: 18px;
         }
-        .ROLOCATE_SMARTSEARCH_user-card-link {
-            display: block;
-            text-decoration: none;
-            color: inherit;
-        }
-        .ROLOCATE_SMARTSEARCH_user-card {
+        .ROLOCATE_SMARTSEARCH_universal-card {
             display: flex;
             align-items: center;
             padding: 8px;
@@ -8941,7 +8916,7 @@ li a.about-link:hover::after {
             border-radius: 8px;
             transition: background-color 0.2s ease;
         }
-        .ROLOCATE_SMARTSEARCH_user-card:hover {
+        .ROLOCATE_SMARTSEARCH_universal-card:hover {
             background-color: ${isDarkMode() ? '#2c2f36' : '#b3a694'} !important;
         }
         .ROLOCATE_SMARTSEARCH_user-thumbnail {
@@ -8951,7 +8926,7 @@ li a.about-link:hover::after {
             margin-right: 12px;
             object-fit: cover;
         }
-        .ROLOCATE_SMARTSEARCH_user-info {
+        .ROLOCATE_SMARTSEARCH_universal-info {
             flex: 1;
             overflow: hidden;
         }
@@ -8987,33 +8962,12 @@ li a.about-link:hover::after {
             font-style: italic;
             font-size: 13px;
         }
-        .ROLOCATE_SMARTSEARCH_group-card-link {
-            display: block;
-            text-decoration: none;
-            color: inherit;
-        }
-        .ROLOCATE_SMARTSEARCH_group-card {
-            display: flex;
-            align-items: center;
-            padding: 8px;
-            margin: 6px 0;
-            background-color: ${isDarkMode() ? '#1e2025' : '#C1B19A'} !important;
-            border-radius: 8px;
-            transition: background-color 0.2s ease;
-        }
-        .ROLOCATE_SMARTSEARCH_group-card:hover {
-            background-color: ${isDarkMode() ? '#2c2f36' : '#b3a694'} !important;
-        }
         .ROLOCATE_SMARTSEARCH_group-thumbnail {
             width: 50px;
             height: 50px;
             border-radius: 4px;
             margin-right: 12px;
             object-fit: cover;
-        }
-        .ROLOCATE_SMARTSEARCH_group-info {
-            flex: 1;
-            overflow: hidden;
         }
         .ROLOCATE_SMARTSEARCH_group-name {
             font-size: 16px;
@@ -9034,33 +8988,12 @@ li a.about-link:hover::after {
             color: #6d717a;
             margin: 0;
         }
-        .ROLOCATE_SMARTSEARCH_catalog-card-link {
-            display: block;
-            text-decoration: none;
-            color: inherit;
-        }
-        .ROLOCATE_SMARTSEARCH_catalog-card {
-            display: flex;
-            align-items: center;
-            padding: 8px;
-            margin: 6px 0;
-            background-color: ${isDarkMode() ? '#1e2025' : '#C1B19A'} !important;
-            border-radius: 8px;
-            transition: background-color 0.2s ease;
-        }
-        .ROLOCATE_SMARTSEARCH_catalog-card:hover {
-            background-color: ${isDarkMode() ? '#2c2f36' : '#b3a694'} !important;
-        }
         .ROLOCATE_SMARTSEARCH_catalog-thumbnail {
             width: 50px;
             height: 50px;
             border-radius: 4px;
             margin-right: 12px;
             object-fit: cover;
-        }
-        .ROLOCATE_SMARTSEARCH_catalog-info {
-            flex: 1;
-            overflow: hidden;
         }
         .ROLOCATE_SMARTSEARCH_catalog-name {
             font-size: 16px;
@@ -9148,6 +9081,111 @@ li a.about-link:hover::after {
             color: #f44336;
             font-size: 13px;
         }
+        .ROLOCATE_SMARTSEARCH_history-container {
+            padding: 4px 0;
+        }
+       .ROLOCATE_SMARTSEARCH_history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 4px 8px 8px 8px;
+        }
+        .ROLOCATE_SMARTSEARCH_history-title {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: ${isDarkMode() ? '#8a8d93' : '#6d717a'};
+            margin: 0;
+            letter-spacing: 0.5px;
+        }
+        .ROLOCATE_SMARTSEARCH_history-clear-all {
+            background: transparent;
+            border: none;
+            color: #8a8d93;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            padding: 2px 8px;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+        .ROLOCATE_SMARTSEARCH_history-clear-all:hover {
+            background: rgba(138, 141, 147, 0.2);
+            color: ${isDarkMode() ? '#e5e7eb' : '#111214'};
+        }
+        .ROLOCATE_SMARTSEARCH_history-clear-all.ROLOCATE_SMARTSEARCH_confirming {
+            color: #ff3b30;
+            background: rgba(255, 59, 48, 0.1);
+        }
+        .ROLOCATE_SMARTSEARCH_history-clear-all.ROLOCATE_SMARTSEARCH_confirming:hover {
+            background: rgba(255, 59, 48, 0.15);
+        }
+        .ROLOCATE_SMARTSEARCH_history-card-link {
+            display: block;
+            text-decoration: none;
+            color: inherit;
+            margin: 4px 0;
+        }
+        .ROLOCATE_SMARTSEARCH_history-card {
+            display: flex;
+            align-items: center;
+            padding: 6px 8px;
+            background-color: ${isDarkMode() ? '#1e2025' : '#C1B19A'} !important;
+            border-radius: 6px;
+            transition: background-color 0.2s ease;
+        }
+        .ROLOCATE_SMARTSEARCH_history-card:hover {
+            background-color: ${isDarkMode() ? '#2c2f36' : '#b3a694'} !important;
+        }
+        .ROLOCATE_SMARTSEARCH_history-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 4px;
+            margin-right: 10px;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+        .ROLOCATE_SMARTSEARCH_history-icon-placeholder {
+            width: 36px;
+            height: 36px;
+            border-radius: 4px;
+            margin-right: 10px;
+            background-color: #2c2f36;
+            flex-shrink: 0;
+        }
+        .ROLOCATE_SMARTSEARCH_history-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: ${isDarkMode() ? '#ffffff' : '#111214'};
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+.ROLOCATE_SMARTSEARCH_history-subtext {
+            font-size: 12px;
+            color: #8a8d93;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 1px;
+        }
+        .ROLOCATE_SMARTSEARCH_history-time {
+            font-size: 11px;
+            color: ${isDarkMode() ? '#6d717a' : '#8a7e6d'};
+            white-space: nowrap;
+            margin-left: 12px;
+            flex-shrink: 0;
+            font-weight: 500;
+        }
+        .ROLOCATE_SMARTSEARCH_history-text-only {
+            cursor: pointer;
+            margin: 4px 0;
+        }
+        .ROLOCATE_SMARTSEARCH_history-search-icon {
+            color: ${isDarkMode() ? '#8a8d93' : '#6d717a'};
+            margin: 0 12px 0 8px;
+            flex-shrink: 0;
+        }
         `;
         document.head.appendChild(style);
         ConsoleLogEnabled('Enhanced search bar with friend integration added successfully!');
@@ -9166,10 +9204,7 @@ li a.about-link:hover::after {
             tabButtons.forEach(btn => {
                 if (btn.dataset.tab === tabKey) {
                     btn.classList.add('ROLOCATE_SMARTSEARCH_active');
-                    if (btn.textContent === "Games") contentArea.innerHTML = `<div class="ROLOCATE_SMARTSEARCH_content-text">Quickly search for <strong>games</strong> above!</div>`;
-                    else if (btn.textContent === "Users") contentArea.innerHTML = `<div class="ROLOCATE_SMARTSEARCH_content-text">Instantly find the <strong>user</strong> you're looking for!</div>`;
-                    else if (btn.textContent === "Groups") contentArea.innerHTML = `<div class="ROLOCATE_SMARTSEARCH_content-text">Search for <strong>groups</strong> rapidly.</div>`;
-                    else if (btn.textContent === "Catalog") contentArea.innerHTML = `<div class="ROLOCATE_SMARTSEARCH_content-text">Browse the <strong>catalog</strong> for items!</div>`;
+                    contentArea.innerHTML = renderEmptyState(btn.textContent);
                 } else btn.classList.remove('ROLOCATE_SMARTSEARCH_active');
             });
         }
@@ -9183,12 +9218,20 @@ li a.about-link:hover::after {
         if (!/^https?:\/\/(www\.)?roblox\.com(\/[a-z]{2})?\/home\/?$/i.test(window.location.href)) return;
         if (localStorage.getItem('ROLOCATE_quicklaunchgames') !== 'true') return;
 
+        // if alreadyt on page return
+        if (document.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_new-games-container')) {
+            return;
+        }
+
+        let observerFailsafeTimeout;
+
         const observer = new MutationObserver((mutations, obs) => {
             const friendsSection = document.querySelector('.friend-carousel-container');
             const friendTiles = document.querySelectorAll('.friends-carousel-tile');
 
             if (friendsSection && friendTiles.length > 1) {
                 obs.disconnect();
+                clearTimeout(observerFailsafeTimeout);
 
                 const newGamesContainer = document.createElement('div');
                 newGamesContainer.className = 'ROLOCATE_QUICKLAUNCHGAMES_new-games-container';
@@ -9256,7 +9299,28 @@ li a.about-link:hover::after {
                     }
 
                     .ROLOCATE_QUICKLAUNCHGAMES_game-grid-container {
-                        margin-top: 16px;
+                        position: relative;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-grid-container.is-dragging-active .ROLOCATE_QUICKLAUNCHGAMES_game-grid {
+                        outline: 2px dashed #5d78ff;
+                        outline-offset: 2px;
+                        background: rgba(93, 120, 255, 0.05);
+                        border-radius: 8px;
+                    }
+
+                    .ROLOCATE_QUICKLAUNCHGAMES_game-grid-container.is-dragging-active::before {
+                        content: "Drag only inside this blue box";
+                        position: absolute;
+                        top: -24px;
+                        left: 0;
+                        width: 100%;
+                        text-align: center;
+                        color: #5d78ff;
+                        font-size: 13px;
+                        font-weight: 600;
+                        pointer-events: none;
+                        letter-spacing: 0.3px;
                     }
 
                     .ROLOCATE_QUICKLAUNCHGAMES_game-grid {
@@ -9285,7 +9349,6 @@ li a.about-link:hover::after {
                     .ROLOCATE_QUICKLAUNCHGAMES_game-grid::-webkit-scrollbar-thumb:hover {
                         background: linear-gradient(to right, #6d85ff, #9aabff);
                     }
-
                     .ROLOCATE_QUICKLAUNCHGAMES_add-tile {
                         flex: 0 0 auto;
                         width: 170px;
@@ -9442,7 +9505,7 @@ li a.about-link:hover::after {
                         border: 2px dashed #5d78ff !important;
                         background: rgba(93, 120, 255, 0.1) !important;
                         transform: scale(0.95);
-                        cursor: grabbing;
+                        cursor: grabbing !important;
                     }
 
                     .ROLOCATE_QUICKLAUNCHGAMES_game-tile.drag-over {
@@ -9507,9 +9570,8 @@ li a.about-link:hover::after {
                     }
 
                     @keyframes tileRemove {
-                        0% { transform: translateY(0) scale(1); opacity: 1; }
-                        50% { transform: translateY(-20px) scale(0.9); opacity: 0.5; }
-                        100% { transform: translateY(40px) scale(0.8); opacity: 0; }
+                        0% { transform: scale(1); opacity: 1; }
+                        100% { transform: scale(0.85); opacity: 0; }
                     }
 
                     @keyframes moveTile {
@@ -9519,7 +9581,7 @@ li a.about-link:hover::after {
                     }
 
                     .ROLOCATE_QUICKLAUNCHGAMES_game-tile.removing {
-                        animation: tileRemove 0.4s cubic-bezier(0.55, 0.085, 0.68, 0.53) forwards;
+                        animation: tileRemove 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
                         pointer-events: none;
                     }
 
@@ -9669,20 +9731,43 @@ li a.about-link:hover::after {
                     .ROLOCATE_QUICKLAUNCHGAMES_add-tile:active {
                         transform: translateY(2px) scale(0.97) !important;
                     }
-
-                    .ROLOCATE_QUICKLAUNCHGAMES_add-tile.clicked {
-                        animation: buttonClick 0.3s ease;
-                    }
-
-                    @keyframes buttonClick {
-                        0% { transform: scale(1); }
-                        50% { transform: scale(0.95); }
-                        100% { transform: scale(1); }
-                    }
                 `;
                 document.head.appendChild(style);
 
                 friendsSection.parentNode.insertBefore(newGamesContainer, friendsSection.nextSibling);
+
+                // drag and drop amster listenre
+                const gameGridContainer = newGamesContainer.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_game-grid');
+
+                gameGridContainer.addEventListener('dragover', (e) => {
+                    e.preventDefault(); // Necessary to allow dropping
+
+                    const draggingTile = document.querySelector('.dragging');
+                    if (!draggingTile) return;
+
+                    // Grab all game tiles EXCEPT the one currently being dragged
+                    const unselectedTiles = [...gameGridContainer.querySelectorAll('.ROLOCATE_QUICKLAUNCHGAMES_game-tile:not(.dragging)')];
+
+                    // Find which tile our cursor is currently hovering over based on the exact X coordinate
+                    const nextTile = unselectedTiles.find(tile => {
+                        const rect = tile.getBoundingClientRect();
+                        // Return true if cursor is on the left half of this tile
+                        return e.clientX <= (rect.left + rect.width / 2);
+                    });
+
+                    // CRITICAL: Only touch the DOM if the target position actually changed.
+                    if (nextTile) {
+                        if (draggingTile.nextSibling !== nextTile) {
+                            gameGridContainer.insertBefore(draggingTile, nextTile);
+                        }
+                    } else {
+                        // If no next tile is found, place it at the very end (right before the Add Game button)
+                        const addButton = document.getElementById('ROLOCATE_QUICKLAUNCHGAMES_add-button');
+                        if (draggingTile.nextSibling !== addButton) {
+                            gameGridContainer.insertBefore(draggingTile, addButton);
+                        }
+                    }
+                });
 
                 function formatNumber(num) {
                     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
@@ -9743,58 +9828,28 @@ li a.about-link:hover::after {
                         }, 400);
                     });
 
-                    // the drag and drop stuff
-                    gameTile.draggable = true;
+                  // the drag and drop stuff
+                  gameTile.draggable = true;
 
-                    gameTile.addEventListener('dragstart', (e) => {
-                        gameTile.classList.add('dragging');
-                        e.dataTransfer.effectAllowed = 'move';
-                        e.dataTransfer.setDragImage(gameTile, 85, 120); // tells browser to use the actual cards as a dragging thingy
-                        e.dataTransfer.setData('text/html', gameTile.innerHTML);
-                    });
+                  gameTile.addEventListener('dragstart', (e) => {
+                      gameTile.classList.add('dragging');
+                      e.dataTransfer.effectAllowed = 'move';
+                      e.dataTransfer.setDragImage(gameTile, 85, 120);
 
-                    gameTile.addEventListener('dragend', () => {
-                        gameTile.classList.remove('dragging');
-                        document.querySelectorAll('.ROLOCATE_QUICKLAUNCHGAMES_game-tile').forEach(tile => {
-                            tile.classList.remove('drag-over');
-                        });
-                        saveCurrentOrder();
-                    });
+                      // Turn on the blue outline and warning text
+                      const container = document.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_game-grid-container');
+                      if (container) container.classList.add('is-dragging-active');
+                  });
 
-                    gameTile.addEventListener('dragover', (e) => {
-                        e.preventDefault();
-                        const draggingTile = document.querySelector('.dragging');
-                        if (draggingTile && draggingTile !== gameTile) {
-                            const gameGrid = document.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_game-grid');
-                            const bounding = gameTile.getBoundingClientRect();
+                  gameTile.addEventListener('dragend', () => {
+                      gameTile.classList.remove('dragging');
 
-                            // lets go geometry finally becoming useful.
-                            // calcualtes the midpoint
-                            const offset = e.clientX - bounding.left;
-                            const isPastMidpoint = offset > bounding.width / 2;
+                      // Turn off the blue outline
+                      const container = document.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_game-grid-container');
+                      if (container) container.classList.remove('is-dragging-active');
 
-                            const allTiles = [...gameGrid.querySelectorAll('.ROLOCATE_QUICKLAUNCHGAMES_game-tile')];
-                            const draggingIndex = allTiles.indexOf(draggingTile);
-                            const targetIndex = allTiles.indexOf(gameTile);
-
-                            // Only swap if we've actually moved past the center to prevent like a dumb flicker. this took too long to figure out a solution to
-                            if (draggingIndex < targetIndex && isPastMidpoint) {
-                                gameGrid.insertBefore(draggingTile, gameTile.nextSibling);
-                            } else if (draggingIndex > targetIndex && !isPastMidpoint) {
-                                gameGrid.insertBefore(draggingTile, gameTile);
-                            }
-                        }
-                    });
-
-                    gameTile.addEventListener('dragleave', () => {
-                        gameTile.classList.remove('drag-over');
-                    });
-
-                    gameTile.addEventListener('drop', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        gameTile.classList.remove('drag-over');
-                    });
+                      saveCurrentOrder();
+                  });
 
                     // load details of the game
                     (async () => {
@@ -9840,10 +9895,6 @@ li a.about-link:hover::after {
                         notifications('Maximum 10 games allowed', 'error', '⚠️', '4000');
                         return;
                     }
-
-                    const addButton = document.getElementById('ROLOCATE_QUICKLAUNCHGAMES_add-button');
-                    addButton.classList.add('clicked');
-                    setTimeout(() => addButton.classList.remove('clicked'), 300);
 
                     const overlay = document.createElement('div');
                     overlay.className = 'ROLOCATE_QUICKLAUNCHGAMES_popup-overlay';
@@ -9968,16 +10019,29 @@ li a.about-link:hover::after {
                         }
                     }
                 });
+                // if user drags outside of blue box then terminate
+                document.addEventListener('dragover', (e) => {
+                    const draggingTile = document.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_game-tile.dragging');
+                    if (!draggingTile) return;
+
+                    const grid = document.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_game-grid');
+
+                    // If the mouse leaves the grid area, kill the drag processing
+                    if (grid && !grid.contains(e.target)) {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'none'; // Changes cursor to a cancel symbol and stops lag
+                    } else {
+                        e.dataTransfer.dropEffect = 'move'; // Keeps it active inside the grid
+                    }
+                });
             }
         });
 
         observer.observe(document.body, { childList: true, subtree: true });
 
-        setTimeout(() => {
+        observerFailsafeTimeout = setTimeout(() => {
             observer.disconnect();
-            if (!document.querySelector('.ROLOCATE_QUICKLAUNCHGAMES_new-games-container')) {
-                quicklaunchgamesfunction();
-            }
+            ConsoleLogEnabled('Quick launch observer disconnected after 5 seconds.');
         }, 5000);
     }
 
@@ -11498,7 +11562,7 @@ li a.about-link:hover::after {
     // WARNING: Do not republish this script. Licensed for personal use only.
     // oneday I will change the variable names from ip to datacenters
     async function fetchServerDetails(gameId, jobId) { //here!
-        const csrfToken = await getCsrfToken(); // calling this
+        const csrfToken = await getCsrfToken();
         const useBatching = localStorage.ROLOCATE_fastservers === "true";
 
         if (!useBatching) {
@@ -11508,15 +11572,12 @@ li a.about-link:hover::after {
                     url: "https://gamejoin.roblox.com/v1/join-game-instance",
                     headers: {
                         "Content-Type": "application/json",
-                        "User-Agent": "Roblox/WinInet",
-                        "X-CSRF-TOKEN": csrfToken, // why send this now roblox?
+                        "User-Agent": "Roblox/WinInet"
                     },
                     withCredentials: true,
                     data: JSON.stringify({
                         placeId: gameId,
-                        gameId: jobId,
-                        gameJoinAttemptId: crypto.randomUUID(),
-                        joinOrigin: 'RoLocate_Fetch_Server_Region'
+                        gameId: jobId
                     }),
                     onload: function(response) {
                         const json = JSON.parse(response.responseText);
@@ -11623,16 +11684,10 @@ li a.about-link:hover::after {
                     url: "https://gamejoin.roblox.com/v1/join-game-instance",
                     headers: {
                         "Content-Type": "application/json",
-                        "User-Agent": "Roblox/WinInet",
-                        "X-CSRF-TOKEN": csrfToken, // why send this now roblox?
+                        "User-Agent": "Roblox/WinInet"
                     },
                     withCredentials: true,
-                    data: JSON.stringify({
-                        placeId: gameId,
-                        gameId: jobId,
-                        gameJoinAttemptId: crypto.randomUUID(),
-                        joinOrigin: 'RoLocate_Fetch_Server_Region'
-                    }),
+                    data: JSON.stringify({ placeId: gameId, gameId: jobId }),
                     onload: function(response) {
                         const json = JSON.parse(response.responseText);
                         ConsoleLogEnabled("API Response:", json);
@@ -12111,7 +12166,7 @@ li a.about-link:hover::after {
         };
 
         // svgs to save space so no repeats in code
-        const emptyServerSVG = `
+        const ServerSVG = `
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${theme.accentPrimary}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:.7;margin-right:10px"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="${theme.accentPrimary}"/><circle cx="6" cy="18" r="1" fill="${theme.accentPrimary}"/></svg>
         `;
 
@@ -12125,10 +12180,6 @@ li a.about-link:hover::after {
 
         const checkmarkwithoutcircle = `
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right:6px"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        `;
-
-        const thelikecopysymbol = `
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="8" y="8" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 8V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v9c0 1.1.9 2 2 2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         `;
 
         const recentSection = document.createElement('div');
@@ -12240,15 +12291,32 @@ li a.about-link:hover::after {
             let removedCount = 0;
             const cardsWrapper = document.querySelector('.recent-servers-section .section-content-off');
 
-            for (const key of keys) {
-                const [gameId, serverId] = key.split("_");
-                try {
-                    await fetchServerDetails(gameId, serverId);
-                } catch (error) {
-                    if (!error.toString().includes("Status 22")) {
-                        delete stored[key];
+            const MAX_PARALLEL = 10;
+            for (let i = 0; i < keys.length; i += MAX_PARALLEL) {
+                const chunk = keys.slice(i, i + MAX_PARALLEL);
+
+                const chunkPromises = chunk.map(async (key) => {
+                    const [gameId, serverId] = key.split("_");
+                    try {
+                        await fetchServerDetails(gameId, serverId);
+                        ConsoleLogEnabled(fetchServerDetails(gameId, serverId));
+                        return { key, active: true };
+                    } catch (error) {
+                        if (!error.toString().includes("Status 22")) {
+                            return { key, active: false };
+                        }
+                        return { key, active: true };
+                    }
+                });
+
+                const results = await Promise.all(chunkPromises);
+
+                results.forEach(result => {
+                    if (!result.active) {
+                        delete stored[result.key];
                         removedCount++;
-                        const card = document.querySelector(`[data-server-key="${key}"]`);
+
+                        const card = document.querySelector(`[data-server-key="${result.key}"]`);
                         if (card) {
                             card.style.transition = 'all 0.3s ease-out';
                             card.style.opacity = '0';
@@ -12258,44 +12326,29 @@ li a.about-link:hover::after {
                             setTimeout(() => card.remove(), 300);
                         }
                     }
+                });
+
+                // wait 1.2 seconds
+                if (i + MAX_PARALLEL < keys.length) {
+                    await delay(1200);
                 }
-            }
+}
 
             localStorage.setItem(storageKey, JSON.stringify(stored));
 
             if (removedCount > 0) {
-                notifications(`Removed ${removedCount} inactive server${removedCount > 1 ? 's' : ''}`, 'success', '🗑️', '2000');
-
-                if (Object.keys(stored).filter(k => k.startsWith(`${currentGameId}_`)).length === 0) {
-                    const emptyMessage = document.createElement('div');
-                    emptyMessage.className = 'no-servers-message';
-                    emptyMessage.innerHTML = `${emptyServerSVG} No Recent Servers Found`;
-                    emptyMessage.style.cssText = `
-                        color: ${theme.textSecondary};
-                        text-align: center;
-                        padding: 28px 0;
-                        font-size: 14px;
-                        letter-spacing: 0.3px;
-                        font-weight: 500;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        background: rgba(20, 22, 26, 0.4);
-                        border-radius: 12px;
-                        border: 1px solid rgba(77, 133, 238, 0.15);
-                        box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.2);
-                    `;
-                    if (cardsWrapper) {
-                        cardsWrapper.innerHTML = '';
-                        cardsWrapper.appendChild(emptyMessage);
-                    }
-                }
+                notifications(`Removed ${removedCount} inactive server${removedCount > 1 ? 's' : ''}`, 'success', '', '2000');
+                // Wait for shrink animations to finish, then smoothly refresh the UI
+                setTimeout(() => {
+                    const section = document.querySelector('.recent-servers-section');
+                    if (section) section.remove();
+                    HandleRecentServers();
+                }, 310);
             } else {
-                notifications('All servers are active!', 'success', '😊', '2000');
+                notifications('All servers are active!', 'success', '✅', '2000');
+                checkStatusButton.innerHTML = originalText;
+                checkStatusButton.disabled = false;
             }
-
-            checkStatusButton.innerHTML = originalText;
-            checkStatusButton.disabled = false;
         });
 
         const clearAllButton = document.createElement('button');
@@ -12474,7 +12527,7 @@ li a.about-link:hover::after {
 
                 const emptyMessage = document.createElement('div');
                 emptyMessage.className = 'no-servers-message';
-                emptyMessage.innerHTML = `${emptyServerSVG} No Recent Servers Found`;
+                emptyMessage.innerHTML = `${ServerSVG} No Recent Servers Joined`;
                 emptyMessage.style.cssText = `
                     color: ${theme.textSecondary};
                     text-align: center;
@@ -12561,7 +12614,7 @@ li a.about-link:hover::after {
         if (keys.length === 0) {
             const emptyMessage = document.createElement('div');
             emptyMessage.className = 'no-servers-message';
-            emptyMessage.innerHTML = `${emptyServerSVG} No Recent Servers Found`;
+            emptyMessage.innerHTML = `${ServerSVG} No Recent Servers Joined`;
             emptyMessage.style.cssText = `
                 color: ${theme.textSecondary};
                 text-align: center;
@@ -12601,6 +12654,11 @@ li a.about-link:hover::after {
 
                 const timeStored = typeof serverData === 'object' ? serverData.timestamp : serverData;
                 const regionData = typeof serverData === 'object' ? serverData.region : null;
+                let uptimeDisplay = 'Unknown';
+                if (regionData && regionData.serverUptime) {
+                    const up = regionData.serverUptime;
+                    uptimeDisplay = `${up.days > 0 ? up.days + 'd ' : ''}${up.hours}h ${up.minutes}m`;
+                }
 
                 const date = new Date(timeStored);
                 const formattedTime = date.toLocaleString(undefined, {
@@ -12653,6 +12711,7 @@ li a.about-link:hover::after {
                 serverCard.dataset.serverId = serverId;
                 serverCard.dataset.region = regionDisplay;
                 serverCard.dataset.lastPlayed = formattedTime;
+                serverCard.dataset.uptime = uptimeDisplay;
                 serverCard.style.cssText = `
                     display: flex;
                     justify-content: space-between;
@@ -12739,7 +12798,7 @@ li a.about-link:hover::after {
                 `;
 
                 const lastPlayed = document.createElement('div');
-                lastPlayed.textContent = `Last Played: ${formatLastPlayedWithRelative(formattedTime, "relativeOnly")}`;
+                lastPlayed.textContent = `Last Joined: ${formatLastPlayedWithRelative(formattedTime, "relativeOnly")}`;
                 lastPlayed.style.cssText = `
                     font-weight: 600;
                     font-size: 14px;
@@ -12850,7 +12909,7 @@ li a.about-link:hover::after {
                         if (document.querySelectorAll('.recent-server-card').length === 0) {
                             const emptyMessage = document.createElement('div');
                             emptyMessage.className = 'no-servers-message';
-                            emptyMessage.innerHTML = `${emptyServerSVG} No Recent Servers Found`;
+                            emptyMessage.innerHTML = `${ServerSVG} No Recent Servers Joined`;
                             emptyMessage.style.cssText = `
                                 color: ${theme.textSecondary};
                                 text-align: center;
@@ -13026,6 +13085,8 @@ li a.about-link:hover::after {
                     const serverId = card.dataset.serverId;
                     const region = card.dataset.region;
                     const lastPlayed = card.dataset.lastPlayed;
+                    // if 999999d then N/A
+                    const uptime = card.dataset.uptime === '999999d 0h 0m' ? 'N/A' : card.dataset.uptime;
 
                     const existingPopup = document.querySelector('.server-info-popup');
                     if (existingPopup) existingPopup.remove();
@@ -13162,8 +13223,12 @@ li a.about-link:hover::after {
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="9" r="2.5" stroke="currentColor" stroke-width="2"/></svg>
                     `)); // pointy thing on google maps
 
+                    infoItems.appendChild(createInfoItem('Server Uptime', uptime, `
+                        <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16"><g stroke-width="0"/><g stroke-linecap="round" stroke-linejoin="round"/><path d="M12 4.667h.007m-2.007 0h.007M12 11.333h.007m-2.007 0h.007M4 6.667h8c.621 0 .932 0 1.177-.101a1.33 1.33 0 0 0 .722-.722C14 5.599 14 5.288 14 4.667s0-.932-.101-1.177a1.33 1.33 0 0 0-.722-.722c-.245-.101-.556-.101-1.177-.101H4c-.621 0-.932 0-1.177.101a1.33 1.33 0 0 0-.722.722C2 3.735 2 4.045 2 4.667s0 .932.101 1.177a1.33 1.33 0 0 0 .722.722c.245.101.556.101 1.177.101m0 6.667h8c.621 0 .932 0 1.177-.101a1.33 1.33 0 0 0 .722-.722c.101-.246.101-.556.101-1.178s0-.932-.101-1.177a1.33 1.33 0 0 0-.722-.722c-.245-.101-.556-.101-1.177-.101H4c-.621 0-.932 0-1.177.101a1.33 1.33 0 0 0-.722.722C2 10.401 2 10.712 2 11.333s0 .932.101 1.177a1.33 1.33 0 0 0 .722.722c.245.101.556.101 1.177.101" stroke="#fff" stroke-width="1.333" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    `)); // server icon
+
                     const formattedLastPlayed = formatLastPlayedWithRelative(lastPlayed);
-                    infoItems.appendChild(createInfoItem('Last Played', formattedLastPlayed, `
+                    infoItems.appendChild(createInfoItem('Last Joined', formattedLastPlayed, `
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     `)); // a clock
 
@@ -13176,41 +13241,6 @@ li a.about-link:hover::after {
                         padding-top: 16px;
                         border-top: 1px solid rgba(255, 255, 255, 0.08);
                     `;
-
-                    const copyButton = document.createElement('button');
-                    copyButton.textContent = 'Copy Info';
-                    copyButton.style.cssText = `
-                        background: rgba(28, 31, 37, 0.6);
-                        color: ${theme.textPrimary};
-                        border: 1px solid rgba(255, 255, 255, 0.12);
-                        padding: 8px 16px;
-                        border-radius: 8px;
-                        font-size: 13px;
-                        font-weight: 500;
-                        cursor: pointer;
-                        transition: all 0.15s ease;
-                        display: flex;
-                        align-items: center;
-                        gap: 6px;
-                    `;
-                    copyButton.innerHTML = `
-                        ${thelikecopysymbol}
-                        Copy Info
-                    `;
-                    copyButton.addEventListener('click', function() {
-                        const infoText = `Game ID: ${gameId}\nServer ID: ${serverId}\nRegion: ${region}\nLast Played: ${lastPlayed}`;
-                        navigator.clipboard.writeText(infoText);
-                        copyButton.innerHTML = `
-                            ${checkmarkwithoutcircle}
-                            Copied!
-                        `;
-                        setTimeout(() => {
-                            copyButton.innerHTML = `
-                              ${thelikecopysymbol}
-                              Copy Info
-                          `;
-                        }, 1500);
-                    });
 
                     const closeButton = document.createElement('button');
                     closeButton.textContent = 'Close';
@@ -13232,7 +13262,6 @@ li a.about-link:hover::after {
                         }, 200);
                     });
 
-                    popupFooter.appendChild(copyButton);
                     popupFooter.appendChild(closeButton);
 
                     popupContent.appendChild(popupHeader);
@@ -13311,6 +13340,85 @@ li a.about-link:hover::after {
                 cardsWrapper.appendChild(serverCard);
             });
 
+          // load all button
+            if (keys.length > 5) {
+                const loadMoreBtn = document.createElement('button');
+                let isExpanded = false;
+
+                loadMoreBtn.textContent = `Show ${keys.length - 5} More Servers`;
+                loadMoreBtn.style.cssText = `
+                    width: 100%; padding: 12px; margin-top: 1px;
+                    background: ${theme.bgGradient}; color: ${theme.textPrimary};
+                    border: 1px solid ${theme.borderLight}; border-radius: 12px;
+                    cursor: pointer; font-weight: 600; font-size: 13px;
+                `;
+
+                loadMoreBtn.onmouseover = () => {
+                    loadMoreBtn.style.background = theme.bgGradientHover;
+                    loadMoreBtn.style.borderColor = theme.borderLightHover;
+                };
+
+                loadMoreBtn.onmouseout = () => {
+                    loadMoreBtn.style.background = theme.bgGradient;
+                    loadMoreBtn.style.borderColor = theme.borderLight;
+                };
+
+                // Get extra cards and an array to hold their new wrappers
+                const extraCards = Array.from(cardsWrapper.querySelectorAll('.recent-server-card')).slice(5);
+                const cardWrappers = [];
+
+                // Pre-collapse the cards using clipping wrappers
+                extraCards.forEach(card => {
+                    // 1. Create a wrapper to handle the animation mask
+                    const wrapper = document.createElement('div');
+                    wrapper.style.overflow = 'hidden';
+                    wrapper.style.transition = 'all 0.3s ease'; // Ensures a smooth slide
+                    wrapper.style.height = '0';
+                    wrapper.style.opacity = '0';
+                    wrapper.style.margin = '-6px 0'; // Cancels out the flex container's 12px gap
+                    wrapper.style.pointerEvents = 'none';
+
+                    // 2. Lock the card to its full size so it NEVER squishes
+                    card.style.height = '76px';
+                    card.style.padding = '16px 22px';
+                    card.style.borderWidth = '1px';
+                    card.style.margin = '0'; // Margin handled by wrapper now
+
+                    // 3. Wrap the card inside the DOM
+                    card.parentNode.insertBefore(wrapper, card);
+                    wrapper.appendChild(card);
+
+                    cardWrappers.push(wrapper);
+                });
+
+                loadMoreBtn.onclick = () => {
+                    // Small button click animation
+                    loadMoreBtn.style.transform = 'scale(0.96)';
+                    setTimeout(() => loadMoreBtn.style.transform = 'scale(1)', 150);
+
+                    // Toggle logic
+                    isExpanded = !isExpanded;
+                    loadMoreBtn.textContent = isExpanded ? 'Hide Extra Servers' : `Show ${keys.length - 5} More Servers`;
+
+                    // Animate the WRAPPERS instead of the cards
+                    cardWrappers.forEach(wrapper => {
+                        if (isExpanded) {
+                            wrapper.style.height = '76px';
+                            wrapper.style.opacity = '1';
+                            wrapper.style.margin = '0';
+                            wrapper.style.pointerEvents = 'auto';
+                        } else {
+                            wrapper.style.height = '0';
+                            wrapper.style.opacity = '0';
+                            wrapper.style.margin = '-6px 0';
+                            wrapper.style.pointerEvents = 'none';
+                        }
+                    });
+                };
+
+                cardsWrapper.appendChild(loadMoreBtn);
+            }
+
             contentContainer.appendChild(cardsWrapper);
         }
 
@@ -13326,139 +13434,107 @@ li a.about-link:hover::after {
     async function showAlreadyInGamePopup(currentGameData) {
         return new Promise(async (resolve) => {
             try {
-                // Create overlay
+                // Remove existing popup if present
+                const existingOverlay = document.querySelector('[data-ingame-overlay]');
+                if (existingOverlay) existingOverlay.remove();
+
+                // Add keyframe animations
+                const styleId = 'rolocate-popup-styles';
+                if (!document.getElementById(styleId)) {
+                    const style = document.createElement('style');
+                    style.id = styleId;
+                    style.textContent = `
+                        @keyframes popup-spin {
+                            to { transform: rotate(360deg); }
+                        }
+                        @keyframes popup-scale-in {
+                            from {
+                                opacity: 0;
+                                transform: scale(0.96);
+                            }
+                            to {
+                                opacity: 1;
+                                transform: scale(1);
+                            }
+                        }
+                    `;
+                    document.head.appendChild(style);
+                }
+
+                // Create outer overlay
                 const overlay = document.createElement('div');
+                overlay.setAttribute('data-ingame-overlay', '');
                 overlay.style.cssText = `
                     position: fixed;
                     top: 0;
                     left: 0;
                     width: 100%;
                     height: 100%;
-                    background: rgba(0, 0, 0, 0.4);
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    z-index: 100000000;
+                    background-color: rgba(0, 0, 0, 0.3);
+                    z-index: 999999;
                     opacity: 0;
                     transition: opacity 0.3s ease;
                 `;
 
-                // Create popup
-                const popup = document.createElement('div');
-                popup.style.cssText = `
-                    background: linear-gradient(135deg, #1a1c1e 0%, #232527 100%);
-                    border-radius: 16px;
-                    padding: 32px;
-                    max-width: 420px;
-                    width: 90%;
-                    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7), 0 0 1px rgba(255, 255, 255, 0.1) inset;
-                    color: white;
-                    font-family: 'HCo Gotham SSm', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-                    transform: scale(0.9);
-                    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-                    border: 1px solid rgba(255, 255, 255, 0.05);
+                // Create main container matching the loading overlay size/style
+                const container = document.createElement('div');
+                container.style.cssText = `
+                    position: fixed;
+                    inset: 0;
+                    margin: auto;
+                    width: 540px;
+                    height: fit-content;
+                    background: #1a1a1a;
+                    border-radius: 18px;
+                    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+                    border: 1px solid #2a2a2a;
+                    padding: 0;
+                    font-family: system-ui, -apple-system, sans-serif;
+                    z-index: 1000000;
+                    overflow: hidden;
+                    opacity: 0;
+                    animation: popup-scale-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
                 `;
 
-                popup.innerHTML = `
-                    <div style="text-align: center;">
-                        <div id="gameIconContainer" style="
-                            width: 150px;
-                            height: 150px;
-                            border-radius: 12px;
-                            margin: 0 auto 20px auto;
-                            background: rgba(255, 255, 255, 0.05);
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            position: relative;
-                            overflow: hidden;
-                            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-                        ">
-                            <div id="loadingSpinner" style="
-                                width: 40px;
-                                height: 40px;
-                                border: 3px solid rgba(255, 255, 255, 0.1);
-                                border-top-color: #00a2ff;
-                                border-radius: 50%;
-                                animation: spin 0.8s linear infinite;
-                            "></div>
-                            <img id="gameIcon" style="
-                                width: 100%;
-                                height: 100%;
-                                object-fit: cover;
-                                display: none;
-                            ">
+                container.innerHTML = `
+                    <div style="display: flex; align-items: center; padding: 32px 32px 24px 32px; gap: 20px;">
+                        <div style="width: 96px; height: 96px; border-radius: 16px; background: #252525; display: flex; align-items: center; justify-content: center; border: 1px solid #333; overflow: hidden; flex-shrink: 0; position: relative;">
+                            <div id="loadingSpinner" style="width: 32px; height: 32px; border: 3px solid rgba(255, 255, 255, 0.1); border-top-color: #3b82f6; border-radius: 50%; animation: popup-spin 0.8s linear infinite;"></div>
+                            <img id="gameIcon" style="width: 100%; height: 100%; object-fit: cover; display: none; opacity: 0; transition: opacity 0.2s ease;">
                         </div>
-                        <h2 style="
-                            margin: 0 0 12px 0;
-                            font-size: 24px;
-                            font-weight: 700;
-                            color: #fff;
-                            letter-spacing: -0.5px;
-                        ">Already in a Game</h2>
-                        <p style="
-                            margin: 0 0 28px 0;
-                            font-size: 15px;
-                            color: #a0a0a0;
-                            line-height: 1.6;
-                        ">You are currently playing <strong style="color: #fff; font-weight: 600;">${currentGameData.lastLocation}</strong>. Would you still like to join this server?</p>
-                        <div style="display: flex; gap: 12px; justify-content: center; margin-bottom: 20px;">
-                            <button id="cancelJoin" style="
-                                background: rgba(255, 255, 255, 0.08);
-                                color: white;
-                                border: 1px solid rgba(255, 255, 255, 0.1);
-                                padding: 13px 28px;
-                                border-radius: 8px;
-                                font-size: 14px;
-                                font-weight: 600;
-                                cursor: pointer;
-                                transition: all 0.2s ease;
-                                letter-spacing: 0.3px;
-                            ">Cancel</button>
-                            <button id="confirmJoin" style="
-                                background: linear-gradient(135deg, #00a2ff 0%, #0088dd 100%);
-                                color: white;
-                                border: none;
-                                padding: 13px 28px;
-                                border-radius: 8px;
-                                font-size: 14px;
-                                font-weight: 600;
-                                cursor: pointer;
-                                transition: all 0.2s ease;
-                                box-shadow: 0 4px 12px rgba(0, 162, 255, 0.3);
-                                letter-spacing: 0.3px;
-                            ">Continue</button>
+                        <div style="flex: 1; min-width: 0; text-align: left;">
+                            <div style="font-size: 24px; font-weight: 600; color: #fff; margin-bottom: 6px; letter-spacing: -0.02em;">Already in a Game</div>
                         </div>
-                        <div style="
-                            font-size: 11px;
-                            color: rgba(255, 255, 255, 0.25);
-                            font-weight: 500;
-                            letter-spacing: 0.5px;
-                        ">RoLocate by Oqarshi</div>
+                    </div>
+
+                    <div style="height: 1px; background: #2a2a2a; margin: 0 32px;"></div>
+
+                    <div style="padding: 24px 32px;">
+                        <p style="margin: 0 0 24px 0; font-size: 15px; color: #aaa; line-height: 1.6; text-align: center;">
+                            You are currently playing <strong style="color: #fff; font-weight: 600;">${currentGameData.lastLocation}</strong>.<br>Would you still like to join this server?
+                        </p>
+                        <div style="display: flex; gap: 12px; justify-content: center;">
+                            <button id="cancelJoin" style="flex: 1; background: #252525; color: #aaa; border: 1px solid #333; padding: 14px 24px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; outline: none;">Cancel</button>
+                            <button id="confirmJoin" style="flex: 1; background: #3b82f6; color: white; border: none; padding: 14px 24px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); outline: none;">Continue</button>
+                        </div>
+                    </div>
+
+                    <div style="padding: 20px 32px; border-top: 1px solid #2a2a2a; text-align: center;">
+                        <div style="font-size: 11px; color: #666; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;">RoLocate by Oqarshi</div>
                     </div>
                 `;
 
-                // Add keyframe animation for spinner
-                const style = document.createElement('style');
-                style.textContent = `
-                    @keyframes spin {
-                        to { transform: rotate(360deg); }
-                    }
-                `;
-                document.head.appendChild(style);
-
-                overlay.appendChild(popup);
+                overlay.appendChild(container);
                 document.body.appendChild(overlay);
 
-                // Trigger fade in animation
-                setTimeout(() => {
+                // Trigger fade in animation for overlay background
+                requestAnimationFrame(() => {
                     overlay.style.opacity = '1';
-                    popup.style.transform = 'scale(1)';
-                }, 10);
+                });
 
-                // Load game icon
-                const loadingSpinner = popup.querySelector('#loadingSpinner');
-                const gameIconImg = popup.querySelector('#gameIcon');
+                // Load game icon logic
+                const loadingSpinner = container.querySelector('#loadingSpinner');
+                const gameIconImg = container.querySelector('#gameIcon');
 
                 try {
                     const universeId = await getUniverseIdFromPlaceId(currentGameData.rootPlaceId);
@@ -13468,43 +13544,45 @@ li a.about-link:hover::after {
                     gameIconImg.onload = () => {
                         loadingSpinner.style.display = 'none';
                         gameIconImg.style.display = 'block';
+                        requestAnimationFrame(() => {
+                            gameIconImg.style.opacity = '1';
+                        });
                     };
                 } catch (error) {
                     loadingSpinner.style.display = 'none';
-                    // Show placeholder on error
-                    popup.querySelector('#gameIconContainer').innerHTML = `
-                        <div style="font-size: 60px; opacity: 0.3;">🎮</div>
+                    // Show a styled fallback placeholder on error
+                    container.querySelector('div[style*="border-radius: 16px"]').innerHTML = `
+                        <div style="font-size: 40px; opacity: 0.3;">🎮</div>
                     `;
                 }
 
-                // Add hover effects
-                const cancelBtn = popup.querySelector('#cancelJoin');
-                const confirmBtn = popup.querySelector('#confirmJoin');
+                // Add button hover effects matching the overall theme
+                const cancelBtn = container.querySelector('#cancelJoin');
+                const confirmBtn = container.querySelector('#confirmJoin');
 
                 cancelBtn.onmouseover = () => {
-                    cancelBtn.style.background = 'rgba(255, 255, 255, 0.12)';
-                    cancelBtn.style.transform = 'translateY(-1px)';
+                    cancelBtn.style.background = '#303030';
+                    cancelBtn.style.color = '#fff';
                 };
                 cancelBtn.onmouseout = () => {
-                    cancelBtn.style.background = 'rgba(255, 255, 255, 0.08)';
-                    cancelBtn.style.transform = 'translateY(0)';
+                    cancelBtn.style.background = '#252525';
+                    cancelBtn.style.color = '#aaa';
                 };
 
                 confirmBtn.onmouseover = () => {
-                    confirmBtn.style.background = 'linear-gradient(135deg, #0088dd 0%, #0077cc 100%)';
-                    confirmBtn.style.transform = 'translateY(-1px)';
-                    confirmBtn.style.boxShadow = '0 6px 16px rgba(0, 162, 255, 0.4)';
+                    confirmBtn.style.background = '#2563eb';
+                    confirmBtn.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)'; // Tighter, dark shadow
                 };
                 confirmBtn.onmouseout = () => {
-                    confirmBtn.style.background = 'linear-gradient(135deg, #00a2ff 0%, #0088dd 100%)';
-                    confirmBtn.style.transform = 'translateY(0)';
-                    confirmBtn.style.boxShadow = '0 4px 12px rgba(0, 162, 255, 0.3)';
+                    confirmBtn.style.background = '#3b82f6';
+                    confirmBtn.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)'; // Subtle resting shadow
                 };
 
-                // Fade out animation
+                // Fade out animation function
                 const fadeOut = () => {
                     overlay.style.opacity = '0';
-                    popup.style.transform = 'scale(0.9)';
+                    container.style.opacity = '0';
+                    container.style.transform = 'translate(-50%, -50%) scale(0.92)';
                     setTimeout(() => overlay.remove(), 300);
                 };
 
@@ -13520,8 +13598,12 @@ li a.about-link:hover::after {
                 };
 
             } catch (error) {
-                ConsoleLogEnabled(`Error creating popup: ${error}`);
-                // Fallback to simple confirm
+                if (typeof ConsoleLogEnabled === "function") {
+                    ConsoleLogEnabled(`Error creating popup: ${error}`);
+                } else {
+                    console.error(`Error creating popup: ${error}`);
+                }
+                // Fallback to simple browser confirm prompt
                 resolve(confirm("You are already in a game. Would you like to continue joining this server?"));
             }
         });
@@ -13580,14 +13662,16 @@ li a.about-link:hover::after {
                 showLoadingOverlay(placeId, serverId);
                 await new Promise(res => setTimeout(res, 1500));
             }
-            /* ---------- recent‑servers handling (always runs) ---------- */
+            /* ---------- recent‑servers handling (always runs) fire in background ---------- */
             if (localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true") {
-                await HandleRecentServersAddGames(placeId, serverId);
-                document.querySelector(".recent-servers-section")?.remove();
-                HandleRecentServers();
+                HandleRecentServersAddGames(placeId, serverId).then(() => {
+                    document.querySelector(".recent-servers-section")?.remove();
+                    HandleRecentServers();
+                }).catch(ConsoleLogEnabled);
             }
             //join via deeplink
             ConsoleLogEnabled(`Joining via deeplink: placeId=${placeId}, serverId=${serverId}`);
+            notifications("Joining server...", "info", "", "2500");
             window.location.href = `roblox://experiences/start?placeId=${placeId}&gameInstanceId=${serverId}`;
         } else {
             // join via roblox launcher
@@ -13597,11 +13681,12 @@ li a.about-link:hover::after {
                 showLoadingOverlay(placeId, serverId);
                 await new Promise(res => setTimeout(res, 1500));
             }
-            /* ---------- recent‑servers handling (always runs) ---------- */
+            /* ---------- recent‑servers handling (always runs) fire in background ---------- */
             if (localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true") {
-                await HandleRecentServersAddGames(placeId, serverId);
-                document.querySelector(".recent-servers-section")?.remove();
-                HandleRecentServers();
+                HandleRecentServersAddGames(placeId, serverId).then(() => {
+                    document.querySelector(".recent-servers-section")?.remove();
+                    HandleRecentServers();
+                }).catch(ConsoleLogEnabled);
             }
             // set flag to bypass interceptor
             window._skipRobloxJoinInterceptor = true;
@@ -13609,12 +13694,12 @@ li a.about-link:hover::after {
         }
     }
 
-    /*******************************************************
+/*******************************************************
     name of function: showLoadingOverlay
-    description: Loading box when joining a server + Shows server location
+    description: Loading box when joining a server + Shows server location, uptime, and version
     *******************************************************/
     // WARNING: Do not republish this script. Licensed for personal use only.
-    async function showLoadingOverlay(gameId, serverId, mainMessage = "", statusMessage = "") {
+    async function showLoadingOverlay(gameId, serverId, mainMessage = "", statusMessage = "", fromPlayButton = false) {
         // remove existing overlay if present
         const existingOverlay = document.querySelector('[data-loading-overlay]');
         if (existingOverlay) {
@@ -13797,7 +13882,7 @@ li a.about-link:hover::after {
             color: '#fff',
             marginBottom: '6px',
             letterSpacing: '-0.02em'
-        }, mainMessage || (isServerHopping ? 'Server Hopping' : 'Joining Game'));
+        }, mainMessage || (fromPlayButton ? 'Joining Roblox Server' : (isServerHopping ? 'Server Hopping' : 'Joining Game')));
 
         const dotsSpan = createElement('span', {
             animation: 'dots 1.4s steps(4, end) infinite'
@@ -13808,12 +13893,25 @@ li a.about-link:hover::after {
             fontSize: '14px',
             color: '#aaa',
             fontWeight: '500'
-        }, statusMessage || (isServerHopping ? 'Finding available server' : 'Connecting to server'));
+        }, statusMessage || (fromPlayButton ? 'Starting Roblox...' : (isServerHopping ? 'Finding available server' : 'Connecting to server')));
 
         textSection.appendChild(titleText);
         textSection.appendChild(subtitleText);
         headerSection.appendChild(iconContainer);
         headerSection.appendChild(textSection);
+
+        // Center everything and stack icon above text for play button
+        if (fromPlayButton) {
+            Object.assign(headerSection.style, {
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '18px',
+                padding: '32px 32px 20px 32px'
+            });
+            Object.assign(textSection.style, { textAlign: 'center', flex: 'none', width: '100%' });
+            Object.assign(titleText.style, { fontSize: '32px', marginBottom: '6px' });
+            Object.assign(subtitleText.style, { fontSize: '16px' });
+        }
 
         // divider
         const divider = createElement('div', {
@@ -13857,16 +13955,18 @@ li a.about-link:hover::after {
         locationSection.appendChild(locationValue);
 
         // server details section
+        // Swapped to a grid layout to elegantly handle 4 items (2x2 grid)
         const detailsSection = createElement('div', {
             padding: '0 32px 24px 32px',
-            display: 'flex',
+            display: fromPlayButton ? 'flex' : 'grid',
+            gridTemplateColumns: fromPlayButton ? 'none' : 'repeat(2, 1fr)',
             gap: '12px',
             animation: 'slide-up 0.4s ease 0.4s backwards'
         });
 
         const createDetail = (label, value, color) => {
             const detail = createElement('div', {
-                flex: '1',
+                flex: fromPlayButton ? '1' : 'none',
                 background: '#222',
                 border: '1px solid #2a2a2a',
                 borderRadius: '10px',
@@ -13895,11 +13995,31 @@ li a.about-link:hover::after {
 
             detail.appendChild(labelEl);
             detail.appendChild(valueEl);
+            detail._valueEl = valueEl; // Save reference for styling/updating
             return detail;
         };
 
-        detailsSection.appendChild(createDetail('Game ID', gameId, '#60a5fa'));
-        detailsSection.appendChild(createDetail('Server ID', serverId, '#34d399'));
+        const gameIdDetail = createDetail('Game ID', gameId, '#e5e7eb');
+        detailsSection.appendChild(gameIdDetail);
+
+        let versionDetail = null;
+        let uptimeDetail = null;
+
+        if (!fromPlayButton) {
+            detailsSection.appendChild(createDetail('Server ID', serverId, '#d1d5db'));
+
+            // Only add extra detailed cards if we aren't random hopping (meaning we have a specific target server to fetch)
+            if (!isServerHopping) {
+                versionDetail = createDetail('Place Version', '...', '#a78bfa');
+                uptimeDetail = createDetail('Server Uptime', '...', '#34d399');
+                detailsSection.appendChild(versionDetail);
+                detailsSection.appendChild(uptimeDetail);
+            }
+        } else {
+            // Keep Game ID but center and enlarge it for play button clicks
+            Object.assign(gameIdDetail.style, { textAlign: 'center', padding: '18px 20px', width: '100%' });
+            Object.assign(gameIdDetail._valueEl.style, { fontSize: '22px' });
+        }
 
         // progress bar section
         const progressSection = createElement('div', {
@@ -13952,7 +14072,12 @@ li a.about-link:hover::after {
         container.appendChild(closeButton);
         container.appendChild(headerSection);
         container.appendChild(divider);
-        container.appendChild(locationSection);
+
+        // Hide location info for the Play button mode
+        if (!fromPlayButton) {
+            container.appendChild(locationSection);
+        }
+
         container.appendChild(detailsSection);
         container.appendChild(progressSection);
         container.appendChild(footer);
@@ -13985,33 +14110,83 @@ li a.about-link:hover::after {
                 .catch(error => ConsoleLogEnabled('Error fetching game icon:', error));
         }
 
-        // fetch server location
+        // fetch server location and additional details
         (async () => {
-            subtitleText.textContent = statusMessage || (isServerHopping ? 'Finding server...' : 'Locating server...');
+            subtitleText.textContent = statusMessage || (fromPlayButton ? 'Starting Roblox...' : (isServerHopping ? 'Finding server...' : 'Locating server...'));
 
             await new Promise(resolve => setTimeout(resolve, 500));
 
             try {
-                if (isServerHopping) {
+                if (fromPlayButton) {
+                    locationValue.innerHTML = '🌍 Joining Roblox Server';
+                    subtitleText.textContent = statusMessage || 'Starting Roblox...';
+                } else if (isServerHopping) {
                     locationValue.innerHTML = '🌍 Random Server';
                     subtitleText.textContent = statusMessage || 'Connecting...';
                 } else {
                     const locationData = await fetchServerDetails(gameId, serverId);
+
+                    // Update location
                     const flagEmoji = getFlagEmoji(locationData.country.code);
                     locationValue.innerHTML = '';
                     locationValue.appendChild(flagEmoji);
                     locationValue.append(` ${locationData.city}, ${locationData.country.name}`);
                     subtitleText.innerHTML = statusMessage || `Connecting to <span style="color: #60a5fa; font-weight: 600;">${locationData.city}</span>`;
+
+                    // Update version
+                    if (versionDetail && locationData.placeVersion !== undefined) {
+                        versionDetail._valueEl.textContent = `v${locationData.placeVersion}`;
+                    }
+
+                    // Update uptime
+                    if (uptimeDetail) {
+                        if (locationData.serverClaimedTimeMs === 0) {
+                            uptimeDetail._valueEl.textContent = 'Not provided by Roblox';
+                            uptimeDetail._valueEl.style.color = '#fbbf24'; // server upotime not found color
+                        } else if (locationData.serverUptime) {
+                            const { days, hours, minutes } = locationData.serverUptime;
+                            const timeParts = [];
+                            if (days > 0) timeParts.push(`${days}d`);
+                            if (hours > 0) timeParts.push(`${hours}h`);
+                            timeParts.push(`${minutes}m`);
+                            uptimeDetail._valueEl.textContent = timeParts.join(' ') || '< 1m';
+                        } else {
+                            uptimeDetail._valueEl.textContent = 'Unknown';
+                        }
+                    }
                 }
             } catch (error) {
                 ConsoleLogEnabled('Error fetching location:', error);
                 locationValue.innerHTML = isServerHopping ? '🌍 Random Server' : '🌍 Unknown Location';
                 subtitleText.textContent = statusMessage || 'Connecting...';
+
+                // Set to error state if the fetch failed completely
+                if (versionDetail) versionDetail._valueEl.textContent = 'Error';
+                if (uptimeDetail) uptimeDetail._valueEl.textContent = 'Error';
+                if (uptimeDetail) uptimeDetail._valueEl.style.color = '#f87171'; // Red text for failure
             }
         })();
 
+        // suppress Roblox's native launch dialog
+        let nativeDialogObserver = null;
+        if (fromPlayButton && localStorage.getItem("ROLOCATE_smartjoinpopup") === "true") {
+            const dismissNativeRobloxDialog = () => {
+                document.querySelectorAll('.foundation-web-dialog-overlay').forEach(el => el.remove());
+                if (document.body.style.pointerEvents === 'none') {
+                    document.body.style.pointerEvents = '';
+                }
+                if (document.body.hasAttribute('data-scroll-locked')) {
+                    document.body.removeAttribute('data-scroll-locked');
+                }
+            };
+            dismissNativeRobloxDialog();
+            nativeDialogObserver = new MutationObserver(() => dismissNativeRobloxDialog());
+            nativeDialogObserver.observe(document.body, { childList: true, subtree: true });
+        }
+
         // cleanup function
         const cleanup = () => {
+            if (nativeDialogObserver) nativeDialogObserver.disconnect();
             overlay.style.opacity = '0';
             setTimeout(() => {
                 overlay.remove();
@@ -14020,7 +14195,7 @@ li a.about-link:hover::after {
         };
 
         // auto hide after 20 seconds for server hopping, 6 seconds for normal join
-        const fadeOutDuration = isServerHopping ? 20000 : 6000;
+        const fadeOutDuration = (isServerHopping && !fromPlayButton) ? 20000 : 6000;
         const fadeOutTimer = setTimeout(cleanup, fadeOutDuration);
 
         // close button handler
@@ -14068,164 +14243,10 @@ li a.about-link:hover::after {
 
     /*******************************************************
      name of function: bettergamestats
-     description: popup for customizing game stats display
+     description: removed as it was very inaccurate
      *******************************************************/
     function bettergamestats_settings () {
-      // don't open it twice
-      if (document.getElementById('rolocate-gamestats-settings-modal')) return;
-      notifications('Warning: This revenue estimate may be 10–25% higher or lower than the game’s actual earnings and does not account for premium payouts. It is intended to provide a general sense of how much a game makes.', 'warning', '', '60000');
-
-      // default toggle values
-      const defaultSettings = {
-        estimatedRevenue: false
-      };
-
-      // load saved settings and fall back to defaults
-      const savedSettings = JSON.parse(
-        localStorage.getItem('ROLOCATE_bettergamestats_settings') || '{}'
-      );
-      const settings = { ...defaultSettings, ...savedSettings };
-
-      // dark background overlay
-      const overlay = document.createElement('div');
-      overlay.id = 'rolocate-gamestats-settings-modal';
-      overlay.style.cssText = `
-        position:fixed;inset:0;display:flex;justify-content:center;align-items:center;
-        background:rgba(0,0,0,.45);z-index:10000;opacity:0;transition:.2s;
-      `;
-
-      // main modal box
-      const modal = document.createElement('div');
-      modal.style.cssText = `
-        background:#181818;border-radius:14px;padding:18px;width:340px;max-width:92vw;
-        color:#fff;border:1px solid #2f2f2f;box-shadow:0 10px 30px rgba(0,0,0,.6);
-        transform:scale(.96) translateY(12px);transition:.2s;
-      `;
-
-      // title + subtitle
-      modal.innerHTML = `
-        <h2 style="margin:0;font-size:18px;text-align:center">Game Stats Settings</h2>
-        <p style="margin:6px 0 0px;text-align:center;font-size:12px;color:#aaa">
-          Choose what you want displayed
-        </p>
-      `;
-
-      // toggle definitions
-      const toggleOptions = [
-        ['estimatedRevenue', 'Estimated Revenue']
-      ];
-
-      // container for all toggles
-      const togglesContainer = document.createElement('div');
-      togglesContainer.style.cssText = `
-        background:#222;padding:10px;border-radius:10px;display:grid;gap:8px;
-      `;
-
-      // build each toggle row
-      toggleOptions.forEach(([key, label]) => {
-        const row = document.createElement('label');
-        row.style.cssText = `
-          display:flex;justify-content:space-between;align-items:center;
-          padding:8px 10px;border-radius:8px;cursor:pointer;
-          transition:.15s;background:#262626;
-        `;
-
-        // hover effect
-        row.onmouseenter = () => (row.style.background = '#2d2d2d');
-        row.onmouseleave = () => (row.style.background = '#262626');
-
-        const on = settings[key];
-        row.innerHTML = `
-          <span style="font-size:13px">${label}</span>
-          <input type="checkbox" id="bgs-${key}" ${on ? 'checked' : ''} style="display:none">
-          <div class="tgl" style="
-            width:36px;height:20px;border-radius:20px;
-            background:${on ? '#16a34a' : '#444'};
-            position:relative;transition:.15s;
-          ">
-            <div style="
-              width:16px;height:16px;border-radius:50%;background:#fff;
-              position:absolute;top:2px;left:${on ? '18px' : '2px'};
-              transition:.15s;
-            "></div>
-          </div>
-        `;
-
-        const checkbox = row.querySelector('input');
-        const toggle = row.querySelector('.tgl');
-        const knob = toggle.querySelector('div');
-
-        // handle toggle click
-        row.onclick = (e) => {
-          e.preventDefault();
-          checkbox.checked = !checkbox.checked;
-          toggle.style.background = checkbox.checked ? '#16a34a' : '#444';
-          knob.style.left = checkbox.checked ? '18px' : '2px';
-        };
-
-        togglesContainer.appendChild(row);
-      });
-
-      // buttons container
-      const buttonRow = document.createElement('div');
-      buttonRow.style.cssText = `
-        display:flex;justify-content:flex-end;gap:8px;margin-top:14px;
-      `;
-
-      // close animation + cleanup
-      const closeModal = () => {
-        modal.style.transform = 'scale(.96) translateY(12px)';
-        overlay.style.opacity = '0';
-        setTimeout(() => overlay.remove(), 200);
-      };
-
-      // reusable button factory
-      const createButton = (text, bgColor, onClick) => {
-        const button = document.createElement('button');
-        button.textContent = text;
-        button.style.cssText = `
-          padding:8px 14px;border-radius:8px;border:1px solid ${bgColor};
-          background:${bgColor};color:#fff;font-size:13px;cursor:pointer;
-          transition:.15s;
-        `;
-        button.onmouseenter = () => (button.style.opacity = 0.85);
-        button.onmouseleave = () => (button.style.opacity = 1);
-        button.onclick = onClick;
-        return button;
-      };
-
-      // add buttons
-      buttonRow.append(
-        createButton('Cancel', '#333', closeModal),
-        createButton('Save', '#16a34a', () => {
-          const newSettings = {};
-          toggleOptions.forEach(([key]) => {
-            newSettings[key] = document.getElementById(`bgs-${key}`).checked;
-          });
-
-          localStorage.setItem(
-            'ROLOCATE_bettergamestats_settings',
-            JSON.stringify(newSettings)
-          );
-
-          // feedback stuff
-          ConsoleLogEnabled('Game stats settings saved:', newSettings);
-          notifications('Settings saved', 'success', '👍', '5000');
-
-          closeModal();
-        })
-      );
-
-      // assemble modal
-      modal.append(togglesContainer, buttonRow);
-      overlay.append(modal);
-      document.body.append(overlay);
-
-      // animate in
-      requestAnimationFrame(() => {
-        overlay.style.opacity = '1';
-        modal.style.transform = 'scale(1) translateY(0)';
-      });
+      notifications('Estimated Revenue for games has been removed because it was very inaccurate.', 'info', '', '6000');
     }
 
     /*******************************************************
@@ -14306,6 +14327,195 @@ li a.about-link:hover::after {
     }
 
     /*******************************************************
+    name of function: DetailedPreviewBETA
+    description: detailed preview yea
+    *******************************************************/
+    function DetailedPreviewBETA() {
+        // 1. Local storage check
+        if (localStorage.getItem('ROLOCATE_detailedpreview') !== 'true') return;
+
+        const doc = document;
+        const verifiedSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 28 28" fill="none"><path fill="#06f" d="m5.888 0 22.11 5.924-5.924 22.11-22.11-5.924z"/><path fill="#fff" fill-rule="evenodd" d="m20.543 8.75.006.007a1.54 1.54 0 0 1 0 2.176l-8.732 8.732-4.367-4.368a1.54 1.54 0 0 1 0-2.175l.007-.007a1.54 1.54 0 0 1 2.176 0l2.184 2.185 6.55-6.55a1.54 1.54 0 0 1 2.176 0"/></svg>`;
+
+        // aniamtuion stuff i guess
+        if (!doc.getElementById('rloc-style')) {
+            doc.head.insertAdjacentHTML('beforeend', `<style id="rloc-style">
+#rloc-prev {
+  position: absolute;
+  display: none;
+  z-index: 99999;
+  background: #121215;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #fff;
+  width: 260px;
+  padding: 12px;
+  font-family: "Builder Sans", "Gotham SSm A", sans-serif;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8);
+  transform: translateY(6px);
+  transition: 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+#rloc-prev.vis {
+  opacity: 1;
+  transform: translateY(0);
+}
+.r-sk {
+  animation: r-pulse 1.5s infinite;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+}
+@keyframes r-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+.r-fl {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.r-bord {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 12px;
+}
+.r-stat {
+  background: rgba(0, 0, 0, 0.25);
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  display: flex;
+  justify-content: space-around;
+  text-align: center;
+  margin: 12px 0;
+}
+.r-stat span {
+  font-size: 10px;
+  color: #bdbebe;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.r-av {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.04);
+  object-fit: cover;
+}
+.r-desc {
+  font-size: 12px;
+  color: #bdbebe;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+            </style>`);
+        }
+
+        //container
+        let popup = doc.getElementById('rloc-prev') || Object.assign(doc.createElement('div'), { id: 'rloc-prev' });
+        if (!popup.parentNode) doc.body.appendChild(popup);
+
+        const getUI = (isGroup, data, img) => {
+            if (!data) return `
+                <div class="r-fl r-bord">
+                    <div class="r-sk r-av" style="border-radius:${isGroup?'8px':'50%'}"></div>
+                    <div style="flex:1"><div class="r-sk" style="height:14px; width:70%; margin-bottom:6px"></div><div class="r-sk" style="height:10px; width:40%"></div></div>
+                </div>
+                <div class="r-sk" style="height:45px; margin: 12px 0; border-radius: 8px;"></div>
+                <div class="r-sk" style="height:10px; width:100%; margin-bottom:4px"></div>
+                <div class="r-sk" style="height:10px; width:80%"></div>`;
+
+            const name = isGroup ? data.name : data.userInfo?.displayName;
+            const sub = isGroup ? `By @${data.ownerName || 'Unknown'}` : `@${data.userInfo?.name || '---'}`;
+            const isVer = isGroup ? data.isVerified : data.hasVerifiedBadge;
+            const desc = (isGroup ? data.description : data.userInfo?.description) || "<i>No description provided.</i>";
+
+            const stats = isGroup
+                ? `<div><b>${(data.memberCount||0).toLocaleString()}</b><br><span>Members</span></div>`
+                : `<div><b>${(data.friendCount||0).toLocaleString()}</b><br><span>Friends</span></div>
+                   <div><b>${(data.followerCount||0).toLocaleString()}</b><br><span>Followers</span></div>
+                   <div><b>${(data.followingCount||0).toLocaleString()}</b><br><span>Following</span></div>`;
+
+            return `
+                <div class="r-fl r-bord">
+                    <img src="${img}" class="r-av" style="border-radius:${isGroup?'8px':'50%'}">
+                    <div style="overflow:hidden">
+                        <div class="r-fl" style="gap:4px">
+                            <b style="font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${name||'Unknown'}</b>
+                            ${isVer ? verifiedSvg : ''}
+                        </div>
+                        <div style="font-size:12px; color:#bdbebe; margin-top:2px">${sub}</div>
+                    </div>
+                </div>
+                <div class="r-stat">${stats}</div>
+                <div class="r-desc">${desc}</div>`;
+        };
+
+        let timer, curId;
+        const regex = /roblox\.com\/(users|communities)\/(\d+)/i;
+
+        // 5. Consolidated Event Listeners
+        doc.addEventListener('mouseover', (e) => {
+            if (window.location.pathname.toLowerCase() === '/home') return;
+            const link = e.target.closest('a');
+            if (!link || link.hash || e.target.tagName === 'IMG' || link.querySelector('img')) return;
+
+            const match = link.href.match(regex);
+            if (match) {
+                const isGroup = match[1].toLowerCase() === 'communities';
+                const tId = match[2];
+                const uId = match[1][0] + tId;
+
+                const rect = link.getBoundingClientRect();
+                popup.style.left = `${Math.min(rect.left + window.scrollX, window.innerWidth - 290)}px`;
+                popup.style.top = `${rect.bottom + window.scrollY + 8}px`;
+                popup.style.display = 'block';
+                requestAnimationFrame(() => popup.classList.add('vis'));
+
+                if (curId === uId) return;
+                popup.innerHTML = getUI(isGroup, null);
+                curId = uId;
+                clearTimeout(timer);
+
+                timer = setTimeout(async () => {
+                    try {
+                        const [imgs, stats] = await Promise.all([
+                            isGroup ? fetchGroupIconsBatch([tId]) : fetchPlayerThumbnailsBatch([tId]),
+                            isGroup ? fetchGroupStatsBatch(tId) : fetchUserStatsBatch(tId)
+                        ]);
+
+                        if (curId !== uId) return;
+
+                        const imgUrl = imgs?.[0]?.state === "Completed" ? imgs[0].imageUrl : "https://tr.rbxcdn.com/53eb9b17fe1432a809c73a13889b5006/150/150/AvatarHeadshot/Png";
+                        popup.innerHTML = stats ? getUI(isGroup, stats, imgUrl) : `<div style="text-align:center; color:#ff5252; padding:10px;">Failed to load data.</div>`;
+                    } catch {
+                        if (curId === uId) popup.innerHTML = `<div style="text-align:center; color:#ff5252; padding:10px;">Error loading data.</div>`;
+                    }
+                }, 300);
+            }
+        });
+
+        doc.addEventListener('mouseout', (e) => {
+            const link = e.target.closest('a');
+            if (link && regex.test(link.href)) {
+                clearTimeout(timer);
+                popup.classList.remove('vis');
+                setTimeout(() => !popup.classList.contains('vis') && (popup.style.display = 'none'), 150);
+                curId = null;
+            }
+        });
+    }
+
+
+    /*******************************************************
     name of function: checkBannedUser
     description: so like this is the banned user logic. coming soonish
     *******************************************************/
@@ -14357,6 +14567,7 @@ li a.about-link:hover::after {
         }
 
         betterfriends(); // shows better friends
+        DetailedPreviewBETA();
         checkBannedUser(); // banned user
         Responsivegamecards(); // uh the repsonsive game cards
         SmartSearch(); // smartsearch bar ontop cool function :)
@@ -14546,8 +14757,7 @@ li a.about-link:hover::after {
             (
                 localStorage.getItem("ROLOCATE_togglefilterserversbutton") === "true" ||
                 localStorage.getItem("ROLOCATE_toggleserverhopbutton") === "true" ||
-                localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true" ||
-                localStorage.getItem("ROLOCATE_betterprivateservers") == "true"
+                localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true"
             )
         ) {
 
@@ -14566,7 +14776,7 @@ li a.about-link:hover::after {
 
         /*******************************************************
         name of function:monitorPlayButton
-        description: for join confimation and like future updates note that it is called if the jopinconfimation in localstop4arghe is true so not check needed here
+        description: for join confimation and like future updates note that it is called if the jopinconfimation or smartjoin pop in localstop4arghe is true so not check needed here
         *******************************************************/
         function monitorPlayButton() {
             const button = document.querySelector('[data-testid="play-button"]');
@@ -14592,7 +14802,12 @@ li a.about-link:hover::after {
                     ConsoleLogEnabled('Error checking user presence:', error);
                 }
 
-                // Uok so rel click
+                // show it yea
+                if (localStorage.getItem("ROLOCATE_smartjoinpopup") === "true") {
+                    showLoadingOverlay(getCurrentGameId(), null, "", "", true);
+                }
+
+                // Uok so real click
                 button.click();
             }
 
@@ -14643,16 +14858,17 @@ li a.about-link:hover::after {
                 }
 
                 ConsoleLogEnabled(`Intercepted join: Game ID = ${gameId}, Server ID = ${serverId}`);
+                // first server join popup cause we want no delay
+                /* ---------- smartserver join---------- */
+                if (localStorage.getItem("ROLOCATE_smartjoinpopup") === "true") {
+                    showLoadingOverlay(gameId, serverId);
+                    await new Promise(res => setTimeout(res, 1500));
+                }
                 /* ---------- recent‑servers handling (always runs) ---------- */
                 if (localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true") {
                     await HandleRecentServersAddGames(gameId, serverId);
                     document.querySelector(".recent-servers-section")?.remove();
                     HandleRecentServers();
-                }
-                /* ---------- smartserver join---------- */
-                if (localStorage.getItem("ROLOCATE_smartjoinpopup") === "true") {
-                    showLoadingOverlay(gameId, serverId);
-                    await new Promise(res => setTimeout(res, 1500));
                 }
                 /* ---------- finally join the game ---------- */
                 return originalJoin.apply(this, arguments);
@@ -14696,448 +14912,6 @@ li a.about-link:hover::after {
 
                 return observer;
             }
-        }
-        /*******************************************************
-         name of function: bettergamestats_action
-         description: calculates estimated revenue range for the
-         current game based on genre RPV benchmarks.
-         formula: visits * RPV * 0.70 * 0.0038
-         *******************************************************/
-        async function bettergamestats_action() {
-          const enabled = localStorage.getItem('ROLOCATE_bettergamestats');
-          if (!enabled || enabled !== 'true') return;
-
-          const rawSettings = localStorage.getItem('ROLOCATE_bettergamestats_settings');
-          const settings = rawSettings ? JSON.parse(rawSettings) : {};
-          if (!settings.estimatedRevenue) return;
-
-          // rpv range by genre
-          // keyed by lowercase genre_l1, with optional genre_l2 overrides
-          // [min, max] RPV in Robux
-          const RPV_BY_GENRE = {
-            shooter:    { default: [3.5, 7.0] },
-            action: {
-              default:       [4.5, 8.5],
-              battlegrounds: [4.0, 8.5],
-              'open world':  [5.0, 9.0],
-              'battle royale': [4.0, 8.5],
-            },
-            rpg: {
-              default:  [5.0, 9.0],
-              action:   [6.0, 12.0],
-              survival: [4.0, 7.5],
-            },
-            simulation: {
-              default: [2.5, 5.0],
-              tycoon:  [1.5, 2.5],
-              idle:    [3.5, 7.5],
-              pet:     [3.5, 7.5],
-            },
-            roleplay: {
-              default:    [1.5, 3.5],
-              social:     [0.5, 1.5],
-              specialized:[2.5, 5.0],
-              life:       [0.5, 2.0],
-            },
-            strategy:   { default: [3.0, 7.5] },
-            horror:     { default: [2.0, 4.5] },
-            survival:   { default: [1.5, 3.5] },
-            obby:       { default: [0.1, 0.5] },
-            platformer: { default: [0.1, 0.5] },
-            // fallback
-            _unknown:   { default: [2.0, 5.0] },
-          };
-
-          function getRpvRange(genre_l1, genre_l2) {
-            const g1 = (genre_l1 || '').toLowerCase();
-            const g2 = (genre_l2 || '').toLowerCase();
-
-            const genreEntry = RPV_BY_GENRE[g1] ?? RPV_BY_GENRE._unknown;
-
-            // check if any genre_l2 keyword matches a subgenre key
-            const subKey = Object.keys(genreEntry).find(k => k !== 'default' && g2.includes(k));
-
-            return subKey ? genreEntry[subKey] : genreEntry.default;
-          }
-
-          // helpers
-          const gmFetch = url => new Promise((resolve, reject) =>
-            GM_xmlhttpRequest({
-              method: 'GET', url,
-              onload: r => resolve(r.responseText),
-              onerror: err => reject(err),
-            })
-          );
-
-          function upsertStat(labelText, valueText) {
-            const container = document.querySelector('ul.game-stat-container');
-            if (!container) return;
-            let el = [...container.querySelectorAll('.game-stat')]
-              .find(li => li.querySelector('.text-label')?.textContent === labelText);
-            if (el) { el.querySelector('.text-lead').textContent = valueText; return; }
-            const li = document.createElement('li');
-            li.className = 'game-stat';
-            li.innerHTML = `
-              <p class="text-label text-overflow font-caption-header">${labelText}</p>
-              <p class="text-lead font-caption-body">${valueText}</p>
-            `;
-            container.appendChild(li);
-          }
-
-          // money compactereretrter
-          function fmtUSD(n) {
-            if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
-            if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
-            if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
-            return '$' + Math.round(n);
-          }
-
-          const wait = ms => new Promise(res => setTimeout(res, ms));
-
-          // get game data
-          const placeId = getCurrentGameId();
-          const universeId = await getUniverseIdFromPlaceId(placeId);
-          ConsoleLogEnabled('[bettergamestats] universeId:', universeId);
-
-          let visits = 0, genre_l1 = '', genre_l2 = '';
-          try {
-            const res  = await gmFetch(`https://games.roblox.com/v1/games?universeIds=${universeId}`);
-            const data = JSON.parse(res);
-            const game = data.data?.[0];
-            if (!game) return;
-
-            visits   = game.visits ?? 0;
-            genre_l1 = game.genre_l1 ?? '';
-            genre_l2 = game.genre_l2 ?? '';
-
-            ConsoleLogEnabled('[bettergamestats] visits:', visits);
-            ConsoleLogEnabled('[bettergamestats] genre_l1:', genre_l1, '| genre_l2:', genre_l2);
-          } catch (e) {
-            ConsoleLogEnabled('[bettergamestats] failed to fetch game info:', e);
-            return;
-          }
-
-          if (visits <= 0) return;
-
-          // get dev products
-          await wait(100);
-          let hasDevProducts = false;
-          try {
-            const dpRes  = await gmFetch(`https://apis.roblox.com/developer-products/v2/universes/${universeId}/developerproducts?limit=500`);
-            const dpData = JSON.parse(dpRes);
-            hasDevProducts = (dpData.developerProducts || []).some(p => p.PriceInRobux > 0);
-            ConsoleLogEnabled('[bettergamestats] hasDevProducts:', hasDevProducts);
-          } catch (e) {
-            ConsoleLogEnabled('[bettergamestats] failed to fetch dev products:', e);
-          }
-
-          // get gamepasses
-          await wait(100);
-          let hasGamePasses = false;
-          try {
-            const gpRes  = await gmFetch(`https://apis.roblox.com/game-passes/v1/universes/${universeId}/game-passes?passView=full`);
-            const gpData = JSON.parse(gpRes);
-            hasGamePasses = (gpData.gamePasses || []).some(p => p.price > 0);
-            ConsoleLogEnabled('[bettergamestats] hasGamePasses:', hasGamePasses);
-          } catch (e) {
-            ConsoleLogEnabled('[bettergamestats] failed to fetch game passes:', e);
-          }
-
-          const noMonetization = !hasDevProducts && !hasGamePasses;
-          ConsoleLogEnabled('[bettergamestats] noMonetization (0.1x):', noMonetization);
-
-          // revenue range
-          const [rpvMin, rpvMax] = getRpvRange(genre_l1, genre_l2);
-          const calc = rpv => visits * rpv * 0.70 * 0.0038;
-
-          // ouitler multipler
-          // top games attract more robux montezization really good
-          let outlierMultiplier;
-          if      (visits >= 100_000_000_000) outlierMultiplier = 3.8;
-          else if (visits >=  50_000_000_000) outlierMultiplier = 3.3;
-          else if (visits >=  20_000_000_000) outlierMultiplier = 3.0;
-          else if (visits >=  10_000_000_000) outlierMultiplier = 2.3;
-          else if (visits >=   5_000_000_000) outlierMultiplier = 1.5;
-          else if (visits >=   1_000_000_000) outlierMultiplier = 1.2;
-          else                                outlierMultiplier = 1.0;
-
-          ConsoleLogEnabled('[bettergamestats] outlierMultiplier:', outlierMultiplier);
-
-          const monetizationMultiplier = noMonetization ? 0.1 : 1;
-          const combined = monetizationMultiplier * outlierMultiplier;
-          const revenueMin = Math.round(calc(rpvMin) * combined);
-          const revenueMax = Math.round(calc(rpvMax) * combined);
-
-          ConsoleLogEnabled('[bettergamestats] RPV range:', rpvMin, '–', rpvMax);
-          ConsoleLogEnabled('[bettergamestats] Est. Revenue range:', revenueMin, '–', revenueMax);
-
-          upsertStat('Est. Revenue', `${fmtUSD(revenueMin)} – ${fmtUSD(revenueMax)}`);
-        }
-        /*******************************************************
-        name of function: cleanupPrivateServerCards
-        Description:
-        compacts private servers so they don't take up so much space
-        *******************************************************/
-        function cleanupPrivateServerCards() {
-          if (localStorage.ROLOCATE_betterprivateservers !== "true") return;
-          if (cleanupPrivateServerCards._initialized) return;
-          cleanupPrivateServerCards._initialized = true;
-
-          let isRunning = false, searchBar = null, currentSearchQuery = '';
-
-          const getSettings = () => ({
-            compactPrivateServers: true,
-            onlyYourPrivateServers: false,
-            privateServerSearch: false,
-            ...JSON.parse(localStorage.getItem('ROLOCATE_editprivateserversettings') || '{}')
-          });
-
-          const applySearchFilter = (query) => {
-            currentSearchQuery = query;
-            document.querySelectorAll('.card-item-private-server').forEach(card => {
-              const parentLi = card.closest('li');
-              const serverName = card.querySelector('.section-header .font-bold')?.textContent.toLowerCase() || '';
-              const ownerName = card.querySelector('.rbx-private-owner .text-name')?.textContent.toLowerCase() || '';
-              const show = !query || serverName.includes(query) || ownerName.includes(query);
-              (parentLi || card).style.display = show ? '' : 'none';
-            });
-            updateFilterBadge();
-          };
-
-          const updateFilterBadge = () => {
-            const container = document.getElementById('rolocate-ps-search-container');
-            if (!container) return;
-            let badge = document.getElementById('rolocate-ps-filter-badge');
-            if (currentSearchQuery) {
-              if (!badge) {
-                badge = document.createElement('div');
-                badge.id = 'rolocate-ps-filter-badge';
-                badge.style.cssText = `display:inline-flex;align-items:center;gap:6px;padding:8px 12px;background:rgba(77,133,238,.15);border:1px solid rgba(77,133,238,.3);border-radius:8px;color:#4d85ee;font-size:13px;font-weight:600;margin-left:8px`;
-                const text = document.createElement('span');
-                text.id = 'rolocate-ps-filter-text';
-                const closeBtn = document.createElement('span');
-                closeBtn.textContent = '×';
-                closeBtn.style.cssText = `cursor:pointer;font-size:18px;font-weight:700;line-height:1;opacity:.7;transition:opacity .2s`;
-                closeBtn.onmouseenter = () => closeBtn.style.opacity = '1';
-                closeBtn.onmouseleave = () => closeBtn.style.opacity = '0.7';
-                closeBtn.onclick = () => { currentSearchQuery = ''; applySearchFilter(''); };
-                badge.appendChild(text);
-                badge.appendChild(closeBtn);
-                container.appendChild(badge);
-              }
-              document.getElementById('rolocate-ps-filter-text').textContent = `Filter: "${currentSearchQuery}"`;
-            } else {
-              badge?.remove();
-            }
-          };
-
-          const createSearchButton = () => {
-            if (searchBar) return searchBar;
-            const container = document.createElement('div');
-            container.id = 'rolocate-ps-search-container';
-            container.style.cssText = `display:inline-flex;align-items:center;margin-bottom:15px;margin-left:9px`;
-            const button = document.createElement('button');
-            button.id = 'rolocate-ps-search-button';
-            button.innerHTML = '🔍 Search Private Servers';
-            button.className = 'btn-secondary-md';
-            button.style.cssText = `padding:10px 18px;background:transparent;border:1px solid rgba(150,150,150,.3);border-radius:8px;color:#a0a8b8;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:6px`;
-            button.onmouseenter = () => { button.style.background='rgba(77,133,238,.15)'; button.style.borderColor='rgba(77,133,238,.3)'; button.style.color='#4d85ee'; };
-            button.onmouseleave = () => { button.style.background='transparent'; button.style.borderColor='rgba(150,150,150,.3)'; button.style.color='#a0a8b8'; };
-            button.onclick = () => showSearchPopup();
-            container.appendChild(button);
-            searchBar = container;
-            return container;
-          };
-
-          // keep clicking "Load More" until it disappears, then run callback
-          const loadAllServers = (onDone) => {
-            const clickNext = () => {
-              const loadMoreBtn = document.querySelector('.rbx-private-running-games-footer .rbx-running-games-load-more');
-              if (!loadMoreBtn) { onDone(); return; }
-              loadMoreBtn.click();
-              setTimeout(clickNext, 600); // 600 ms delay
-            };
-            clickNext();
-          };
-
-          // the show popup function
-          const showSearchPopup = () => {
-            const overlay = document.createElement('div');
-            overlay.className = 'search-popup-overlay';
-            const box = document.createElement('div');
-            box.className = 'search-popup-content';
-
-            const title = document.createElement('h3');
-            title.textContent = 'Search Private Servers';
-            title.style.cssText = `margin:0 0 20px 0;color:#e8ecf3;font-size:20px;font-weight:700;text-align:center`;
-
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.placeholder = 'Search by server name or owner...';
-            input.id = 'rolocate-ps-search-input-popup';
-            input.value = currentSearchQuery;
-            input.style.cssText = `width:100%;padding:14px 16px;background:rgba(28,31,37,.6);border:1px solid rgba(77,133,238,.3);border-radius:8px;color:#e8ecf3;font-size:15px;font-weight:600;outline:none;transition:border-color .2s;box-sizing:border-box`;
-            input.onfocus = () => input.style.borderColor = 'rgba(77,133,238,.6)';
-            input.onblur  = () => input.style.borderColor = 'rgba(77,133,238,.3)';
-            input.oninput = (e) => { currentSearchQuery = e.target.value.toLowerCase().trim(); };
-
-            const close = document.createElement('button');
-            close.className = 'search-popup-close btn-secondary-md';
-            close.textContent = 'Close';
-
-            const closeOverlay = () => {
-              // load all servers then filter when user closes
-              if (currentSearchQuery) {
-                close.textContent = 'Finding Server...';
-                close.disabled = true;
-                input.disabled = true;
-                loadAllServers(() => {
-                  applySearchFilter(currentSearchQuery);
-                  overlay.classList.add('fade-out');
-                  overlay.addEventListener('animationend', () => overlay.remove(), { once: true });
-                });
-              } else {
-                applySearchFilter('');
-                overlay.classList.add('fade-out');
-                overlay.addEventListener('animationend', () => overlay.remove(), { once: true });
-              }
-            };
-
-            close.onclick = closeOverlay;
-            overlay.onclick = e => e.target === overlay && closeOverlay();
-            box.addEventListener('click', e => e.stopPropagation());
-
-            box.appendChild(title);
-            box.appendChild(input);
-            box.appendChild(close);
-            overlay.appendChild(box);
-            document.body.appendChild(overlay);
-            setTimeout(() => input.focus(), 100);
-          };
-
-          // search abr
-          const insertSearchBar = () => {
-            const settings = getSettings();
-            if (!settings.privateServerSearch) {
-              document.getElementById('rolocate-ps-search-container')?.remove();
-              searchBar = null;
-              return;
-            }
-            const serverList = document.querySelector('#rbx-private-running-games');
-            if (!serverList || document.getElementById('rolocate-ps-search-container')) return;
-            const container = createSearchButton();
-            serverList.insertBefore(container, serverList.firstChild);
-            updateFilterBadge();
-          };
-
-          const showPlayersPopup = (thumbs) => {
-            const overlay = document.createElement('div');
-            overlay.className = 'players-popup-overlay';
-            const box = document.createElement('div');
-            box.className = 'players-popup-content';
-            box.innerHTML = '<h3 style="font-size:1.4em">Players in Server</h3>';
-
-            if (thumbs?.querySelector('img')) {
-              Object.assign(thumbs.style, { display:'flex', justifyContent:'center', flexWrap:'wrap' });
-              thumbs.querySelectorAll('a').forEach(l => { l.target='_blank'; l.rel='noopener noreferrer'; });
-              thumbs.addEventListener('click', e => e.stopPropagation());
-              box.appendChild(thumbs);
-            } else {
-              const noP = document.createElement('p');
-              noP.innerHTML = '<b style="font-size:1.2em">No players currently in this server.</b><br><span style="color:gray;font-size:1.0em">RoLocate: To disable: Settings -> Appearance -> Better Private Servers.</span>';
-              box.appendChild(noP);
-            }
-
-            const close = document.createElement('button');
-            close.className = 'players-popup-close btn-secondary-md';
-            close.textContent = 'Close';
-            const closeOverlay = () => { overlay.classList.add('fade-out'); overlay.addEventListener('animationend', () => overlay.remove(), { once: true }); };
-            close.onclick = closeOverlay;
-            overlay.onclick = e => e.target === overlay && closeOverlay();
-            box.addEventListener('click', e => e.stopPropagation());
-            box.appendChild(close);
-            overlay.appendChild(box);
-            document.body.appendChild(overlay);
-          };
-
-          const performCleanup = () => {
-            if (isRunning) return;
-            isRunning = true;
-
-            const settings = getSettings();
-            const currentUserId = getCurrentUserId();
-            insertSearchBar();
-
-            document.querySelectorAll('.card-item-private-server').forEach(card => {
-              const parentLi = card.closest('li');
-
-              if (settings.onlyYourPrivateServers) {
-                const href = card.querySelector('.rbx-private-owner a[href*="/users/"]')?.getAttribute('href');
-                const match = href?.match(/\/users\/(\d+)\//);
-                if (match && match[1] !== currentUserId.toString()) {
-                  (parentLi || card).style.display = 'none';
-                  return;
-                }
-              } else if (!currentSearchQuery) {
-                (parentLi || card).style.display = '';
-              }
-
-              if (settings.compactPrivateServers) {
-                const thumbs = card.querySelector('.player-thumbnails-container');
-                if (thumbs) thumbs.remove();
-                card.querySelector('.rbx-private-game-server-details')?.classList.remove('game-server-details', 'border-right');
-                const joinBtn = card.querySelector('.rbx-private-game-server-join');
-                if (joinBtn && !card.querySelector('.rolocate-view-players-btn')) {
-                  const btn = document.createElement('button');
-                  btn.textContent = 'View Players';
-                  btn.className = 'btn-full-width btn-control-xs rolocate-view-players-btn btn-secondary-md btn-min-width';
-                  btn.style.marginTop = '6px';
-                  joinBtn.after(btn);
-                  btn.addEventListener('click', () => showPlayersPopup(thumbs?.cloneNode(true)));
-                }
-              }
-            });
-
-            if (currentSearchQuery) applySearchFilter(currentSearchQuery);
-
-            if (settings.compactPrivateServers)
-              document.querySelectorAll('.rbx-private-game-server-item').forEach(i => i.classList.remove('rbx-private-game-server-item'));
-
-            if (!document.getElementById('private-server-cleanup-styles')) {
-              const s = document.createElement('style');
-              s.id = 'private-server-cleanup-styles';
-              s.textContent = `
-                .card-item-private-server{display:inline-block;width:auto;max-width:250px;min-width:200px}
-                #rbx-private-game-server-item-container li{display:inline-block;width:auto!important;float:none}
-                .rbx-private-game-server-item-container{display:flex;flex-wrap:wrap;gap:10px}
-                .players-popup-overlay,.search-popup-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:9999;animation:fadeIn .2s ease-out;opacity:1}
-                .players-popup-content{background:rgba(20,22,26,.95);color:#e8ecf3;border-radius:12px;padding:20px;max-width:400px;width:90%;box-shadow:0 10px 25px rgba(0,0,0,.3);border:1px solid rgba(77,133,238,.2);text-align:center;transform:scale(.95);animation:popIn .2s ease-out forwards}
-                .players-popup-content h3{margin-top:0;color:#e8ecf3;font-size:16px;font-weight:600;margin-bottom:16px}
-                .players-popup-content p{color:#a0a8b8;font-size:13px;line-height:1.5;margin-bottom:24px}
-                .players-popup-content .player-thumbnails-container{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:10px}
-                .players-popup-close{margin-top:15px;padding:8px 20px;cursor:pointer;background:rgba(28,31,37,.6);color:#e8ecf3;border:1px solid rgba(255,255,255,.12);border-radius:6px;font-size:13px;font-weight:500;transition:.2s}
-                .search-popup-content{background:rgba(20,22,26,.95);color:#e8ecf3;border-radius:12px;padding:30px;max-width:400px;width:20%;box-shadow:0 10px 25px rgba(0,0,0,.3);border:1px solid rgba(77,133,238,.2);transform:scale(.95);animation:popIn .2s ease-out forwards}
-                .search-popup-close{margin-top:20px;width:100%;padding:10px 20px;cursor:pointer;background:rgba(28,31,37,.6);color:#e8ecf3;border:1px solid rgba(255,255,255,.12);border-radius:8px;font-size:14px;font-weight:600;transition:.2s}
-                .search-popup-close:hover{background:rgba(28,31,37,.8);border-color:rgba(255,255,255,.2)}
-                @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-                @keyframes popIn{to{transform:scale(1)}}
-                @keyframes fadeOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.95)}}
-                .fade-out{animation:fadeOut .2s ease-out forwards}
-              `;
-              document.head.appendChild(s);
-            }
-
-            isRunning = false;
-          };
-
-          const observer = new MutationObserver(() => {
-            observer.disconnect();
-            performCleanup();
-            observer.observe(document.body, { childList: true, subtree: true });
-          });
-
-          performCleanup();
-          observer.observe(document.body, { childList: true, subtree: true });
         }
 
         /*******************************************************
@@ -15920,7 +15694,6 @@ li a.about-link:hover::after {
             filter button, server hop button, recent servers, disables
             trailer autoplay, and adds monitor server button if settings are true
             *******************************************************/
-            let bettergamesstats_action_enabled = false;
             let trailerDisableInitialized = false; // for the dumb trailer thing
             const observer = new MutationObserver((mutations, obs) => {
                 const serverListOptions = document.querySelector('.server-list-options');
@@ -15990,21 +15763,10 @@ li a.about-link:hover::after {
                     HandleRecentServers();
                 }
 
-                // new condition to trigger recent server logic
-                if (localStorage.getItem("ROLOCATE_bettergamestats") === "true" && !bettergamesstats_action_enabled) {
-                    bettergamestats_action();
-                    bettergamesstats_action_enabled = true;
-                }
-
                 // new condition to trigger disable trailer logic
                 if (localStorage.getItem("ROLOCATE_disabletrailer") === "true" && !trailerDisableInitialized) {
                     disableVideoAutoplay();
                     trailerDisableInitialized = true;
-                }
-
-                // new condition to trigger compact private server logic
-                if (localStorage.getItem("ROLOCATE_betterprivateservers") === "true" && !document.querySelector('.rolocate-view-players-btn')) {
-                    cleanupPrivateServerCards();
                 }
 
                 if (playButton && !document.querySelector('.rolocate-serverhop-custom-play-button') && localStorage.getItem("ROLOCATE_toggleserverhopbutton") === "true") {
@@ -16110,9 +15872,9 @@ li a.about-link:hover::after {
                     });
                 }
 
-                // for the like join confimatrion
-                if (playButton && localStorage.getItem("ROLOCATE_joinconfirmation") === "true") {
-                  monitorPlayButton();
+                // for the like join confimatrion and Smartjoin popup
+                if (playButton && (localStorage.getItem("ROLOCATE_joinconfirmation") === "true" || localStorage.getItem("ROLOCATE_smartjoinpopup") === "true")) {
+                    monitorPlayButton();
                 }
 
                 const filterEnabled = localStorage.getItem("ROLOCATE_togglefilterserversbutton") === "true";
@@ -16349,7 +16111,7 @@ li a.about-link:hover::after {
             // check if the max player count has already been determined
             if (!player_count_tab.maxPlayers) {
                 // try to find the element containing the player count information
-                const playerCountElement = document.querySelector('.text-info.rbx-game-status.rbx-game-server-status.text-overflow');
+                const playerCountElement = document.querySelector('.rbx-game-status.text-overflow');
                 if (playerCountElement) {
                     const playerCountText = playerCountElement.textContent.trim();
                     const match = playerCountText.match(/(\d+) of (\d+) people max/);
@@ -19665,7 +19427,6 @@ select:hover, select:focus {
         /*******************************************************
         name of function: getUserLocation
         description: gets the user's location
-        @param {boolean} [quickJoin=false] – when true, operates in lightweight "quick join" mode
         *******************************************************/
         function getUserLocation(quickJoin = false) {
             return new Promise((resolve, reject) => {
@@ -19757,9 +19518,6 @@ select:hover, select:focus {
         /*******************************************************
         name of function: resolveSuccess
         description: tells the user that location was detected
-        @param {GeolocationPosition} position – browser geolocation position
-        @param {Function} resolve – promise resolver
-        @param {boolean} [quickJoin=false] – when true, skips UI-disabling side‑effects
         *******************************************************/
         function resolveSuccess(position, resolve, quickJoin = false) {
             notifications("We successfully detected your location.", "success", "🌎", "2000");
@@ -19775,8 +19533,6 @@ select:hover, select:focus {
                 accuracy: position.coords.accuracy
             });
         }
-
-
 
         /*********************************************************************************************************************************************************************************************************************************************
                                                                  Functions for the 7th button.
