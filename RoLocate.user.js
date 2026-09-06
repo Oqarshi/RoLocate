@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RoLocate
 // @namespace    https://oqarshi.github.io/
-// @version      47.0
+// @version      47.1
 // @description  Adds filter options to roblox server page. Alternative to paid extensions like RoPro, RoGold®, RoQol, and RoKit.
 // @author       Oqarshi
 // @match        https://www.roblox.com/*
@@ -14,8 +14,8 @@
 // @grant        GM_setValue
 // @grant        GM_deleteValue
 // @require      https://update.greasyfork.org/scripts/535590/1882014/Rolocate%20Base64%20Image%20Library%2020.js
-// @require      https://update.greasyfork.org/scripts/547134/1886819/Rolocate%20Server%20Region%20Data%20%28Data%20Saving%29.js
-// @require      https://update.greasyfork.org/scripts/540553/1648593/Rolocate%20Flag%20Base64%20Data.js
+// @require      https://update.greasyfork.org/scripts/547134/1915649/Rolocate%20Server%20Region%20Data%20%28Data%20Saving%29.js
+// @require      https://update.greasyfork.org/scripts/540553/1916149/Rolocate%20Flag%20Base64%20Data.js
 // @require      https://update.greasyfork.org/scripts/544437/1642116/Rolocate%20Restore%20Classic%20Terms%20All%20Languages.js
 // @connect      thumbnails.roblox.com
 // @connect      games.roblox.com
@@ -43,10 +43,8 @@
  *   * Use and modify this script for personal, non-commercial use only.
  *
  * You MAY NOT:
- *   * Redistribute or reupload this script (original or modified)
  *   * Publish it on any website (GreasyFork, GitHub, UserScripts.org, etc.)
  *   * Include it in commercial, monetized, or donation-based tools
- *   * Remove or alter this license or attribution
  *
  * Attribution to the original author (Oqarshi) must always be preserved.
  * Violations may result in takedown notices under DMCA or applicable law.
@@ -56,10 +54,10 @@
  *   https://update.greasyfork.org/scripts/535590/1882014/Rolocate%20Base64%20Image%20Library%2020.js
  *
  * * Server Regions Data:
- *   https://update.greasyfork.org/scripts/547134/1886819/Rolocate%20Server%20Region%20Data%20%28Data%20Saving%29.js
+ *   https://update.greasyfork.org/scripts/547134/1915649/Rolocate%20Server%20Region%20Data%20%28Data%20Saving%29.js
  *
  * * Flag Icons (Base64):
- *   https://update.greasyfork.org/scripts/540553/1648593/Rolocate%20Flag%20Base64%20Data.js
+ *   https://update.greasyfork.org/scripts/540553/1916149/Rolocate%20Flag%20Base64%20Data.js
  *
  * * Classic Terms Replacements:
  *   https://update.greasyfork.org/scripts/544437/1642116/Rolocate%20Restore%20Classic%20Terms%20All%20Languages.js
@@ -870,21 +868,9 @@
         localStorage.removeItem('ROLOCATE_compactprivateservers');
         localStorage.removeItem('ROLOCATE_mutualfriends');
 
-        const VERSION = "V47.0", PREV_VERSION = "V46.9";
+        const VERSION = "V47.1", PREV_VERSION = "V47.0";
         const changelog = {
-            searchhistory: ["🔎","Search History","Smart Search now saves your search history.","New"],
-            detailedpreview: ["👤","Detailed Preview","Hover over users and groups to view extra information. Off by default.","New"],
-            smallerrobloxsidebar: ["⚙️","Smaller Roblox Sidebar","Brings back the original Roblox sidebar size. Off by default.","New"],
-            serverregions: ["🌎","Server Regions","Added more datacenters for improved region detection.","Updated"],
-            recentservers: ["🖥️","Recent Servers","Now shows server uptime and only displays 5 servers by default. Expand to see more.","Updated"],
-            adblocker: ["🚫","Ad Blocker","Now blocks all Roblox Plus advertisements. On by Default.","Updated"],
-            joinpopup: ["🚀","Join Experience","Join Confirmation and Smart Join Popup have been improved.","Updated"],
-            quicklaunch: ["⚡","Quick Launch Games","Smoother animations and faster drag-to-reorder.","Updated"],
-            settingsmenu: ["🛠️","Settings","Revamped settings menu with smoother animations.","Updated"],
-            logo: ["🎨","RoLocate Logo","Now uses SVG for a sharper image.","Updated"],
-            oldgreeting: ["👋","Show Old Greeting","Now displays user status and game join status.","Updated"],
-            bugfixes: ["🐛","Bug Fixes","Various bug fixes and performance improvements. Full changelog: https://oqarshi.github.io/Invite/rolocate/changelog/","Fixed"],
-            removedfeatures: ["🗑️","Removed Features","Removed Better Private Servers and Estimated Revenue.","Removed"]
+            serverregions: ["🌎","Server Regions","Added more datacenters for improved region detection, Better Connection V2, and Compare Server Ping in settings.","Updated"]
         };
 
         const cur = localStorage.getItem('version') || "V0.0";
@@ -1211,14 +1197,15 @@
         betterfriends: true, restoreclassicterms: true,
         custombackgrounds: false, btrobloxfix: false, mobilemode: false,
         joinconfirmation: true, forcedarkmode: false, responsivegamecards: true,
-        bettergamestats: false, smallerrobloxsidebar: false, detailedpreview: false
+        bettergamestats: false, smallerrobloxsidebar: false, detailedpreview: false,
+        EXPERIMENTALPINGRELATE: false
     };
 
     // presets in settings
     const presetConfigurations = {
       default: { name: "Default", settings: {} },
       mobilesettings: { name: "Mobile Settings", settings: {"loadbetterprofileinfo": false, "disablechat": true, "smartjoinpopup": false, "mobilemode": true, "responsivegamecards": false} },
-      developerpref: { name: "Dev Settings", settings: {"enableLogs": true, "disablechat": true, "bettergamestats": true, "smallerrobloxsidebar": true, "detailedpreview": true} },
+      optimalsettings: { name: "Dev Settings", settings: {"enableLogs": true, "disablechat": true, "bettergamestats": true, "smallerrobloxsidebar": true, "detailedpreview": true, "EXPERIMENTALPINGRELATE": true} },
       serverfiltersonly: { name: "Server Filters Only", settings: {"removeads": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "disabletrailer": false, "loadbetterprofileinfo": false, "smartsearch": false, "quicklaunchgames": false, "betterfriends": false, "restoreclassicterms": false, "responsivegamecards": false} },
       smartsearchonly: { name: "Smart Search Only", settings: {"removeads": false, "togglefilterserversbutton": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "fastservers": false, "disabletrailer": false, "loadbetterprofileinfo": false, "quicklaunchgames": false, "smartjoinpopup": false, "betterfriends": false, "restoreclassicterms": false, "joinconfirmation": false, "responsivegamecards": false} },
       disablerolocate: { name: "Disable RoLocate", settings: {"removeads": false, "togglefilterserversbutton": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "fastservers": false, "disabletrailer": false, "loadbetterprofileinfo": false, "smartsearch": false, "quicklaunchgames": false, "smartjoinpopup": false, "betterfriends": false, "restoreclassicterms": false, "joinconfirmation": false, "responsivegamecards": false} },
@@ -1301,7 +1288,7 @@
             <div style="font-size: 26px; font-weight: 700; color: #f5f5f7; letter-spacing: -0.3px; line-height: 1.2; margin-top: 14px;">RoLocate</div>
 
             <div style="margin-top: 4px; margin-bottom: 24px; display: flex; flex-direction: column; align-items: center; gap: 4px;">
-                <span style="font-size: 16px; font-weight: 600; color: #d1d1d6; letter-spacing: 0.5px;">Version 47.0</span>
+                <span style="font-size: 16px; font-weight: 600; color: #d1d1d6; letter-spacing: 0.5px;">Version 47.1</span>
 
                 ${updateStatusHtml}
             </div>
@@ -1346,23 +1333,23 @@
                             <p>Default settings that RoLocate comes with.</p>
                         </div>
                         <div class="preset-card" data-preset="mobilesettings">
-                            <h4>📱 Mobile Settings</h4>
+                            <h4>📱Mobile Settings</h4>
                             <p>Optimized for Mobile Users.</p>
                         </div>
-                        <div class="preset-card" data-preset="developerpref">
-                            <h4>👑 Dev Settings</h4>
-                            <p>Settings used by the developer Oqarshi.</p>
+                        <div class="preset-card" data-preset="optimalsettings">
+                            <h4>👌Optimal Settings</h4>
+                            <p>Settings that I recommend! (Experimental)</p>
                         </div>
                         <div class="preset-card" data-preset="serverfiltersonly">
-                            <h4>🌍 Server Filters</h4>
+                            <h4>🌍Server Filters</h4>
                             <p>Only Enables Server Filters.</p>
                         </div>
                         <div class="preset-card" data-preset="smartsearchonly">
-                            <h4>🧠 Smart Search</h4>
+                            <h4>🧠Smart Search</h4>
                             <p>Only Enables Smart Seach.</p>
                         </div>
                         <div class="preset-card" data-preset="disablerolocate">
-                            <h4>🚫 RoLocate Off </h4>
+                            <h4>🚫RoLocate Off </h4>
                             <p>Turns off all settings.</p>
                         </div>
                     </div>
@@ -1485,7 +1472,7 @@
             <label class="toggle-slider">
                 <input type="checkbox" id="btrobloxfix">
                 <span class="slider"></span>
-                Fix BTRoblox Compatability
+                Fix BTRoblox Compatibility
                 <span class="help-icon" data-help="Fix BTRoblox">?</span>
             </label>
 
@@ -1498,6 +1485,19 @@
                     <span class="tooltip">Just Released/Updated</span>
                 </span>
                 <a class="help-icon" data-help="Mobile Mode">?</a>
+            </label>
+
+            <label class="toggle-slider new_label experiment_label">
+                <input type="checkbox" id="EXPERIMENTALPINGRELATE">
+                <span class="slider"></span>
+                Compare Server Ping
+                <span class="new">New
+                    <span class="tooltip">Just Released/Updated</span>
+                </span>
+            <span class="experimental">EXP
+                <span class="tooltip">Experimental: Still being tested</span>
+            </span>
+                <a class="help-icon" data-help="Experimental Ping Relate">?</a>
             </label>
 
             <label class="toggle-slider new_label">
@@ -1910,6 +1910,7 @@
                 <li id="help-Enable Notifications"><strong>Enable Notifications:</strong> <span>Enables helpful notifications from the script.</span></li>
                 <li id="help-Fix BTRoblox"><strong>Fix Btroblox Compatability:</strong> <span>Uses alternative methods to make the script compatible with BTRoblox.</span></li>
                 <li id="help-Mobile Mode"><strong>Mobile Mode:</strong> <span>Allows you to join server regions on mobile devices. May work on other devices that prevent direct joining servers like chromebooks.</span></li>
+                <li id="help-Experimental Ping Relate"><strong>Compare Server Ping:</strong> <span>Compares the server ping based on Roblox's V2 region api. If the ping is the same, it assumes all locations with same ping are the same. Thus, saving api requests. May not be accurate tho.</span></li>
                 <li id="help-Force Dark Mode Styles"><strong>Force Dark Mode Styles:</strong> <span>When enabled, dark mode styles will be used regardless of whether Roblox is in Light or Dark Mode.</span></li>
                 <li id="help-Set Default Location Mode"><strong>Set Default Location Mode:</strong> <span>Enables the user to set a default location for Roblox server regions. Turn this on if the script cannot automatically detect your location.</span></li>
             </ul>
@@ -14974,54 +14975,54 @@ function editremoveads () {
             // stuff for unique names, tooltips, experimental status, and explanations for each button
             const buttonData = [{
                     name: "Smallest Servers",
-                    tooltip: "**Reverses the order of the server list.** The emptiest servers will be displayed first.",
+                    tooltip: "**Sorts by lowest player count.** Shows the emptiest servers.",
                     experimental: false,
                     disabled: false,
                 },
                 {
                     name: "Available Space",
-                    tooltip: "**Filters out servers which are full.** Servers with space will only be shown.",
+                    tooltip: "**Hides full servers.** Only shows servers that have space to join.",
                     experimental: false,
                     disabled: false,
                 },
                 {
                     name: "Player Count",
-                    tooltip: "**Rolocate will find servers with your specified player count or fewer.** Searching for up to 3 minutes. If no exact match is found, it shows servers closest to the target.",
+                    tooltip: "**Finds servers with a specific player count.** Searches for up to 3 minutes and returns the closest match.",
                     experimental: false,
                     disabled: false,
                 },
                 {
                     name: "Random Shuffle",
-                    tooltip: "**Display servers in a completely random order.** Shows servers with space and servers with low player counts in a randomized order.",
+                    tooltip: "**Randomizes the server list.** Shuffles low player servers with high player servers randomly.",
                     experimental: false,
                     disabled: false,
                 },
                 {
                     name: "Server Region",
-                    tooltip: "**Filters servers by region.** Offering more accuracy than 'Best Connection' in areas with fewer Roblox servers, like India, or in games with high player counts.",
+                    tooltip: "**Filters servers by region.** Useful for joining servers in a specific region, e.g. India while in the USA.",
                     experimental: true,
-                    experimentalExplanation: "**Experimental**: Still in development and testing. Sometimes user location cannot be detected.",
+                    experimentalExplanation: "**Experimental:** User location detection may occasionally fail.",
                     disabled: false,
                 },
                 {
-                    name: "Best Connection",
-                    tooltip: "**Automatically joins the fastest servers for you.** However, it may be less accurate in regions with fewer Roblox servers, like India, or in games with large player counts.",
+                    name: "Best Connect V1",
+                    tooltip: "**Joins the server that is closest to you.** Is slower than V2 however, it follow the custom location you set at settings.",
                     experimental: true,
-                    experimentalExplanation: "**Experimental**: Still in development and testing.  it may be less accurate in regions with fewer Roblox servers",
+                    experimentalExplanation: "**Experimental:** Might not be accurate sometimes",
+                    disabled: false,
+                },
+                {
+                    name: "Best Connect V2",
+                    tooltip: "**Joins the server that is closest to you using Roblox's offical api.** Is faster than Best Connection V1. Does not follow the custom location you set at settings.",
+                    experimental: true,
+                    experimentalExplanation: "**Experimental:** This feature relies on Roblox's API being accurate. Sometimes the api is not accurate.",
                     disabled: false,
                 },
                 {
                     name: "Join Small Server",
-                    tooltip: "**Automatically tries to join a server with a very low population.** On popular games servers may fill up very fast so you might not always get in alone.",
+                    tooltip: "**Instantly joins a near-empty server.** Note: In highly popular games, these servers may fill up quickly as you join.",
                     experimental: false,
                     disabled: false,
-                },
-                {
-                    name: "Newest server",
-                    tooltip: "**Tries to find Roblox servers that are less than 5 minute old.** This may take longer for very popular games or games with few players.",
-                    disabledExplanation: "Does not work anymore.",
-                    experimental: false,
-                    disabled: true,
                 },
             ];
 
@@ -15253,19 +15254,19 @@ function editremoveads () {
                             random_servers();
                             break;
                         case 4:
-                            createServerCountPopup((totalLimit) => {
-                                rebuildServerList(gameId, totalLimit);
+                            createServerCountPopup((totalLimit, latencyEnabledOfficialAPIForRebuildServerList) => {
+                                rebuildServerList(gameId, totalLimit, false, false, latencyEnabledOfficialAPIForRebuildServerList);
                             });
                             break;
                         case 5:
-                            rebuildServerList(gameId, 50, true); // finds 50 servers
+                            rebuildServerList(gameId, 3, true); // finds 50 servers
                             notifications("Please Wait 5-7 seconds...", "info", "", "8000");
                             break;
                         case 6:
-                            auto_join_small_server();
+                            nearest_server_official_api();
                             break;
                         case 7:
-                            auto_join_small_server(); // for now
+                            auto_join_small_server();
                             break;
                     }
                 });
@@ -17130,8 +17131,8 @@ select:hover, select:focus {
         }
 
         /*******************************************************
-         name of function: createServerCountPopup
-         description: Creates the first time popup and allows user to pick the amount of servers they want.
+         * name of function: createServerCountPopup
+         * description: Creates the first time popup and allows user to pick the amount of servers they want.
          *******************************************************/
         // WARNING: Do not republish this script. Licensed for personal use only.
         function createServerCountPopup(callback) {
@@ -17148,175 +17149,185 @@ select:hover, select:focus {
             // inject styles for dropdown icon and mobile responsiveness
             const style = document.createElement('style');
             style.textContent = `
-            .overlay {
-                z-index: 10000;
-            }
+                .overlay {
+                    z-index: 10000;
+                }
 
-            .filter-popup {
-                width: 90%;
-                max-width: 460px;
-                max-height: 90vh;
-                margin: 0 auto;
-                box-sizing: border-box;
-                overflow-y: auto;
-                z-index: 10001;
-            }
+                .filter-popup {
+                    width: 90%;
+                    max-width: 460px;
+                    max-height: 90vh;
+                    margin: 0 auto;
+                    box-sizing: border-box;
+                    overflow-y: auto;
+                    z-index: 10001;
+                }
 
-            .filter-grid {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 20px;
-                margin-bottom: 15px;
-            }
-
-            @media (max-width: 600px) {
                 .filter-grid {
-                    grid-template-columns: 1fr;
-                    gap: 15px;
+                    display: grid;
+                    grid-template-columns: repeat(3, 1fr);
+                    gap: 20px;
+                    margin-bottom: 15px;
                 }
 
-                .filter-popup {
-                    width: 95%;
-                    padding: 20px 15px;
+                @media (max-width: 600px) {
+                    .filter-grid {
+                        grid-template-columns: 1fr;
+                        gap: 15px;
+                    }
+
+                    .filter-popup {
+                        width: 95%;
+                        padding: 20px 15px;
+                    }
+
+                    .popup-header h3 {
+                        font-size: 18px;
+                    }
+
+                    .popup-header p {
+                        font-size: 13px;
+                    }
+
+                    .popup-footer p {
+                        font-size: 12px;
+                    }
                 }
 
-                .popup-header h3 {
-                    font-size: 18px;
+                @media (max-width: 400px) {
+                    .filter-popup {
+                        width: 98%;
+                        padding: 15px 10px;
+                    }
+
+                    .popup-header h3 {
+                        font-size: 16px;
+                    }
+
+                    .filter-section label {
+                        font-size: 13px;
+                    }
+
+                    select, input, button {
+                        font-size: 13px;
+                    }
                 }
 
-                .popup-header p {
-                    font-size: 13px;
+                .dropdown-wrapper {
+                    position: relative;
+                    display: inline-block;
+                    width: 100%;
                 }
 
-                .popup-footer p {
+                .dropdown-wrapper select {
+                    width: 100%;
+                    padding-right: 30px;
+                    appearance: none;
+                    -webkit-appearance: none;
+                    -moz-appearance: none;
+                    box-sizing: border-box;
+                }
+
+                .dropdown-wrapper .dropdown-icon {
+                    position: absolute;
+                    right: 10px;
+                    top: 40%;
+                    transform: translateY(-50%);
+                    pointer-events: none;
                     font-size: 12px;
-                }
-            }
-
-            /* Very small screens */
-            @media (max-width: 400px) {
-                .filter-popup {
-                    width: 98%;
-                    padding: 15px 10px;
-                }
-
-                .popup-header h3 {
-                    font-size: 16px;
+                    color: #fff;
                 }
 
                 .filter-section label {
-                    font-size: 13px;
+                    display: block;
+                    margin-bottom: 5px;
+                    font-weight: 600;
                 }
 
-                select, input, button {
-                    font-size: 13px;
+                #cancelServerCount {
+                    background-color: #2a1f1f;
+                    border: 1px solid #3d2626;
+                    border-radius: 6px;
+                    font-size: 14px;
+                    cursor: pointer;
+                    transition: background-color 0.3s ease, transform 0.2s ease;
                 }
-            }
 
-            .dropdown-wrapper {
-                position: relative;
-                display: inline-block;
-                width: 100%;
-            }
-
-            .dropdown-wrapper select {
-                width: 100%;
-                padding-right: 30px;
-                appearance: none;
-                -webkit-appearance: none;
-                -moz-appearance: none;
-                box-sizing: border-box;
-            }
-
-            .dropdown-wrapper .dropdown-icon {
-                position: absolute;
-                right: 10px;
-                top: 40%;
-                transform: translateY(-50%);
-                pointer-events: none;
-                font-size: 12px;
-                color: #fff;
-            }
-
-            .filter-section label {
-                display: block;
-                margin-bottom: 5px;
-                font-weight: 600;
-            }
-
-            #cancelServerCount {
-                background-color: #2a1f1f;
-                border: 1px solid #3d2626;
-                border-radius: 6px;
-                font-size: 14px;
-                cursor: pointer;
-                transition: background-color 0.3s ease, transform 0.2s ease;
-            }
-
-            #cancelServerCount:hover {
-                background-color: #332222;
-                transform: translateY(-1px);
-            }
-
-            #cancelServerCount:active {
-                transform: translateY(0);
-            }
-
-            /* Ensure buttons are touch-friendly on mobile */
-            @media (max-width: 600px) {
-                button {
-                    padding: 12px;
-                    min-height: 44px;
+                #cancelServerCount:hover {
+                    background-color: #332222;
+                    transform: translateY(-1px);
                 }
-            }
-        `;
+
+                #cancelServerCount:active {
+                    transform: translateY(0);
+                }
+
+                /* Ensure buttons are touch-friendly on mobile */
+                @media (max-width: 600px) {
+                    button {
+                        padding: 12px;
+                        min-height: 44px;
+                    }
+                }
+            `;
             document.head.appendChild(style);
 
             popup.innerHTML = `
-            <div class="popup-header">
-                <h3>Select Number of Servers</h3>
-                <p><strong>More servers = more variety, but longer search times.</strong></p>
-            </div>
-
-            <div class="filter-grid">
-                <div class="filter-section">
-                    <label for="serverCount">Number of Servers:</label>
-                    <div class="dropdown-wrapper">
-                        <select id="serverCount">
-                            <option value="10">10 Servers</option>
-                            <option value="25">50 Servers</option>
-                            <option value="100" selected>100 Servers</option>
-                            <option value="200">200 Servers</option>
-                            <option value="500">500 Servers</option>
-                            <option value="700">700 Servers</option>
-                            <option value="custom">Custom</option>
-                        </select>
-                        <span class="dropdown-icon">▼</span>
-                    </div>
-                    <input id="customServerCount" type="number" min="1" max="700" placeholder="Enter number (1–700)" style="display: none; margin-top: 5px; width: calc(100% - 10px); box-sizing: border-box;">
+                <div class="popup-header">
+                    <h3>Select Number of Servers</h3>
+                    <p><strong>More servers = more variety, but longer search times.</strong></p>
                 </div>
 
-                <div class="filter-section">
-                    <label for="playerCountFilter">Find Servers with:</label>
-                    <div class="dropdown-wrapper">
-                        <select id="playerCountFilter">
-                            <option value="high" ${!isLowPlayerCount ? 'selected' : ''}>High Player Counts</option>
-                            <option value="low" ${isLowPlayerCount ? 'selected' : ''}>Low Player Counts</option>
-                        </select>
-                        <span class="dropdown-icon">▼</span>
+                <div class="filter-grid">
+                    <div class="filter-section">
+                        <label for="serverCount">Number of Servers:</label>
+                        <div class="dropdown-wrapper">
+                            <select id="serverCount">
+                                <option value="10">10 Servers</option>
+                                <option value="25">50 Servers</option>
+                                <option value="100" selected>100 Servers</option>
+                                <option value="200">200 Servers</option>
+                                <option value="500">500 Servers</option>
+                                <option value="700">700 Servers</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                            <span class="dropdown-icon">▼</span>
+                        </div>
+                        <input id="customServerCount" type="number" min="1" max="700" placeholder="Enter number (1–700)" style="display: none; margin-top: 5px; width: calc(100% - 10px); box-sizing: border-box;">
+                    </div>
+
+                    <div class="filter-section">
+                        <label for="playerCountFilter">Find Servers with:</label>
+                        <div class="dropdown-wrapper">
+                            <select id="playerCountFilter">
+                                <option value="high" ${!isLowPlayerCount ? 'selected' : ''}>High Players</option>
+                                <option value="low" ${isLowPlayerCount ? 'selected' : ''}>Low Players</option>
+                            </select>
+                            <span class="dropdown-icon">▼</span>
+                        </div>
+                    </div>
+
+                    <div class="filter-section">
+                        <label for="latencyFilter">Best Ping (Official API):</label>
+                        <div class="dropdown-wrapper">
+                            <select id="latencyFilter">
+                                <option value="off" selected>Off</option>
+                                <option value="on">On</option>
+                            </select>
+                            <span class="dropdown-icon">▼</span>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="popup-footer" style="text-align: left; margin-top: 0;">
-                <p><strong>Note:</strong> If you have fast servers on, the buildman thumbnails are intentional! It's because it saves time for the search.</p>
-            </div>
+                <div class="popup-footer" style="text-align: left; margin-top: 0;">
+                    <p><strong>Note:</strong> If you have fast servers on, the buildman thumbnails are intentional! It's because it saves time for the search.</p>
+                </div>
 
-            <div style="display: flex; gap: 10px; margin-top: 15px;">
-                <button id="cancelServerCount" style="width:25%;">Cancel</button>
-                <button id="confirmServerCount" style="width: 75%;">Confirm</button>
-            </div>
-        `;
+                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                    <button id="cancelServerCount" style="width:25%;">Cancel</button>
+                    <button id="confirmServerCount" style="width: 75%;">Confirm</button>
+                </div>
+            `;
 
             document.body.appendChild(overlay);
             document.body.appendChild(popup);
@@ -17324,6 +17335,13 @@ select:hover, select:focus {
             const serverCountDropdown = popup.querySelector('#serverCount');
             const customServerCountInput = popup.querySelector('#customServerCount');
             const playerCountFilter = popup.querySelector('#playerCountFilter');
+            const latencyFilter = popup.querySelector('#latencyFilter');
+
+            latencyFilter.addEventListener('change', () => {
+                if (latencyFilter.value === 'on') {
+                    notifications('This is experimental. To speed up search even more, try to enable Compare Server Ping in Settings. Settings -> Advanced -> Enable Compare Server Ping. It Will only work when this is on.','info','','20000');}
+            });
+
             const confirmButton = popup.querySelector('#confirmServerCount');
             const cancelButton = popup.querySelector('#cancelServerCount');
 
@@ -17351,7 +17369,12 @@ select:hover, select:focus {
                 const playerCountPreference = playerCountFilter.value;
                 localStorage.setItem('ROLOCATE_invertplayercount', playerCountPreference === 'low' ? 'true' : 'false');
 
-                callback(serverCount);
+                // Determine latency setting (true = on, false = off)
+                const latencyEnabledOfficialAPIForRebuildServerList = latencyFilter.value === 'on';
+
+                // Pass both server count and latency preference to the callback
+                callback(serverCount, latencyEnabledOfficialAPIForRebuildServerList);
+
                 disableFilterButton(true);
                 disableLoadMoreButton(true);
                 hidePopup();
@@ -17381,7 +17404,7 @@ select:hover, select:focus {
         description: Function to fetch public servers with rate limtiing and stuff (Server regions)
         *******************************************************/
         // WARNING: Do not republish this script. Licensed for personal use only.
-        async function fetchPublicServers(gameId, totalLimit) {
+        async function fetchPublicServers(gameId, totalLimit, bestLatencyOfficialapiFetchservers = false) {
             let servers = [];
             let cursor = null;
             let delayTime = 250; // Start with 0.25 seconds
@@ -17394,7 +17417,15 @@ select:hover, select:focus {
             ConsoleLogEnabled(`Invert player count: ${invertPlayerCount}`);
 
             while (servers.length < totalLimit) {
-                const url = `https://games.roblox.com/v1/games/${gameId}/servers/public?excludeFullGames=true&limit=100${invertPlayerCount ? '&sortOrder=1' : ''}${cursor ? `&cursor=${cursor}` : ''}`;
+                let url;
+
+                if (bestLatencyOfficialapiFetchservers) {
+                    // Use v2 API sorted by BestLatency
+                    url = `https://games.roblox.com/v2/games/${gameId}/servers/Public?sortOrder=Desc&excludeFullGames=true&orderBy=BestLatency&limit=100${invertPlayerCount ? '&sortOrder=1' : ''}${cursor ? `&cursor=${cursor}` : ''}`;
+                } else {
+                    // Use standard v1 API
+                    url = `https://games.roblox.com/v1/games/${gameId}/servers/public?excludeFullGames=true&limit=100${invertPlayerCount ? '&sortOrder=1' : ''}${cursor ? `&cursor=${cursor}` : ''}`;
+                }
 
                 pageCount++;
                 ConsoleLogEnabled(`Fetching page ${pageCount}... (Current delay: ${delayTime}ms)`);
@@ -18488,7 +18519,7 @@ select:hover, select:focus {
         name of function: rebuildServerList
         description: function to create server cards immediately and load thumbnails
         *******************************************************/
-        async function rebuildServerList(gameId, totalLimit, best_connection, quick_join = false) {
+        async function rebuildServerList(gameId, totalLimit, best_connection = false, quick_join = false, useBestLatency = false) {
             const latestPublishedVersion = await getLatestPlaceVersion(gameId);
             const serverListContainer = document.getElementById("rbx-public-game-server-item-container");
             const isJoinMode = best_connection || quick_join;
@@ -18521,7 +18552,7 @@ select:hover, select:focus {
                             notifications('No available servers found. Trying smallest servers...', 'info', '🔄', '3000');
                         }
 
-                        const servers = await fetchPublicServers(gameId, 50);
+                        const servers = await fetchPublicServers(gameId, 50, false);
                         if (servers.length === 0) {
                             notifications('No servers found for this game.', 'error', '⚠️', '3000');
                             continue;
@@ -18672,7 +18703,7 @@ select:hover, select:focus {
                 }
 
                 // thx Waivy
-                let servers = await fetchPublicServers(gameId, totalLimit);
+                let servers = await fetchPublicServers(gameId, totalLimit, useBestLatency);
 
                 if (servers.length === 0) {
                     ConsoleLogEnabled("No servers returned on first attempt, Retrying after delay");
@@ -18687,9 +18718,13 @@ select:hover, select:focus {
                             premium_message.textContent = `Retrying server fetch (attempt ${retry}/${retrycap})`;
                         }
                         ConsoleLogEnabled(`Retry attempt ${retry}/${retrycap}...`);
-                        servers = await fetchPublicServers(gameId, totalLimit);
+                        servers = await fetchPublicServers(gameId, totalLimit, useBestLatency);
                     }
                 }
+
+                // Ping caching – only used if experimental flag is on and we fetched via v2 API
+                const usePingCaching = localStorage.getItem('ROLOCATE_EXPERIMENTALPINGRELATE') === 'true';
+                const pingLocationCache = new Map(); // key: ping, value: Promise<location|null>
 
                 const totalServers = servers.length;
                 let skippedServers = 0;
@@ -18734,32 +18769,69 @@ select:hover, select:focus {
                                 return null;
                             }
 
-                            try {
-                                const location = await fetchServerDetails(gameId, serverId);
+                            let location;
 
-                                if (location.city === "Unknown") {
-                                    ConsoleLogEnabled(`Skipping server ${serverId} because location is unknown.`);
+                            // Ping caching with promise deduplication
+                            if (usePingCaching && server.ping !== undefined) {
+                                const serverPing = server.ping;
+
+                                // If we already have a promise for this ping, reuse it
+                                if (pingLocationCache.has(serverPing)) {
+                                    location = await pingLocationCache.get(serverPing);
+                                } else {
+                                    // Create a new promise and store it
+                                    const locationPromise = (async () => {
+                                        try {
+                                            const loc = await fetchServerDetails(gameId, serverId);
+                                            return loc;
+                                        } catch (error) {
+                                            if (error === 'purchase_required' || error === 'subplace_join_restriction' || error === 'banned_by_creator') {
+                                                // Re-throw so the outer batch Promise.all catches it
+                                                throw error;
+                                            }
+                                            // For other errors, return null (will be skipped later)
+                                            return null;
+                                        }
+                                    })();
+                                    pingLocationCache.set(serverPing, locationPromise);
+                                    location = await locationPromise;
+                                }
+
+                                // If location is null (previous failure), skip
+                                if (!location) {
                                     skippedServers++;
                                     return null;
                                 }
-
-                                return {
-                                    server,
-                                    location
-                                };
-                            } catch (error) {
-                                if (error === 'purchase_required') {
-                                    throw error;
-                                } else if (error === 'subplace_join_restriction') {
-                                    throw error;
-                                } else if (error === 'banned_by_creator') {
-                                    throw error;
-                                } else {
-                                    ConsoleLogEnabled(error);
-                                    skippedServers++;
-                                    return null;
+                            } else {
+                                // No ping caching – original behaviour
+                                try {
+                                    location = await fetchServerDetails(gameId, serverId);
+                                } catch (error) {
+                                    if (error === 'purchase_required') {
+                                        throw error;
+                                    } else if (error === 'subplace_join_restriction') {
+                                        throw error;
+                                    } else if (error === 'banned_by_creator') {
+                                        throw error;
+                                    } else {
+                                        ConsoleLogEnabled(error);
+                                        skippedServers++;
+                                        return null;
+                                    }
                                 }
                             }
+
+                            // Continue with checks
+                            if (location.city === "Unknown") {
+                                ConsoleLogEnabled(`Skipping server ${serverId} because location is unknown.`);
+                                skippedServers++;
+                                return null;
+                            }
+
+                            return {
+                                server,
+                                location
+                            };
                         });
 
                         const batchResults = await Promise.all(batchPromises);
@@ -18798,39 +18870,70 @@ select:hover, select:focus {
                         } = server;
 
                         let location;
-                        try {
-                            location = await fetchServerDetails(gameId, serverId);
-                        } catch (error) {
-                            if (error === 'purchase_required') {
-                                if (premium_message) {
-                                    premium_message.textContent = "Error: Cannot access server regions because you have not purchased the game.";
-                                }
-                                notifications('Error: Cannot access server regions because you have not purchased the game.', 'error', '⚠️', '15000');
-                                Loadingbar(false);
-                                return;
-                            } else if (error === 'subplace_join_restriction') {
-                                if (premium_message) {
-                                    premium_message.textContent = "Error: This game requires users to teleport to a subplace. As a result, server regions cannot be retrieved.";
-                                }
-                                notifications('Error: This game requires users to teleport to a subplace. As a result, server regions cannot be retrieved.', 'error', '⚠️', '15000');
-                                Loadingbar(false);
-                                return;
-                            } else if (error === 'banned_by_creator') {
-                                if (premium_message) {
-                                    premium_message.textContent = "Error: Cannot access server regions because the creator has banned you from the game.";
-                                }
-                                notifications('Error: Cannot access server regions because the creator has banned you from the game.', 'error', '⚠️', '15000');
-                                Loadingbar(false);
-                                return;
+
+                        // Ping caching with promise deduplication
+                        if (usePingCaching && server.ping !== undefined) {
+                            const serverPing = server.ping;
+
+                            if (pingLocationCache.has(serverPing)) {
+                                location = await pingLocationCache.get(serverPing);
                             } else {
-                                ConsoleLogEnabled(error);
-                                location = {
-                                    city: "Unknown",
-                                    country: {
-                                        name: "Unknown",
-                                        code: "??"
+                                const locationPromise = (async () => {
+                                    try {
+                                        const loc = await fetchServerDetails(gameId, serverId);
+                                        return loc;
+                                    } catch (error) {
+                                        if (error === 'purchase_required' || error === 'subplace_join_restriction' || error === 'banned_by_creator') {
+                                            throw error; // propagate to outer try-catch
+                                        }
+                                        // For other errors, return null (will be skipped)
+                                        return null;
                                     }
-                                };
+                                })();
+                                pingLocationCache.set(serverPing, locationPromise);
+                                location = await locationPromise;
+                            }
+
+                            if (!location) {
+                                skippedServers++;
+                                continue;
+                            }
+                        } else {
+                            // No ping caching – original behaviour
+                            try {
+                                location = await fetchServerDetails(gameId, serverId);
+                            } catch (error) {
+                                if (error === 'purchase_required') {
+                                    if (premium_message) {
+                                        premium_message.textContent = "Error: Cannot access server regions because you have not purchased the game.";
+                                    }
+                                    notifications('Error: Cannot access server regions because you have not purchased the game.', 'error', '⚠️', '15000');
+                                    Loadingbar(false);
+                                    return;
+                                } else if (error === 'subplace_join_restriction') {
+                                    if (premium_message) {
+                                        premium_message.textContent = "Error: This game requires users to teleport to a subplace. As a result, server regions cannot be retrieved.";
+                                    }
+                                    notifications('Error: This game requires users to teleport to a subplace. As a result, server regions cannot be retrieved.', 'error', '⚠️', '15000');
+                                    Loadingbar(false);
+                                    return;
+                                } else if (error === 'banned_by_creator') {
+                                    if (premium_message) {
+                                        premium_message.textContent = "Error: Cannot access server regions because the creator has banned you from the game.";
+                                    }
+                                    notifications('Error: Cannot access server regions because the creator has banned you from the game.', 'error', '⚠️', '15000');
+                                    Loadingbar(false);
+                                    return;
+                                } else {
+                                    ConsoleLogEnabled(error);
+                                    location = {
+                                        city: "Unknown",
+                                        country: {
+                                            name: "Unknown",
+                                            code: "??"
+                                        }
+                                    };
+                                }
                             }
                         }
 
@@ -19059,6 +19162,13 @@ select:hover, select:focus {
                                     ? `${location.placeVersion} <span style="display: inline-block; background: rgba(239, 68, 68, 0.12); color: #ef4444; font-weight: 600; font-size: 10px; padding: 3px 10px; border-radius: 6px; margin-left: 8px; text-transform: uppercase; letter-spacing: 0.8px; border: 1px solid rgba(239, 68, 68, 0.25);">OLD</span>`
                                     : location.placeVersion)
                             : 'N/A';
+                      // dont show two of the same city like singapore singapore and then show flag emoji stuff too.
+                      const isRepeatLocation = location.city.trim().toLowerCase() === location.country.name.trim().toLowerCase();
+                      const locationText = isRepeatLocation ? location.city : `${location.city}, ${location.country.name}`;
+                      // this poart of for the flag emoji
+                      const flagHtml = (location.country && location.country.code && location.country.code !== '??')
+                          ? getFlagEmoji(location.country.code).outerHTML
+                          : '';
 
                         cardItem.innerHTML = `
                         ${thumbnailsContainer.outerHTML}
@@ -19085,7 +19195,7 @@ select:hover, select:focus {
                                     </div>
                                     <hr style="margin: 6px 0; border: none; height: 1px; background: #333333;">
                                     <div style="margin-bottom: 6px; font-size: 14px; color: #888888;">
-                                        <span style="color: #e5e5e5; font-weight: 600;">Location:</span> ${location.city}, ${location.country.name}
+                                        <span style="color: #e5e5e5; font-weight: 600;">Location:</span> ${flagHtml}${locationText}
                                     </div>
                                     <hr style="margin: 6px 0; border: none; height: 1px; background: #333333;">
                                     <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
@@ -19539,12 +19649,82 @@ select:hover, select:focus {
 
         *********************************************************************************************************************************************************************************************************************************************/
         /*******************************************************
+        name of function: nearest_server_official_api
+        description: Automatically joins the nearest server with the best latency using the official roblox api.
+        *******************************************************/
+        async function nearest_server_official_api() {
+            // disable the "Load More" button and show the loading bar
+            disableFilterButton(true);
+            disableLoadMoreButton();
+
+            // get the game ID from the URL
+            const gameId = getCurrentGameId();
+
+            // retry mechanism for 429 errors
+            let retries = 3; // number of retries
+            let success = false;
+
+            while (retries > 0 && !success) {
+                try {
+                    // fetch server data
+                    const data = await new Promise((resolve, reject) => {
+                        GM_xmlhttpRequest({
+                            method: "GET",
+                            // v2 api
+                            url: `https://games.roblox.com/v2/games/${gameId}/servers/Public?cursor=&sortOrder=Desc&excludeFullGames=true&orderBy=BestLatency`,
+                            onload: function(response) {
+                                if (response.status === 429) {
+                                    reject('429: Too Many Requests');
+                                } else if (response.status >= 200 && response.status < 300) {
+                                    resolve(JSON.parse(response.responseText));
+                                } else {
+                                    reject(`HTTP error: ${response.status}`);
+                                }
+                            },
+                            onerror: function(error) {
+                                reject(error);
+                            },
+                        });
+                    });
+
+                    // Grab the first server from the sorted list instead of searching for the lowest player count
+                    if (data && data.data && data.data.length > 0) {
+                        const targetServer = data.data[0];
+
+                        // join the server
+                        JoinServer(gameId, targetServer.id);
+                        notifications(`Joining nearest server with best latency (${targetServer.playing} players).`, 'success', '🚀');
+                        success = true;
+                    } else {
+                        notifications('No available servers found.', 'error', '⚠️');
+                        break;
+                    }
+                } catch (error) {
+                    if (error === '429: Too Many Requests' && retries > 0) {
+                        ConsoleLogEnabled('Rate limited. Retrying in 10 seconds...');
+                        notifications('Rate limited. Retrying in 10 seconds...', 'warning', '⏳', '10000');
+                        await delay(10000);
+                        retries--;
+                    } else {
+                        ConsoleLogEnabled('Error fetching server data:', error);
+                        notifications('Error: Failed to fetch server data. Please try again later.', 'error', '⚠️', '5000');
+                        break;
+                    }
+                }
+            }
+            disableFilterButton(false);
+        }
+        /*********************************************************************************************************************************************************************************************************************************************
+                                                                 Functions for the 8th button. roblox borke it lmao. basically fillter code, might remove it one day
+
+        *********************************************************************************************************************************************************************************************************************************************/
+
+        /*******************************************************
         name of function: auto_join_small_server
         description: Automatically joins the smallest server
         *******************************************************/
         async function auto_join_small_server() {
             // disable the "Load More" button and show the loading bar
-            Loadingbar(true);
             disableFilterButton(true);
             disableLoadMoreButton();
 
@@ -19606,20 +19786,13 @@ select:hover, select:focus {
                     } else {
                         ConsoleLogEnabled('Error fetching server data:', error);
                         notifications('Error: Failed to fetch server data. Please try again later.', 'error', '⚠️', '5000');
-                        Loadingbar(false);
                         break;
                     }
                 }
             }
 
-            Loadingbar(false);
             disableFilterButton(false);
         }
-        /*********************************************************************************************************************************************************************************************************************************************
-                                                                 Functions for the 8th button. roblox borke it lmao. basically fillter code, might remove it one day
-
-        *********************************************************************************************************************************************************************************************************************************************/
-
 
         /*********************************************************************************************************************************************************************************************************************************************
                                                                  End of: This is all the functions for the 8 buttons
