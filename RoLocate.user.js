@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RoLocate
 // @namespace    https://oqarshi.github.io/
-// @version      47.1
+// @version      47.2
 // @description  Adds filter options to roblox server page. Alternative to paid extensions like RoPro, RoGold®, RoQol, and RoKit.
 // @author       Oqarshi
 // @match        https://www.roblox.com/*
@@ -868,9 +868,10 @@
         localStorage.removeItem('ROLOCATE_compactprivateservers');
         localStorage.removeItem('ROLOCATE_mutualfriends');
 
-        const VERSION = "V47.1", PREV_VERSION = "V47.0";
+        const VERSION = "V47.2", PREV_VERSION = "V47.1";
         const changelog = {
-            serverregions: ["🌎","Server Regions","Added more datacenters for improved region detection, Better Connection V2, and Compare Server Ping in settings.","Updated"]
+            smallbugfixes: ["🐛","Bug Fixes","Small bug fixes.","Updated"],
+            onlinestatusforuser: ["🌎","Online Status","Trusted Friends has been added as an option for changing your online status and game join status.","Updated"]
         };
 
         const cur = localStorage.getItem('version') || "V0.0";
@@ -1288,7 +1289,7 @@
             <div style="font-size: 26px; font-weight: 700; color: #f5f5f7; letter-spacing: -0.3px; line-height: 1.2; margin-top: 14px;">RoLocate</div>
 
             <div style="margin-top: 4px; margin-bottom: 24px; display: flex; flex-direction: column; align-items: center; gap: 4px;">
-                <span style="font-size: 16px; font-weight: 600; color: #d1d1d6; letter-spacing: 0.5px;">Version 47.1</span>
+                <span style="font-size: 16px; font-weight: 600; color: #d1d1d6; letter-spacing: 0.5px;">Version 47.2</span>
 
                 ${updateStatusHtml}
             </div>
@@ -6070,32 +6071,35 @@ function editremoveads () {
             return `Evening, ${name}!`;
         };
 
-        // privacy
+        // privacy this is the levels of the settings.
         const PERM = {
-            AllUsers: 4, All: 4,
-            FriendsFollowingAndFollowers: 3, Followers: 3,
-            FriendsAndFollowing: 2, Following: 2,
-            Friends: 1, NoOne: 0,
+            AllUsers: 5, All: 5,
+            FriendsFollowingAndFollowers: 4, Followers: 4,
+            FriendsAndFollowing: 3, Following: 3,
+            Friends: 2, TrustedFriends: 1, NoOne: 0,
         };
 
         const ONLINE_TO_JOIN = {
             AllUsers: 'All', FriendsFollowingAndFollowers: 'Followers',
-            FriendsAndFollowing: 'Following', Friends: 'Friends', NoOne: 'NoOne',
+            FriendsAndFollowing: 'Following', Friends: 'Friends',
+            TrustedFriends: 'TrustedFriends', NoOne: 'NoOne',
         };
 
         const ONLINE_OPTS = [
-            { label: 'Everyone',                       value: 'AllUsers' },
-            { label: 'Friends, Following & Followers', value: 'FriendsFollowingAndFollowers' },
-            { label: 'Friends & Following',            value: 'FriendsAndFollowing' },
-            { label: 'Friends',                        value: 'Friends' },
-            { label: 'No One',                         value: 'NoOne' },
+            { label: 'Everyone',                           value: 'AllUsers' },
+            { label: 'All Friends, Following & Followers', value: 'FriendsFollowingAndFollowers' },
+            { label: 'All Friends & Following',            value: 'FriendsAndFollowing' },
+            { label: 'All Friends',                        value: 'Friends' },
+            { label: 'Trusted Friends',                    value: 'TrustedFriends' },
+            { label: 'No One',                             value: 'NoOne' },
         ];
         const JOIN_OPTS = [
-            { label: 'Everyone',                       value: 'All' },
-            { label: 'Friends, Following & Followers', value: 'Followers' },
-            { label: 'Friends & Following',            value: 'Following' },
-            { label: 'Friends',                        value: 'Friends' },
-            { label: 'No One',                         value: 'NoOne' },
+            { label: 'Everyone',                           value: 'All' },
+            { label: 'All Friends, Following & Followers', value: 'Followers' },
+            { label: 'All Friends & Following',            value: 'Following' },
+            { label: 'All Friends',                        value: 'Friends' },
+            { label: 'Trusted Friends',                    value: 'TrustedFriends' },
+            { label: 'No One',                             value: 'NoOne' },
         ];
 
         const gmFetch = (url, opts = {}) => new Promise((resolve, reject) => {
@@ -10121,7 +10125,6 @@ function editremoveads () {
 
             .friend-tile-dropdown {
                 background: ${isDarkMode() ? '#1a1c23' : '#C1B19A'} !important;
-                border: 1px solid rgba(148, 163, 184, 0.2) !important;
                 border-radius: 8px !important;
                 box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
                 overflow: hidden !important;
@@ -15698,7 +15701,7 @@ function editremoveads () {
             let trailerDisableInitialized = false; // for the dumb trailer thing
             const observer = new MutationObserver((mutations, obs) => {
                 const serverListOptions = document.querySelector('.server-list-options');
-                const playButton = document.querySelector('.btn-common-play-game-lg.btn-primary-md');
+                const playButton = document.querySelector('.btn-common-play-game-lg.btn-primary-md, button[data-testid="play-button"]');
                 if (serverListOptions && !document.querySelector('.RL-filter-button') && localStorage.getItem("ROLOCATE_togglefilterserversbutton") === "true") {
 
                     ConsoleLogEnabled("Added Filter Button");
@@ -18775,9 +18778,14 @@ select:hover, select:focus {
                             if (usePingCaching && server.ping !== undefined) {
                                 const serverPing = server.ping;
 
-                                // If we already have a promise for this ping, reuse it
+                                // If we already have a promise for this ping, reuse it with some NA since we really don't know them
                                 if (pingLocationCache.has(serverPing)) {
-                                    location = await pingLocationCache.get(serverPing);
+                                    const cachedLocation = await pingLocationCache.get(serverPing);
+                                    location = cachedLocation ? {
+                                        ...cachedLocation,
+                                        placeVersion: 'N/A',
+                                        serverUptime: { days: 999999, hours: 0, minutes: 0 }
+                                    } : null;
                                 } else {
                                     // Create a new promise and store it
                                     const locationPromise = (async () => {
@@ -18875,8 +18883,14 @@ select:hover, select:focus {
                         if (usePingCaching && server.ping !== undefined) {
                             const serverPing = server.ping;
 
+                            // again we reuse it with some NA
                             if (pingLocationCache.has(serverPing)) {
-                                location = await pingLocationCache.get(serverPing);
+                                const cachedLocation = await pingLocationCache.get(serverPing);
+                                location = cachedLocation ? {
+                                    ...cachedLocation,
+                                    placeVersion: 'N/A',
+                                    serverUptime: { days: 999999, hours: 0, minutes: 0 }
+                                } : null;
                             } else {
                                 const locationPromise = (async () => {
                                     try {
