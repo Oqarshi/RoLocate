@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RoLocate
 // @namespace    https://oqarshi.github.io/
-// @version      47.2
+// @version      47.3
 // @description  Adds filter options to roblox server page. Alternative to paid extensions like RoPro, RoGold®, RoQol, and RoKit.
 // @author       Oqarshi
 // @match        https://www.roblox.com/*
@@ -868,10 +868,9 @@
         localStorage.removeItem('ROLOCATE_compactprivateservers');
         localStorage.removeItem('ROLOCATE_mutualfriends');
 
-        const VERSION = "V47.2", PREV_VERSION = "V47.1";
+        const VERSION = "V47.3", PREV_VERSION = "V47.2";
         const changelog = {
-            smallbugfixes: ["🐛","Bug Fixes","Small bug fixes.","Updated"],
-            onlinestatusforuser: ["🌎","Online Status","Trusted Friends has been added as an option for changing your online status and game join status.","Updated"]
+            smallbugfixes: ["🐛","Bug Fixes","Fixed settings button not showing up.","Fixed"],
         };
 
         const cur = localStorage.getItem('version') || "V0.0";
@@ -1289,7 +1288,7 @@
             <div style="font-size: 26px; font-weight: 700; color: #f5f5f7; letter-spacing: -0.3px; line-height: 1.2; margin-top: 14px;">RoLocate</div>
 
             <div style="margin-top: 4px; margin-bottom: 24px; display: flex; flex-direction: column; align-items: center; gap: 4px;">
-                <span style="font-size: 16px; font-weight: 600; color: #d1d1d6; letter-spacing: 0.5px;">Version 47.2</span>
+                <span style="font-size: 16px; font-weight: 600; color: #d1d1d6; letter-spacing: 0.5px;">Version 47.3</span>
 
                 ${updateStatusHtml}
             </div>
@@ -3710,7 +3709,7 @@ li a.about-link:hover::after {
     *******************************************************/
     function AddSettingsButton() {
         const base64Logo = window.Base64Images.logo;
-        const navbarGroup = document.querySelector('.nav.navbar-right.rbx-navbar-icon-group');
+        const navbarGroup = document.querySelector('ul.rbx-navbar-icon-group, .nav.navbar-right.rbx-navbar-icon-group'); // new one. we check both since might not have updated for some users
         if (!navbarGroup || document.getElementById('custom-logo')) return;
 
         const li = document.createElement('li');
