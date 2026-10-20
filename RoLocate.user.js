@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RoLocate
 // @namespace    https://oqarshi.github.io/
-// @version      47.3
+// @version      47.4
 // @description  Adds filter options to roblox server page. Alternative to paid extensions like RoPro, RoGold®, RoQol, and RoKit.
 // @author       Oqarshi
 // @match        https://www.roblox.com/*
@@ -70,6 +70,9 @@
 (function() {
     'use strict';
 
+    // save code idk where to put thsi so its here i guess
+    const VERIFIED_BADGE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 28 28" fill="none"><g clip-path="url(#a)"><path fill="#06f" d="m5.888 0 22.11 5.924-5.924 22.11-22.11-5.924z"/><path fill-rule="evenodd" clip-rule="evenodd" d="m20.543 8.75.006.007a1.54 1.54 0 0 1 0 2.176l-8.732 8.732-4.367-4.368a1.54 1.54 0 0 1 0-2.175l.007-.007a1.54 1.54 0 0 1 2.176 0l2.184 2.185 6.55-6.55a1.54 1.54 0 0 1 2.176 0" fill="#fff"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h28v28H0z"/></clipPath></defs></svg>';
+
     //---------------XSS Attack Vectors Protection--------------------
     // ik this should be fixed, but roblox engineers are not the brightest...
     // so extra protection i guess.
@@ -94,13 +97,6 @@
     // for hex value colors. currenlty used in custombackgrounds function
     const sanitizeColor = (color) => {
         return /^#[0-9A-Fa-f]{6}$/.test(color) ? color : '#ffffff';
-    };
-
-    // for css values like rgb and rgba. currenlty used in custombackgrounds function
-    const sanitizeCssValue = (value) => {
-        const rgbaPattern = /^rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*[\d.]+\s*)?\)$/;
-        const hexPattern = /^#[0-9A-Fa-f]{3,6}$/;
-        return (rgbaPattern.test(value) || hexPattern.test(value)) ? value : 'rgba(40,40,40,0.85)';
     };
     //----------------------------------------------------------
 
@@ -867,11 +863,17 @@
     function Update_Popup() {
         localStorage.removeItem('ROLOCATE_compactprivateservers');
         localStorage.removeItem('ROLOCATE_mutualfriends');
+        localStorage.removeItem('ROLOCATE_bettergamestats');
 
-        const VERSION = "V47.3", PREV_VERSION = "V47.2";
+        const VERSION = "V47.4", PREV_VERSION = "V47.3";
         const changelog = {
-            smallbugfixes: ["🐛","Bug Fixes","Fixed settings button not showing up.","Fixed"],
+            bestconnectserverhop: ["🚀","Best Connect V2","You can now Shift + Click Serverhop button and in Smartsearch to join via Best Connect V2.","Updated"],
+            smallerrobloxsidebar: ["⚙️","Smaller Roblox Sidebar","The sidebar can now be made smaller to the users liking with a little notch on the right side of the roblox sidebar.","Updated"],
+            profilecss: ["🎨","Profile Info","CSS improvements for better profile info.","Updated"],
+            settingsbutton: ["🐛","Bug Fixes","Better Profile Info is now fixed after Roblox website updated.","Fixed"],
+            bettergamestates: ["🗑️","Better Game Stats","Better Game States in settings, since it didn't do anything.","Removed"]
         };
+
 
         const cur = localStorage.getItem('version') || "V0.0";
         if (cur === VERSION) return;
@@ -1198,17 +1200,17 @@
         custombackgrounds: false, btrobloxfix: false, mobilemode: false,
         joinconfirmation: true, forcedarkmode: false, responsivegamecards: true,
         bettergamestats: false, smallerrobloxsidebar: false, detailedpreview: false,
-        EXPERIMENTALPINGRELATE: false
+        EXPERIMENTALPINGRELATE: false, determineifsubplace: true,
     };
 
     // presets in settings
     const presetConfigurations = {
       default: { name: "Default", settings: {} },
-      mobilesettings: { name: "Mobile Settings", settings: {"loadbetterprofileinfo": false, "disablechat": true, "smartjoinpopup": false, "mobilemode": true, "responsivegamecards": false} },
+      mobilesettings: { name: "Mobile Settings", settings: {"loadbetterprofileinfo": false, "disablechat": true, "smartjoinpopup": false, "mobilemode": true, "responsivegamecards": false, "determineifsubplace": false, "joinconfirmation": false, "betterfriends": false, "quicklaunchgames": false} },
       optimalsettings: { name: "Dev Settings", settings: {"enableLogs": true, "disablechat": true, "bettergamestats": true, "smallerrobloxsidebar": true, "detailedpreview": true, "EXPERIMENTALPINGRELATE": true} },
-      serverfiltersonly: { name: "Server Filters Only", settings: {"removeads": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "disabletrailer": false, "loadbetterprofileinfo": false, "smartsearch": false, "quicklaunchgames": false, "betterfriends": false, "restoreclassicterms": false, "responsivegamecards": false} },
-      smartsearchonly: { name: "Smart Search Only", settings: {"removeads": false, "togglefilterserversbutton": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "fastservers": false, "disabletrailer": false, "loadbetterprofileinfo": false, "quicklaunchgames": false, "smartjoinpopup": false, "betterfriends": false, "restoreclassicterms": false, "joinconfirmation": false, "responsivegamecards": false} },
-      disablerolocate: { name: "Disable RoLocate", settings: {"removeads": false, "togglefilterserversbutton": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "fastservers": false, "disabletrailer": false, "loadbetterprofileinfo": false, "smartsearch": false, "quicklaunchgames": false, "smartjoinpopup": false, "betterfriends": false, "restoreclassicterms": false, "joinconfirmation": false, "responsivegamecards": false} },
+      serverfiltersonly: { name: "Server Filters Only", settings: {"removeads": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "disabletrailer": false, "loadbetterprofileinfo": false, "smartsearch": false, "quicklaunchgames": false, "betterfriends": false, "restoreclassicterms": false, "responsivegamecards": false, "determineifsubplace": false} },
+      smartsearchonly: { name: "Smart Search Only", settings: {"removeads": false, "togglefilterserversbutton": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "fastservers": false, "disabletrailer": false, "loadbetterprofileinfo": false, "quicklaunchgames": false, "smartjoinpopup": false, "betterfriends": false, "restoreclassicterms": false, "joinconfirmation": false, "responsivegamecards": false, "determineifsubplace": false} },
+      disablerolocate: { name: "Disable RoLocate", settings: {"removeads": false, "togglefilterserversbutton": false, "toggleserverhopbutton": false, "ShowOldGreeting": false, "togglerecentserverbutton": false, "fastservers": false, "disabletrailer": false, "loadbetterprofileinfo": false, "smartsearch": false, "quicklaunchgames": false, "smartjoinpopup": false, "betterfriends": false, "restoreclassicterms": false, "joinconfirmation": false, "responsivegamecards": false, "determineifsubplace": false} },
     };
 
     function initializeLocalStorage() {
@@ -1288,7 +1290,7 @@
             <div style="font-size: 26px; font-weight: 700; color: #f5f5f7; letter-spacing: -0.3px; line-height: 1.2; margin-top: 14px;">RoLocate</div>
 
             <div style="margin-top: 4px; margin-bottom: 24px; display: flex; flex-direction: column; align-items: center; gap: 4px;">
-                <span style="font-size: 16px; font-weight: 600; color: #d1d1d6; letter-spacing: 0.5px;">Version 47.3</span>
+                <span style="font-size: 16px; font-weight: 600; color: #d1d1d6; letter-spacing: 0.5px;">Version 47.4</span>
 
                 ${updateStatusHtml}
             </div>
@@ -1877,12 +1879,12 @@
             <h3 class="grayish-center">⚙️ General Tab</h3>
             <ul>
                 <li id="help-Smart Search"><strong>SmartSearch:</strong> <span>Improves the Roblox website’s search bar by enabling instant searches for games, users, and groups.</span></li>
+                <li id="help-Determine If Subplace"><strong>Determine Subplaces:</strong> <span>Shows if a "game" or "place" is a subplace of another game. Shows under the maturity label.</span></li>
                 <li id="help-Auto Server Regions"><strong>Auto Server Regions:</strong> <span>Replaces Roblox's 8 default servers with at least 8 servers, providing detailed info such as location and ping.</span></li>
                 <li id="help-Fast Server Search"><strong>Fast Server Search:</strong> <span>Boosts server search speed up to 10x (experimental). Replaces player thumbnails with Builderman/Roblox icons to bypass rate limits.</span></li>
                 <li id="help-Invert Player Count"><strong>Invert Player Count:</strong> <span>For server regions: shows low-player servers when enabled, high-player servers when disabled. You can also control this on the Roblox server popup.</span></li>
                 <li id="help-Recent Servers"><strong>Recent Servers:</strong> <span>Shows the most recent servers you have joined in the past 3 days.</span></li>
                 <li id="help-Join Confirmation"><strong>Join Confirmation:</strong> <span>Shows a popup when the user is trying to join a server/game when the user is already in a game.</span></li>
-                <li id="help-Better Game Stats"><strong>Better Game Stats:</strong> <span>Does nothing for now. Maybe will add something in the future.</span></li>
             </ul>
 
             <div class="section-separator"></div>
@@ -1896,7 +1898,7 @@
                 <li id="help-Restore Classic Terms"><strong>Restore Classic Terms:</strong> <span>Reverts corporate buzzwords Roblox has added. Example: “Connections” becomes “Friends”. May not be translated into all languages yet.</span></li>
                 <li id="help-Better Private Servers"><strong>Better Private Servers:</strong> <span>Compacts private servers on game pages, so that they do not take up so much space.</span></li>
                 <li id="help-Responsive Game Cards"><strong>Responsive Game Cards:</strong> <span>Makes game cards on the website more responsive when hovering over them.</span></li>
-                <li id="help-Smaller Roblox Sidebar"><strong>Smaller Roblox Sidebar:</strong> <span>Shrinks/compacts the Roblox Side Bar to its original size before the new roblox sidebar update.</span></li>
+                <li id="help-Smaller Roblox Sidebar"><strong>Smaller Roblox Sidebar:</strong> <span>Adds a notch on the right side of the Roblox sidebar for users to change its size to their liking.</span></li>
                 <li id="help-Backgrounds"><strong>Backgrounds:</strong> <span>Allows you to change the background of your roblox page and customize the colors of other stuff on the page. Still very experimental as there could be UI and storage issues.</span></li>
             </ul>
 
@@ -1949,6 +1951,16 @@
         </label>
 
         <label class="toggle-slider new_label">
+            <input type="checkbox" id="determineifsubplace">
+            <span class="slider"></span>
+            Determine Subplaces
+            <span class="new">New
+                <span class="tooltip">Just Released/Updated</span>
+            </span>
+            <span class="help-icon" data-help="Determine If Subplace">?</span>
+        </label>
+
+        <label class="toggle-slider">
             <input type="checkbox" id="AutoRunServerRegions">
             <span class="slider"></span>
             Auto Server Regions
@@ -1956,13 +1968,10 @@
             <span class="help-icon" data-help="Auto Server Regions">?</span>
         </label>
 
-        <label class="toggle-slider experiment_label">
+        <label class="toggle-slider">
             <input type="checkbox" id="fastservers">
             <span class="slider"></span>
             Fast Server Search
-            <span class="experimental">EXP
-                <span class="tooltip">Experimental: Still being tested</span>
-            </span>
             <span class="help-icon" data-help="Fast Server Search">?</span>
         </label>
 
@@ -1980,25 +1989,11 @@
             <span class="help-icon" data-help="Recent Servers">?</span>
         </label>
 
-        <label class="toggle-slider new_label">
+        <label class="toggle-slider">
             <input type="checkbox" id="joinconfirmation">
             <span class="slider"></span>
             Join Confirmation
-            <span class="new">New
-                <span class="tooltip">Just Released/Updated</span>
-            </span>
             <span class="help-icon" data-help="Join Confirmation">?</span>
-        </label>
-
-        <label class="toggle-slider new_label">
-            <input type="checkbox" id="bettergamestats">
-            <span class="slider"></span>
-            Better Game Stats
-            <span class="new">New
-                <span class="tooltip">Just Released/Updated</span>
-            </span>
-            <button id="edit-bettergamestats-btn" class="edit-button" type="button" style="display: none;">Edit</button>
-            <span class="help-icon" data-help="Better Game Stats">?</span>
         </label>
     </div>
 `;
@@ -3095,12 +3090,6 @@ li a.about-link:hover::after {
                             buttonId: "edit-autoserverregionsbutton-btn",
                             storageKey: "ROLOCATE_AutoRunServerRegions"
                         });
-
-                        bindToggle({
-                            checkboxId: "bettergamestats",
-                            buttonId: "edit-bettergamestats-btn",
-                            storageKey: "ROLOCATE_bettergamestats"
-                        });
                     }
 
                     if (section === "appearance") {
@@ -3236,7 +3225,6 @@ li a.about-link:hover::after {
             ["Invert Player Count", "general", "invertplayercount", "invert player count"],
             ["Recent Servers", "general", "togglerecentserverbutton", "recent server history"],
             ["Join Confirmation", "general", "joinconfirmation", "join confirm popup ingame"],
-            ["Better Game Stats", "general", "bettergamestats", "better game stats statistics revenue money gamepass"],
             ["Disable Trailer Autoplay", "appearance", "disabletrailer", "trailer autoplay video"],
             ["Smart Join Popup", "appearance", "smartjoinpopup", "join popup smart region"],
             ["Remove All Roblox Ads", "appearance", "removeads", "ads remove block ad blocker recommend recommended standout sitin for you recomend"],
@@ -3509,13 +3497,6 @@ li a.about-link:hover::after {
         if (editServerfilters) {
             editServerfilters.addEventListener("click", () => {
                 editserverregions();
-            });
-        }
-
-        const editbettergamestats = document.getElementById("edit-bettergamestats-btn");
-        if (editbettergamestats) {
-            editbettergamestats.addEventListener("click", () => {
-                bettergamestats_settings();
             });
         }
 
@@ -6872,8 +6853,6 @@ function editremoveads () {
 
         let avatarCache = {};
 
-        // api helpers
-
         const postJson = (url, body) => new Promise(resolve => {
             GM_xmlhttpRequest({
                 method: "POST", url,
@@ -6910,9 +6889,13 @@ function editremoveads () {
 
         const formatAccountAge = created => {
             const days = Math.floor((Date.now() - new Date(created)) / 86400000);
-            if (days < 30)  return `${days} day${days !== 1 ? 's' : ''}`;
-            if (days < 365) { const months = Math.floor(days / 30); return `${months} month${months !== 1 ? 's' : ''}`; }
-            const years = Math.floor(days / 365), months = Math.floor((days % 365) / 30);
+            if (days < 30) return `${days} day${days !== 1 ? 's' : ''}`;
+            if (days < 365) {
+                const months = Math.floor(days / 30);
+                return `${months} month${months !== 1 ? 's' : ''}`;
+            }
+            const years = Math.floor(days / 365),
+                months = Math.floor((days % 365) / 30);
             return months ? `${years}y ${months}mo` : `${years} year${years !== 1 ? 's' : ''}`;
         };
 
@@ -6921,350 +6904,339 @@ function editremoveads () {
 
         const formatNum = n => n === null || n === undefined ? '—' : Number(n).toLocaleString();
 
-        // styles
 
         const injectStyles = () => {
             if (document.querySelector('#bpi-styles')) return;
             const styleEl = document.createElement('style');
             styleEl.id = 'bpi-styles';
             styleEl.textContent = `
-          /* section wrapper */
-          .bpi-section {
-              margin: 24px 0;
-              display: flex;
-              flex-direction: column;
-              gap: 12px;
-          }
-          .bpi-section-label {
-              font: 700 11px "Source Sans Pro", Arial, sans-serif;
-              text-transform: uppercase;
-              letter-spacing: 1px;
-              color: #6b6b75;
-          }
+.bpi-section {
+    margin: 24px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.bpi-section-label {
+    font: 700 11px "Source Sans Pro", Arial, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #6b6b75;
+}
 
-          /* stat card row */
-          .bpi-stat-row {
-              display: grid;
-              grid-template-columns: repeat(6, 1fr);
-              gap: 10px;
-          }
-          @media (max-width: 700px) { .bpi-stat-row { grid-template-columns: repeat(3, 1fr); } }
-          @media (max-width: 420px) { .bpi-stat-row { grid-template-columns: repeat(2, 1fr); } }
+.bpi-stat-row {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 10px;
+}
+@media (max-width: 700px) { .bpi-stat-row { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 420px) { .bpi-stat-row { grid-template-columns: repeat(2, 1fr); } }
 
-          /* individual stat card */
-          .bpi-card {
-              background: #1a1a1e;
-              border: 1px solid #26262c;
-              border-radius: 20px;
-              padding: 14px 16px;
-              display: flex;
-              flex-direction: column;
-              gap: 5px;
-              animation: bpi-up .25s cubic-bezier(.34,1.56,.64,1) backwards;
-              transition: border-color .15s, background .15s, transform .15s, box-shadow .15s;
-              min-width: 0;
-          }
-          .bpi-card.clickable {
-              cursor: pointer;
-          }
-          .bpi-card.clickable:hover {
-              border-color: #3a5ea3;
-              background: #1d1d23;
-              transform: translateY(-2px) scale(1.03);
-              box-shadow: 0 6px 18px rgba(58, 94, 163, .18);
-          }
-          .bpi-card.clickable:active {
-              transform: scale(.97);
-              box-shadow: none;
-          }
-          .bpi-card-label {
-              font: 600 10px "Source Sans Pro", Arial, sans-serif;
-              text-transform: uppercase;
-              letter-spacing: .7px;
-              color: #6b6b75;
-              white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
-          }
-          .bpi-card-value {
-              font: 700 17px "Source Sans Pro", Arial, sans-serif;
-              color: #e8e8ec;
-              white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
-              line-height: 1.3;
-          }
+.bpi-card {
+    background: #1a1a1e;
+    border: 1px solid #26262c;
+    border-radius: 20px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    animation: bpi-up .3s cubic-bezier(0.2, 0, 0.2, 1) backwards;
+    transition: background 0.2s ease, transform 0.2s cubic-bezier(0.2, 0, 0.2, 1), box-shadow 0.2s ease;
+    min-width: 0;
+}
+.bpi-card.clickable {
+    cursor: pointer;
+}
+.bpi-card.clickable:hover {
+    background: #222228;
+    transform: scale(1.015);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+.bpi-card.clickable:active {
+    transform: scale(0.98);
+    box-shadow: none;
+}
+.bpi-card-label {
+    font: 600 10px "Source Sans Pro", Arial, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: .7px;
+    color: #6b6b75;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.bpi-card-value {
+    font: 700 17px "Source Sans Pro", Arial, sans-serif;
+    color: #e8e8ec;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+}
 
-          /* mutual friends block */
-          .bpi-mf-block {
-              background: #1a1a1e;
-              border: 1px solid #26262c;
-              border-radius: 20px;
-              overflow: hidden;
-              animation: bpi-up .25s cubic-bezier(.34,1.56,.64,1) backwards;
-              animation-delay: .1s;
-          }
-          .bpi-mf-header {
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-              padding: 12px 16px;
-              border-bottom: 1px solid #26262c;
-          }
-          .bpi-mf-title {
-              font: 700 13px "Source Sans Pro", Arial, sans-serif;
-              text-transform: uppercase;
-              letter-spacing: 1px;
-              color: #6b6b75;
-          }
-          .bpi-mf-count {
-              font: 700 13px "Source Sans Pro", Arial, sans-serif;
-              color: #3a5ea3;
-              background: rgba(58, 94, 163, .12);
-              border-radius: 999px;
-              padding: 2px 10px;
-          }
+.bpi-mf-block {
+    background: #1a1a1e;
+    border: 1px solid #26262c;
+    border-radius: 20px;
+    overflow: hidden;
+    animation: bpi-up .3s cubic-bezier(0.2, 0, 0.2, 1) backwards;
+    animation-delay: .1s;
+}
+.bpi-mf-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #26262c;
+}
+.bpi-mf-title {
+    font: 700 13px "Source Sans Pro", Arial, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #6b6b75;
+}
+.bpi-mf-count {
+    font: 700 13px "Source Sans Pro", Arial, sans-serif;
+    color: #e8e8ec;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 999px;
+    padding: 2px 10px;
+}
 
-          .bpi-mf-grid {
-              display: grid;
-              grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-              gap: 1px;
-              background: #26262c;
-          }
-          .bpi-mf-row {
-              display: flex;
-              align-items: center;
-              gap: 10px;
-              padding: 13px 16px;
-              background: #1a1a1e;
-              cursor: pointer;
-              transition: background .12s, transform .12s;
-              animation: bpi-fade .18s ease-out backwards;
-          }
-          .bpi-mf-row:hover {
-              background: #1d1d23;
-          }
-          .bpi-mf-row:active {
-              transform: scale(.97);
-          }
+.bpi-mf-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1px;
+    background: #26262c;
+}
+.bpi-mf-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 16px;
+    background: #1a1a1e;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s cubic-bezier(0.2, 0, 0.2, 1);
+    animation: bpi-fade .2s ease-out backwards;
+}
+.bpi-mf-row:hover {
+    background: #222228;
+    transform: scale(1.01);
+}
+.bpi-mf-row:active {
+    transform: scale(0.98);
+}
 
-          .bpi-mf-thumb {
-              width: 38px;
-              height: 38px;
-              border-radius: 50%;
-              border: 2px solid #26262c;
-              overflow: hidden;
-              flex-shrink: 0;
-              background: #121215;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-size: 15px;
-              transition: border-color .15s, transform .15s;
-          }
-          .bpi-mf-row:hover .bpi-mf-thumb {
-              border-color: #3a5ea3;
-              transform: scale(1.08);
-          }
-          .bpi-mf-thumb img {
-              width: 100%;
-              height: 100%;
-              object-fit: cover;
-          }
-          .bpi-mf-info {
-              overflow: hidden;
-              flex: 1;
-          }
-          .bpi-mf-name {
-              font: 600 14px "Source Sans Pro", Arial, sans-serif;
-              color: #d8d8de;
-              white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
-          }
-          .bpi-mf-age {
-              font: 400 12px "Source Sans Pro", Arial, sans-serif;
-              color: #6b6b75;
-          }
-          .bpi-mf-arrow {
-              color: #3a5ea3;
-              font-size: 16px;
-              flex-shrink: 0;
-              transition: transform .15s;
-          }
-          .bpi-mf-row:hover .bpi-mf-arrow {
-              transform: translateX(3px);
-          }
+.bpi-mf-thumb {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 2px solid #26262c;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: #121215;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    transition: transform 0.2s cubic-bezier(0.2, 0, 0.2, 1);
+}
+.bpi-mf-row:hover .bpi-mf-thumb {
+    transform: scale(1.05);
+}
+.bpi-mf-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.bpi-mf-info {
+    overflow: hidden;
+    flex: 1;
+}
+.bpi-mf-name {
+    font: 600 14px "Source Sans Pro", Arial, sans-serif;
+    color: #d8d8de;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.bpi-mf-age {
+    font: 400 12px "Source Sans Pro", Arial, sans-serif;
+    color: #6b6b75;
+}
+.bpi-mf-arrow {
+    color: #6b6b75;
+    font-size: 16px;
+    flex-shrink: 0;
+    transition: transform 0.2s cubic-bezier(0.2, 0, 0.2, 1), color 0.2s ease;
+}
+.bpi-mf-row:hover .bpi-mf-arrow {
+    transform: translateX(2px);
+    color: #e8e8ec;
+}
 
-          /* "view all" cell */
-          .bpi-mf-viewall .bpi-mf-name { color: #3a5ea3; }
-          .bpi-mf-viewall:hover .bpi-mf-name { color: #6b9de8; }
-          .bpi-mf-viewall-icon {
-              background: #121215;
-              border: 1px solid rgba(58, 94, 163, .4);
-              border-radius: 50%;
-              color: #3a5ea3;
-              font: 700 11px "Source Sans Pro", Arial, sans-serif;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-          }
+.bpi-mf-viewall .bpi-mf-name { color: #d8d8de; }
+.bpi-mf-viewall:hover .bpi-mf-name { color: #e8e8ec; }
+.bpi-mf-viewall-icon {
+    background: #121215;
+    border: 1px solid #26262c;
+    border-radius: 50%;
+    color: #e8e8ec;
+    font: 700 11px "Source Sans Pro", Arial, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 
-          /* empty / loading states */
-          .bpi-mf-empty {
-              padding: 20px 16px;
-              color: #6b6b75;
-              font: 400 13px "Source Sans Pro", Arial, sans-serif;
-              font-style: italic;
-          }
-          .bpi-loading {
-              display: flex;
-              align-items: center;
-              gap: 8px;
-              color: #6b6b75;
-              font: 400 12px "Source Sans Pro", Arial, sans-serif;
-              padding: 4px 0;
-          }
-          .bpi-spinner {
-              width: 13px;
-              height: 13px;
-              border: 2px solid #26262c;
-              border-top-color: #3a5ea3;
-              border-radius: 50%;
-              animation: bpi-spin .7s linear infinite;
-              flex-shrink: 0;
-          }
+.bpi-mf-empty {
+    padding: 20px 16px;
+    color: #6b6b75;
+    font: 400 13px "Source Sans Pro", Arial, sans-serif;
+    font-style: italic;
+}
+.bpi-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #6b6b75;
+    font: 400 12px "Source Sans Pro", Arial, sans-serif;
+    padding: 4px 0;
+}
+.bpi-spinner {
+    width: 13px;
+    height: 13px;
+    border: 2px solid #26262c;
+    border-top-color: #9b9b9b;
+    border-radius: 50%;
+    animation: bpi-spin .7s linear infinite;
+    flex-shrink: 0;
+}
 
-          /* popup overlay */
-          .bpi-overlay {
-              position: fixed;
-              inset: 0;
-              background: rgba(0, 0, 0, .6);
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              z-index: 10000;
-              animation: bpi-fadein .15s ease-out;
-          }
-          .bpi-popup {
-              background: #1a1a1e;
-              border: 1px solid #26262c;
-              border-radius: 22px;
-              width: 90%;
-              max-width: 720px;
-              max-height: 82vh;
-              display: flex;
-              flex-direction: column;
-              overflow: hidden;
-              box-shadow: 0 16px 48px rgba(0, 0, 0, .5);
-              animation: bpi-pop .22s cubic-bezier(.34,1.45,.64,1);
-          }
-          .bpi-popup-head {
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              padding: 18px 22px;
-              border-bottom: 1px solid #26262c;
-          }
-          .bpi-popup-title {
-              color: #e8e8ec;
-              font: 700 16px "Source Sans Pro", Arial, sans-serif;
-          }
-          .bpi-popup-close {
-              background: #121215;
-              border: 1px solid #26262c;
-              color: #9b9b9b;
-              width: 30px;
-              height: 30px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              border-radius: 50%;
-              cursor: pointer;
-              font-size: 18px;
-              line-height: 1;
-              transition: border-color .12s, color .12s, transform .15s;
-          }
-          .bpi-popup-close:hover {
-              border-color: #3a5ea3;
-              color: #e8e8ec;
-              transform: rotate(90deg) scale(1.1);
-          }
-          .bpi-popup-grid {
-              padding: 16px 22px;
-              overflow-y: auto;
-              display: grid;
-              grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-              gap: 10px;
-          }
-          .bpi-popup-grid::-webkit-scrollbar { width: 4px; }
-          .bpi-popup-grid::-webkit-scrollbar-track { background: transparent; }
-          .bpi-popup-grid::-webkit-scrollbar-thumb { background: rgba(58, 94, 163, .5); border-radius: 2px; }
-          .bpi-popup-item {
-              display: flex;
-              align-items: center;
-              gap: 12px;
-              padding: 13px 14px;
-              background: #121215;
-              border: 1px solid #26262c;
-              border-radius: 16px;
-              cursor: pointer;
-              transition: border-color .12s, background .12s, transform .15s, box-shadow .15s;
-              animation: bpi-slide .15s ease-out backwards;
-          }
-          .bpi-popup-item:hover {
-              background: #1d1d23;
-              border-color: #3a5ea3;
-              transform: translateY(-2px) scale(1.02);
-              box-shadow: 0 4px 14px rgba(58, 94, 163, .15);
-          }
-          .bpi-popup-item:active {
-              transform: scale(.97);
-              box-shadow: none;
-          }
-          .bpi-popup-avatar {
-              width: 42px;
-              height: 42px;
-              border-radius: 50%;
-              border: 2px solid #26262c;
-              overflow: hidden;
-              flex-shrink: 0;
-              background: #1a1a1e;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-size: 16px;
-              transition: border-color .15s, transform .15s;
-          }
-          .bpi-popup-item:hover .bpi-popup-avatar {
-              border-color: #3a5ea3;
-              transform: scale(1.08);
-          }
-          .bpi-popup-avatar img {
-              width: 100%;
-              height: 100%;
-              object-fit: cover;
-          }
-          .bpi-popup-name {
-              font: 600 15px "Source Sans Pro", Arial, sans-serif;
-              color: #e8e8ec;
-              white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
-          }
-          .bpi-popup-meta {
-              font: 400 12px "Source Sans Pro", Arial, sans-serif;
-              color: #6b6b75;
-          }
+.bpi-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    animation: bpi-fadein .15s ease-out;
+}
+.bpi-popup {
+    background: #1a1a1e;
+    border: 1px solid #26262c;
+    border-radius: 22px;
+    width: 90%;
+    max-width: 720px;
+    max-height: 82vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, .5);
+    animation: bpi-pop .25s cubic-bezier(0.2, 0, 0.2, 1);
+}
+.bpi-popup-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 22px;
+    border-bottom: 1px solid #26262c;
+}
+.bpi-popup-title {
+    color: #e8e8ec;
+    font: 700 16px "Source Sans Pro", Arial, sans-serif;
+}
+.bpi-popup-close {
+    background: #121215;
+    border: 1px solid #26262c;
+    color: #9b9b9b;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    transition: background 0.2s ease, color 0.2s ease, transform 0.2s cubic-bezier(0.2, 0, 0.2, 1);
+}
+.bpi-popup-close:hover {
+    background: #1a1a20;
+    color: #e8e8ec;
+    transform: scale(1.05);
+}
+.bpi-popup-grid {
+    padding: 16px 22px;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+}
+.bpi-popup-grid::-webkit-scrollbar { width: 4px; }
+.bpi-popup-grid::-webkit-scrollbar-track { background: transparent; }
+.bpi-popup-grid::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 2px; }
+.bpi-popup-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 14px;
+    background: #121215;
+    border: 1px solid #26262c;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s cubic-bezier(0.2, 0, 0.2, 1), box-shadow 0.2s ease;
+    animation: bpi-slide .2s ease-out backwards;
+}
+.bpi-popup-item:hover {
+    background: #1a1a20;
+    transform: scale(1.015);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+.bpi-popup-item:active {
+    transform: scale(0.98);
+    box-shadow: none;
+}
+.bpi-popup-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 2px solid #26262c;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: #1a1a1e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: transform 0.2s cubic-bezier(0.2, 0, 0.2, 1);
+}
+.bpi-popup-item:hover .bpi-popup-avatar {
+    transform: scale(1.05);
+}
+.bpi-popup-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.bpi-popup-name {
+    font: 600 15px "Source Sans Pro", Arial, sans-serif;
+    color: #e8e8ec;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.bpi-popup-meta {
+    font: 400 12px "Source Sans Pro", Arial, sans-serif;
+    color: #6b6b75;
+}
 
-          /* keyframes */
-          @keyframes bpi-up    { from { opacity: 0; transform: translateY(8px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
-          @keyframes bpi-fade  { from { opacity: 0; }                               to { opacity: 1; } }
-          @keyframes bpi-spin  { to   { transform: rotate(360deg); } }
-          @keyframes bpi-fadein{ from { opacity: 0; }                               to { opacity: 1; } }
-          @keyframes bpi-fadeout{from { opacity: 1; }                               to { opacity: 0; } }
-          @keyframes bpi-pop   { from { opacity: 0; transform: scale(.94); }        to { opacity: 1; transform: scale(1); } }
-          @keyframes bpi-slide { from { opacity: 0; transform: translateX(-8px); }  to { opacity: 1; transform: translateX(0); } }
+@keyframes bpi-up     { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes bpi-fade   { from { opacity: 0; }                             to { opacity: 1; } }
+@keyframes bpi-spin   { to   { transform: rotate(360deg); } }
+@keyframes bpi-fadein { from { opacity: 0; }                             to { opacity: 1; } }
+@keyframes bpi-fadeout{ from { opacity: 1; }                             to { opacity: 0; } }
+@keyframes bpi-pop    { from { opacity: 0; transform: scale(0.96); }     to { opacity: 1; transform: scale(1); } }
+@keyframes bpi-slide  { from { opacity: 0; transform: translateX(-4px); }to { opacity: 1; transform: translateX(0); } }
             `;
             document.head.appendChild(styleEl);
         };
@@ -7442,7 +7414,7 @@ function editremoveads () {
             avatarCache = {};
             injectStyles();
 
-            const insertionPoint = document.querySelector('ul.profile-tabs.flex');
+            const insertionPoint = document.querySelector('div.user-profile-header');
             if (!insertionPoint) { ConsoleLogEnabled('[BPI] no insertion point'); return; }
 
             // placeholder while we load
@@ -7827,7 +7799,7 @@ function editremoveads () {
                             </button>
                             <button class="ROLOCATE_SMARTSEARCH_play-button"
                                     data-place-id="${game.rootPlaceId}"
-                                    title="Quick Join">
+                                    title="Quick Join (Shift+Click for V2)">
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                     <path d="M8 5V19L19 12L8 5Z" fill="#4CAF50"/>
                                 </svg>
@@ -7835,15 +7807,20 @@ function editremoveads () {
                         </div>
                     `}).join('');
                     setTimeout(() => {
-                        // Play button listeners
-                        document.querySelectorAll('.ROLOCATE_SMARTSEARCH_play-button').forEach(button => {
-                            button.addEventListener('click', function(e) {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                const placeId = this.getAttribute('data-place-id');
-                                window.location.href = `https://www.roblox.com/games/${placeId}#?ROLOCATE_QUICKJOIN`;
-                            });
-                        });
+                        // click for best connect v1 and shiftclick for v2
+                      document.querySelectorAll('.ROLOCATE_SMARTSEARCH_play-button').forEach(button => {
+                          button.addEventListener('click', function(e) {
+                              e.preventDefault();
+                              e.stopPropagation();
+
+                              const placeId = this.getAttribute('data-place-id');
+                              const quickJoin = e.shiftKey
+                                  ? 'ROLOCATE_QUICKJOIN_V2'
+                                  : 'ROLOCATE_QUICKJOIN';
+
+                              window.location.href = `https://www.roblox.com/games/${placeId}#?${quickJoin}`;
+                          });
+                      });
 
                         // quick Launch button listeners
                         document.querySelectorAll('.ROLOCATE_SMARTSEARCH_quicklaunch-button').forEach(button => {
@@ -8021,7 +7998,7 @@ function editremoveads () {
                                     <div class="ROLOCATE_SMARTSEARCH_universal-info">
                                         <h3 class="ROLOCATE_SMARTSEARCH_user-display-name">
                                             ${user.displayName || user.username}
-                                            ${user.hasVerifiedBadge ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 28 28" fill="none"><g clip-path="url(#a)"><path fill="#06f" d="m5.888 0 22.11 5.924-5.924 22.11-22.11-5.924z"/><path fill-rule="evenodd" clip-rule="evenodd" d="m20.543 8.75.006.007a1.54 1.54 0 0 1 0 2.176l-8.732 8.732-4.367-4.368a1.54 1.54 0 0 1 0-2.175l.007-.007a1.54 1.54 0 0 1 2.176 0l2.184 2.185 6.55-6.55a1.54 1.54 0 0 1 2.176 0" fill="#fff"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h28v28H0z"/></clipPath></defs></svg>' : ''}
+                                            ${user.hasVerifiedBadge ? VERIFIED_BADGE_SVG : ''}
                                         </h3>
                                         <p class="ROLOCATE_SMARTSEARCH_user-username">
                                             @${user.username}
@@ -8125,7 +8102,7 @@ function editremoveads () {
                                 <div class="ROLOCATE_SMARTSEARCH_universal-info">
                                     <h3 class="ROLOCATE_SMARTSEARCH_group-name">
                                         ${group.name}
-                                        ${group.hasVerifiedBadge ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 28 28" fill="none"><g clip-path="url(#a)"><path fill="#06f" d="m5.888 0 22.11 5.924-5.924 22.11-22.11-5.924z"/><path fill-rule="evenodd" clip-rule="evenodd" d="m20.543 8.75.006.007a1.54 1.54 0 0 1 0 2.176l-8.732 8.732-4.367-4.368a1.54 1.54 0 0 1 0-2.175l.007-.007a1.54 1.54 0 0 1 2.176 0l2.184 2.185 6.55-6.55a1.54 1.54 0 0 1 2.176 0" fill="#fff"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h28v28H0z"/></clipPath></defs></svg>' : ''}
+                                        ${group.hasVerifiedBadge ? VERIFIED_BADGE_SVG : ''}
                                     </h3>
                                     <p class="ROLOCATE_SMARTSEARCH_group-members">Members: ${formatNumberCount(group.memberCount)}</p>
                                     <p class="ROLOCATE_SMARTSEARCH_group-created">Created: ${formatDate(group.created)}</p>
@@ -10085,10 +10062,6 @@ function editremoveads () {
         let sharedOnlineStatusMap = {};
         let sharedFriendsDataMap = {};
 
-        // tooltip stuff, not really used much but keeping it around
-        let activeTooltip = null;
-        let tooltipHideTimeout = null;
-
         // just a bunch of class name strings so we dont have to type them out everywhere
         const CLASSES = {
             STYLES_ID: 'ROLOCATE_friend-status-styles',
@@ -11318,7 +11291,6 @@ function editremoveads () {
             if (mainObserver)              mainObserver.disconnect();
             if (bestFriendsButtonObserver) bestFriendsButtonObserver.disconnect();
             if (observerTimeout)           clearTimeout(observerTimeout);
-            removeStatusTooltip();
         };
 
         const checkForFriendsSectionExistence = () =>
@@ -11657,7 +11629,7 @@ function editremoveads () {
 
         // batching
 
-        const BATCH_SIZE     = 10; // roblox recently added this limit idk why
+        const SERVER_BATCH_SIZE = 10; // roblox recently added this limit idk why
         const BATCH_INTERVAL = 1000; // holy nerf roblox. whyyyyyyyyy
 
         if (!fetchServerDetails._queue)                   fetchServerDetails._queue = [];
@@ -11674,7 +11646,7 @@ function editremoveads () {
                     fetchServerDetails._timer = null;
                     return;
                 }
-                const batch = q.splice(0, BATCH_SIZE);
+                const batch = q.splice(0, SERVER_BATCH_SIZE);
                 ConsoleLogEnabled(`Dispatching batch of ${batch.length} requests`);
                 batch.forEach(task => task());
             }, BATCH_INTERVAL);
@@ -14208,6 +14180,10 @@ function editremoveads () {
         });
     }
 
+    /*******************************************************
+    name of function: Responsivegamecards
+    description: custom responseive game cards
+    *******************************************************/
     function Responsivegamecards() {
         if (localStorage.getItem("ROLOCATE_responsivegamecards") === "false") {
           return;
@@ -14243,58 +14219,326 @@ function editremoveads () {
         new MutationObserver(() => {}).observe(document.body, { childList: true, subtree: true });
     }
 
-
-    /*******************************************************
-     name of function: bettergamestats
-     description: removed as it was very inaccurate
-     *******************************************************/
-    function bettergamestats_settings () {
-      notifications('Estimated Revenue for games has been removed because it was very inaccurate.', 'info', '', '6000');
-    }
-
     /*******************************************************
     name of function: setSidebarMode
-    description: does sidebar stuff shinrks yea
+    description: custom sidebar size for user
     *******************************************************/
-    function setSidebarMode(mode) {
-      if (localStorage.getItem("ROLOCATE_smallerrobloxsidebar") === "false") {
-        return;
-      }
-      const sidebarContainer = document.getElementById('left-navigation-container');
-      const contentDiv = document.getElementById('content');
-      if (!sidebarContainer || !contentDiv) return;
+    function setSidebarMode() {
+        if (localStorage.getItem('ROLOCATE_smallerrobloxsidebar') === 'false') {
+            window.ROLOCATE_sidebarObserver?.disconnect();
+            window.ROLOCATE_sidebarObserver = null;
+            return;
+        }
 
-      // communits = groups
-      const isCommunities = window.location.pathname.startsWith('/communities/');
+        const sidebarWidth = Math.min(289, parseInt(localStorage.getItem('ROLOCATE_sidebar_width'), 10) || 289);
+        const sidebar = document.getElementById('left-navigation-container');
+        const content = document.getElementById('content');
+        const main = document.querySelector('main.container-main');
 
-      const ORIGINAL_WIDTH = 289;
-      const COMPACT_WIDTH = 210;
+        if (!sidebar || !content) return;
 
-      const widthContainers = sidebarContainer.querySelectorAll(
-        '.left-nav, .width-\\[289px\\], .width-\\[288px\\]'
-      );
+        const isCommunityPage = window.location.pathname.startsWith('/communities/');
+        const isNarrow = sidebarWidth < 100;
 
-      // original margin)
-      if (!isCommunities && !contentDiv.dataset.originalMarginLeft) {
-        contentDiv.dataset.originalMarginLeft =
-          parseInt(getComputedStyle(contentDiv).marginLeft, 10) || 0;
-      }
+        if (!isCommunityPage && !content.dataset.originalMarginLeft) {
+            content.dataset.originalMarginLeft =
+                parseInt(getComputedStyle(content).marginLeft, 10) || 0;
+        }
 
-      const originalMarginLeft = isCommunities ? 0 : parseInt(contentDiv.dataset.originalMarginLeft, 10);
+        const originalMarginLeft = isCommunityPage ?
+            0 :
+            parseInt(content.dataset.originalMarginLeft, 10);
 
-      // compact mode only. future might add icons
-      const targetWidth = mode === 'compact' ? COMPACT_WIDTH : ORIGINAL_WIDTH;
+        sidebar.querySelectorAll(
+            '.left-nav, .width-\\[289px\\], .width-\\[288px\\]'
+        ).forEach(sidebarItem => {
+            sidebarItem.style.width = `${sidebarWidth}px`;
+        });
 
-      // width change
-      widthContainers.forEach(el => {
-        el.style.width = `${targetWidth}px`;
-      });
+        const leftNavigation = sidebar.querySelector('.left-nav');
 
-      // bro groups are like dumb idk.
-      if (!isCommunities) {
-        const moveAmount = ORIGINAL_WIDTH - targetWidth;
-        contentDiv.style.marginLeft = `${originalMarginLeft - moveAmount}px`;
-      }
+        if (leftNavigation) {
+            leftNavigation.classList.toggle('sidebar-icons-only', isNarrow);
+
+            leftNavigation.querySelectorAll(
+                'nav li > a > span:not(:first-of-type), nav li > button > span:not(:first-of-type)'
+            ).forEach(text => {
+                text.style.display = isNarrow ? 'none' : '';
+            });
+
+            leftNavigation.querySelectorAll('.foundation-web-badge').forEach(badge => {
+                badge.style.display = isNarrow ? 'none' : '';
+            });
+
+            leftNavigation.querySelectorAll('nav li > a, nav li > button').forEach(link => {
+                if (isNarrow) {
+                    link.style.width = '48px';
+                    link.style.minWidth = '48px';
+                    link.style.justifyContent = 'center';
+                    link.style.paddingLeft = '0';
+                    link.style.paddingRight = '0';
+                    link.style.marginLeft = 'auto';
+                    link.style.marginRight = 'auto';
+                } else {
+                    link.style.width = '';
+                    link.style.minWidth = '';
+                    link.style.justifyContent = '';
+                    link.style.paddingLeft = '';
+                    link.style.paddingRight = '';
+                    link.style.marginLeft = '';
+                    link.style.marginRight = '';
+                }
+            });
+
+            const sidePadding = leftNavigation.querySelector('.padding-x-large');
+
+            if (sidePadding) {
+                sidePadding.style.paddingLeft = isNarrow ? '0' : '';
+                sidePadding.style.paddingRight = isNarrow ? '0' : '';
+            }
+        }
+
+        if (main) {
+            main.style.setProperty('margin-left', `${sidebarWidth}px`, 'important');
+            main.style.setProperty(
+                'width',
+                `calc(100% - ${sidebarWidth}px)`,
+                'important'
+            );
+            main.style.setProperty('box-sizing', 'border-box', 'important');
+        } else if (!isCommunityPage) {
+            content.style.marginLeft =
+                `${originalMarginLeft - (289 - sidebarWidth)}px`;
+        }
+
+        let dragHandle = document.getElementById('sidebar-drag-handle');
+
+        if (!dragHandle) {
+            if (!document.getElementById('sidebar-styles')) {
+                const style = document.createElement('style');
+                style.id = 'sidebar-styles';
+                style.textContent = `
+                    #sidebar-drag-handle::after {
+                        content: "Drag to resize";
+                        position: absolute;
+                        left: 20px;
+                        top: 50%;
+                        transform: translateY(-50%);
+                        background: #1a1c23;
+                        color: #fff;
+                        padding: 4px 8px;
+                        border-radius: 4px;
+                        font-size: 12px;
+                        white-space: nowrap;
+                        display: none;
+                        pointer-events: none;
+                        z-index: 1003;
+                    }
+
+                    #sidebar-drag-handle:hover::after {
+                        display: block;
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+
+            dragHandle = document.createElement('div');
+            dragHandle.id = 'sidebar-drag-handle';
+            dragHandle.innerHTML = '⋮'; // ooooo vertical elipse :)
+
+            Object.assign(dragHandle.style, {
+                position: 'fixed',
+                top: '50%',
+                transform: 'translate(-1px, -50%)',
+                width: '12px',
+                height: '60px',
+                backgroundColor: '#1a1c23',
+                cursor: 'ew-resize',
+                zIndex: '1002',
+                borderRadius: '6px',
+                transition: 'opacity 0.15s, background-color 0.2s',
+                opacity: '0',
+                pointerEvents: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--color-text-default, #555)',
+                fontSize: '18px',
+                fontWeight: 'bold',
+                userSelect: 'none'
+            });
+
+            let isDragging = false;
+
+            dragHandle.addEventListener('mousedown', (event) => {
+                isDragging = true;
+                dragHandle.dataset.dragging = 'true';
+                dragHandle.style.opacity = '1';
+                event.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (event) => {
+                if (!isDragging) return;
+
+                let newWidth = Math.max(72, Math.min(289, event.clientX));
+                localStorage.setItem('ROLOCATE_sidebar_width', newWidth);
+
+                const currentSidebar = document.getElementById('left-navigation-container');
+                const currentContent = document.getElementById('content');
+                const currentMain = document.querySelector('main.container-main');
+
+                if (currentSidebar) {
+                    currentSidebar.querySelectorAll('.left-nav, .width-\\[289px\\], .width-\\[288px\\]').forEach(element => {
+                        element.style.width = `${newWidth}px`;
+                    });
+                }
+
+                if (currentMain) {
+                    currentMain.style.setProperty('margin-left', `${newWidth}px`, 'important');
+                    currentMain.style.setProperty('width', `calc(100% - ${newWidth}px)`, 'important');
+                } else if (currentContent && !window.location.pathname.startsWith('/communities/')) {
+                    const originalMarginLeft = parseInt(currentContent.dataset.originalMarginLeft, 10) || 0;
+                    currentContent.style.marginLeft = `${originalMarginLeft - (289 - newWidth)}px`;
+                }
+
+                dragHandle.style.left = `${newWidth - 6}px`;
+
+                const activeNavigation = currentSidebar?.querySelector('.left-nav');
+                if (activeNavigation) {
+                    const isNarrow = newWidth < 100;
+                    activeNavigation.classList.toggle('sidebar-icons-only', isNarrow);
+                    activeNavigation.querySelectorAll('nav li > a > span:not(:first-of-type), nav li > button > span:not(:first-of-type)').forEach(text => text.style.display = isNarrow ? 'none' : '');
+                    activeNavigation.querySelectorAll('.foundation-web-badge').forEach(badge => badge.style.display = isNarrow ? 'none' : '');
+                    activeNavigation.querySelectorAll('nav li > a, nav li > button').forEach(link => {
+                        if (isNarrow) {
+                            link.style.width = '48px';
+                            link.style.minWidth = '48px';
+                            link.style.justifyContent = 'center';
+                            link.style.paddingLeft = '0';
+                            link.style.paddingRight = '0';
+                            link.style.marginLeft = 'auto';
+                            link.style.marginRight = 'auto';
+                        } else {
+                            link.style.width = '';
+                            link.style.minWidth = '';
+                            link.style.justifyContent = '';
+                            link.style.paddingLeft = '';
+                            link.style.paddingRight = '';
+                            link.style.marginLeft = '';
+                            link.style.marginRight = '';
+                        }
+                    });
+                    const sidePadding = activeNavigation.querySelector('.padding-x-large');
+                    if (sidePadding) {
+                        sidePadding.style.paddingLeft = isNarrow ? '0' : '';
+                        sidePadding.style.paddingRight = isNarrow ? '0' : '';
+                    }
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (isDragging) {
+                    isDragging = false;
+                    dragHandle.dataset.dragging = '';
+                    setSidebarMode(); // to put sidebar in new place. ik is bad practice but works here
+
+                    if (
+                        !document.getElementById('left-navigation-container')?.matches(':hover') &&
+                        !dragHandle.matches(':hover')
+                    ) {
+                        dragHandle.style.opacity = '0';
+                        dragHandle.style.pointerEvents = 'none';
+                    }
+                }
+            });
+
+            document.body.appendChild(dragHandle);
+        }
+
+        dragHandle.style.left = `${sidebarWidth - 6}px`;
+
+        const showDragHandle = () => {
+            dragHandle.style.opacity = '1';
+            dragHandle.style.pointerEvents = 'auto';
+        };
+
+        const hideDragHandle = () => {
+            const activeSidebar = document.getElementById('left-navigation-container');
+
+            if (
+                activeSidebar?.matches(':hover') ||
+                dragHandle.matches(':hover') ||
+                dragHandle.dataset.dragging === 'true'
+            ) return;
+
+            dragHandle.style.opacity = '0';
+            dragHandle.style.pointerEvents = 'none';
+        };
+
+        if (!dragHandle.dataset.hoverEventsAdded) {
+            dragHandle.dataset.hoverEventsAdded = 'true';
+            dragHandle.addEventListener('mouseenter', showDragHandle);
+            dragHandle.addEventListener('mouseleave', hideDragHandle);
+        }
+
+        if (!sidebar.dataset.dragHandleHoverEventsAdded) {
+            sidebar.dataset.dragHandleHoverEventsAdded = 'true';
+            sidebar.addEventListener('mouseenter', showDragHandle);
+            sidebar.addEventListener('mouseleave', hideDragHandle);
+        }
+
+        if (!window.ROLOCATE_sidebarObserver) {
+            window.ROLOCATE_sidebarObserver = new MutationObserver(() => {
+                if (localStorage.getItem('ROLOCATE_smallerrobloxsidebar') === 'false') {
+                    window.ROLOCATE_sidebarObserver.disconnect();
+                    window.ROLOCATE_sidebarObserver = null;
+                    return;
+                }
+
+                const savedWidth = Math.min(289, parseInt(localStorage.getItem('ROLOCATE_sidebar_width'), 10) || 289);
+                const currentSidebar = document.getElementById('left-navigation-container');
+
+                if (!currentSidebar) return;
+
+                let sidebarNeedsFix = false;
+
+                currentSidebar.querySelectorAll(
+                    '.left-nav, .width-\\[289px\\], .width-\\[288px\\]'
+                ).forEach(sidebarItem => {
+                    if (parseInt(sidebarItem.style.width, 10) !== savedWidth) {
+                        sidebarNeedsFix = true;
+                    }
+                });
+
+                const activeNavigation = currentSidebar.querySelector('.left-nav');
+                const isNarrow = savedWidth < 100;
+
+                if (activeNavigation) {
+                    if (isNarrow && !activeNavigation.classList.contains('sidebar-icons-only')) {
+                        sidebarNeedsFix = true;
+                    } else if (!isNarrow && activeNavigation.classList.contains('sidebar-icons-only')) {
+                        sidebarNeedsFix = true;
+                    }
+
+                    activeNavigation.querySelectorAll('.foundation-web-badge').forEach(badge => {
+                        const isHidden = getComputedStyle(badge).display === 'none';
+                        if (isNarrow && !isHidden) sidebarNeedsFix = true;
+                        if (!isNarrow && isHidden) sidebarNeedsFix = true;
+                    });
+                }
+
+                if (sidebarNeedsFix) {
+                    setSidebarMode();
+                }
+            });
+
+            window.ROLOCATE_sidebarObserver.observe(document.body, {
+                subtree: true,
+                childList: true,
+                attributes: true,
+                attributeFilter: ['class', 'style']
+            });
+        }
     }
     /*******************************************************
     name of function: getCsrfToken
@@ -14585,7 +14829,7 @@ function editremoveads () {
         showOldRobloxGreeting(); // shows old greeting
         validateManualMode(); // checks for manual mode
         qualityfilterRobloxGames(); // filters roblox game if it is on
-        setSidebarMode('compact'); // shirnk sidebar if enabled
+        setSidebarMode(); // shirnk sidebar if enabled
 
         // start observing URL changes cuase its cool
         observeURLChanges();
@@ -14605,7 +14849,6 @@ function editremoveads () {
     name of function: mobile stuff #1
     description: mobile mode thing. if mobile mode true and not in game link then show notification.
     *******************************************************/
-
     if (localStorage.ROLOCATE_mobilemode === "true" && !location.href.match(/^https:\/\/www\.roblox\.com(\/[a-z]{2})?\/games\//)) {
         const observer = new MutationObserver(() => {
             document.querySelectorAll('a[href*="/games/"]').forEach(link => {
@@ -14751,16 +14994,16 @@ function editremoveads () {
             }, 600);
         }, 3000);
     }
-
     /*******************************************************
-    The code for the random hop button and the filter button on roblox.com/games/*
+    The code for the random hop button and the filter button on roblox.com/games/* now for subplaces
     *******************************************************/
         if (
             window.location.href.includes("/games/") &&
             (
                 localStorage.getItem("ROLOCATE_togglefilterserversbutton") === "true" ||
                 localStorage.getItem("ROLOCATE_toggleserverhopbutton") === "true" ||
-                localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true"
+                localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true" ||
+                localStorage.getItem("ROLOCATE_determineifsubplace") === "true"
             )
         ) {
 
@@ -14778,8 +15021,49 @@ function editremoveads () {
         }
 
         /*******************************************************
+        name of function:determineifsubplace
+        description: determines if a place is a subplace
+        *******************************************************/
+        async function determineifsubplace() {
+            if (determineifsubplace.ran)
+              return;
+
+            determineifsubplace.ran = true;
+
+            const gameId = getCurrentGameId();
+
+            if (!gameId)
+              return;
+
+            const getPlace = id => new Promise(res => GM_xmlhttpRequest({
+                method: "GET",
+                url: "https://games.roblox.com/v1/games/multiget-place-details?placeIds=" + id,
+                onload: response => res(JSON.parse(response.responseText)[0])
+            }));
+
+            const info = await getPlace(gameId);
+
+            // If it's a subplace, fetch the root info using the same function
+            if (info && info.universeRootPlaceId != gameId) {
+                const root = await getPlace(info.universeRootPlaceId);
+
+                if (root) {
+                    const timer = setInterval(() => {
+                        const container = document.getElementById("game-age-recommendation-container");
+                        if (container) {
+                            clearInterval(timer);
+                            container.insertAdjacentHTML('afterend',
+                                `<div class="age-recommendation-title text">This is a subplace of <a href="/games/${info.universeRootPlaceId}" style="color: white; text-decoration: underline;">${root.name}</a></div>`
+                            );
+                        }
+                    }, 250);
+                }
+            }
+        }
+
+        /*******************************************************
         name of function:monitorPlayButton
-        description: for join confimation and like future updates note that it is called if the jopinconfimation or smartjoin pop in localstop4arghe is true so not check needed here
+        description: for join confimation and like future updates
         *******************************************************/
         function monitorPlayButton() {
             const button = document.querySelector('[data-testid="play-button"]');
@@ -14810,7 +15094,6 @@ function editremoveads () {
                     showLoadingOverlay(getCurrentGameId(), null, "", "", true);
                 }
 
-                // Uok so real click
                 button.click();
             }
 
@@ -15428,45 +15711,40 @@ function editremoveads () {
                 if (serverIds.length > 0) {
                     const serverRegionsPrefs = JSON.parse(localStorage.getItem('ROLOCATE_serverRegions') || '{}');
                     let attempts = 0;
-                    while (attempts < 100 && serverIds.length > 0) { // 100 genrous attempts
-                        const idx = Math.floor(Math.random() * serverIds.length);
-                        const randomServerId = serverIds[idx];
-                        ConsoleLogEnabled(`Considering server: ${randomServerId}`);
-                        try {
-                            const location = await fetchServerDetails(gameId, randomServerId);
-                            const regionKey = `${location.city}_${location.country?.code}`;
-                            if (serverRegionsPrefs[regionKey] === 'banned') {
-                                ConsoleLogEnabled(`Skipping server ${randomServerId} due to banned region ${regionKey}.`);
-                                notifications(`Skipping server ${randomServerId} due to banned region ${regionKey}.`, "info", "", "1000");
-                                // remove this one so we don't pick it again
-                                serverIds.splice(idx, 1);
-                                attempts++;
-                                continue;
-                            }
-                        } catch (e) {
-                            ConsoleLogEnabled(`Error fetching details for server ${randomServerId} during ServerHop:`, e);
-                            // remove and continue
-                            serverIds.splice(idx, 1);
+                    while (attempts < 100 && serverIds.length > 0) {
+                        // 1. Grab up to 10 random servers
+                        const batch = [];
+                        for(let i = 0; i < 10 && serverIds.length > 0; i++) {
+                            const idx = Math.floor(Math.random() * serverIds.length);
+                            batch.push(serverIds.splice(idx, 1)[0]);
                             attempts++;
-                            continue;
                         }
 
-                        // join the game instance with the selected server ID
-                        JoinServer(gameId, randomServerId);
+                        // do 10 at a time lets go
+                        const results = await Promise.allSettled(batch.map(id => fetchServerDetails(gameId, id)));
 
-                        // store the selected server ID with the time and date in localStorage
-                        const timestamp = new Date().toISOString();
-                        const newServer = {
-                            serverId: randomServerId,
-                            timestamp
-                        };
-                        validServers.push(newServer);
+                        for (let i = 0; i < batch.length; i++) {
+                            const randomServerId = batch[i];
+                            const res = results[i];
 
-                        // save the updated list of recently joined servers to localStorage
-                        localStorage.setItem(`ROLOCATE_recentServers_${gameId}`, JSON.stringify(validServers));
+                            if (res.status === 'fulfilled') {
+                                const location = res.value;
+                                const regionKey = `${location.city}_${location.country?.code}`;
 
-                        ConsoleLogEnabled(`Server ${randomServerId} stored with timestamp ${timestamp}`);
-                        return;
+                                if (serverRegionsPrefs[regionKey] !== 'banned') {
+                                    // if good one found join it
+                                    JoinServer(gameId, randomServerId);
+                                    const timestamp = new Date().toISOString();
+                                    validServers.push({ serverId: randomServerId, timestamp });
+                                    localStorage.setItem(`ROLOCATE_recentServers_${gameId}`, JSON.stringify(validServers));
+                                    ConsoleLogEnabled(`Server ${randomServerId} stored with timestamp ${timestamp}`);
+                                    return;
+                                }
+                            }
+                        }
+
+                        // if all 10 banned wait 1 sec
+                        await new Promise(r => setTimeout(r, 1000));
                     }
 
                     ConsoleLogEnabled("No unbanned servers found to join. Try to enable more regions in settings!");
@@ -15761,12 +16039,15 @@ function editremoveads () {
                         }
                     });
                 }
-                // new condition to trigger recent server logic
+
+                if (localStorage.getItem("ROLOCATE_determineifsubplace") === "true") {
+                    determineifsubplace();
+                }
+
                 if (localStorage.getItem("ROLOCATE_togglerecentserverbutton") === "true" && !document.querySelector('.recent-servers-section')) {
                     HandleRecentServers();
                 }
 
-                // new condition to trigger disable trailer logic
                 if (localStorage.getItem("ROLOCATE_disabletrailer") === "true" && !trailerDisableInitialized) {
                     disableVideoAutoplay();
                     trailerDisableInitialized = true;
@@ -15794,7 +16075,7 @@ function editremoveads () {
                 background-color: #335fff;
                 color: white;
                 border: none;
-                padding: 7.5px 12px;
+                padding: 10px 12px;
                 cursor: pointer;
                 font-weight: bold;
                 border-radius: 8px;
@@ -15807,7 +16088,7 @@ function editremoveads () {
             `;
 
                     const tooltip = document.createElement('div');
-                    tooltip.textContent = 'Join Random Server / Server Hop';
+                    tooltip.innerHTML = 'Click for Server Hop<br>Shift + Click For Best Connect V2';
                     tooltip.style.cssText = `
                         position: absolute;
                         background: rgba(51, 95, 255, 0.9);
@@ -15870,8 +16151,14 @@ function editremoveads () {
                     buttonContainer.appendChild(playButton);
                     buttonContainer.appendChild(serverHopButton);
 
-                    serverHopButton.addEventListener('click', () => {
-                        ServerHop();
+                    serverHopButton.addEventListener('click', (event) => {
+                        if (event.shiftKey) {
+                            notifications('Joining via Best Connect V2...', 'info', '', 3000);
+                            nearest_server_official_api(true); // we pass serverhop cause we dont
+                        } else {
+                            notifications('Serverhopping...', 'info', '', 3000);
+                            ServerHop();
+                        }
                     });
                 }
 
@@ -15900,44 +16187,32 @@ function editremoveads () {
             });
         }
 
-
-
-
         /*********************************************************************************************************************************************************************************************************************************************
                                                                  The End of: This is all of the functions for the filter button and the popup for the 8 buttons does not include the functions for the 8 buttons
 
         *********************************************************************************************************************************************************************************************************************************************/
 
-        // Quick join handler for smartsearch
-        if (window.location.hash === '#?ROLOCATE_QUICKJOIN') {
-            if (localStorage.ROLOCATE_smartsearch === 'true' || localStorage.ROLOCATE_quicklaunchgames === 'true') { // fixed this
+        // Quick join handler
+        if (window.location.hash.includes('ROLOCATE_QUICKJOIN') &&
+            (localStorage.ROLOCATE_smartsearch === 'true' || localStorage.ROLOCATE_quicklaunchgames === 'true')) {
 
-                const gameId = getCurrentGameId();
+            const gameId = getCurrentGameId();
+            if (!gameId) return notifications('Error: Failed to extract gameid.', 'error', '⚠️', 5000);
 
-                if (!gameId) {
-                    ConsoleLogEnabled('Could not extract gameId from URL');
-                    notifications('Error: Failed to extract gameid. Please try again later.', 'error', '⚠️', 5000);
-                    return;
-                }
-
-                rebuildServerList(gameId, 50, false, true);
-
-
-                // clean up the URL
-                history.replaceState(null, null, window.location.pathname + window.location.search);
+            if (window.location.hash.includes('QUICKJOIN_V2')) {
+                nearest_server_official_api(true);
             } else {
-                ConsoleLogEnabled('[RoLocate] Quick Join detected but smartsearch is disabled');
+                rebuildServerList(gameId, 50, false, true);
             }
+
+            // Clean up the URL
+            history.replaceState(null, null, window.location.pathname + window.location.search);
         }
-
-
 
         /*********************************************************************************************************************************************************************************************************************************************
                                                                  Functions for the 1st button
 
         *********************************************************************************************************************************************************************************************************************************************/
-
-
         /*******************************************************
         name of function: smallest_servers
         description: Fetches the smallest servers, disables the "Load More" button, shows a loading bar, and recreates the server cards.
@@ -17123,15 +17398,6 @@ select:hover, select:focus {
             return container;
         }
 
-
-        /*******************************************************
-        name of function: delay
-        description: custom delay also known as sleep function in js cause this language sucks and doesent have a default built-in sleep.
-        *******************************************************/
-        function delay(ms) {
-            return new Promise(resolve => setTimeout(resolve, ms));
-        }
-
         /*******************************************************
          * name of function: createServerCountPopup
          * description: Creates the first time popup and allows user to pick the amount of servers they want.
@@ -17264,7 +17530,6 @@ select:hover, select:focus {
                     transform: translateY(0);
                 }
 
-                /* Ensure buttons are touch-friendly on mobile */
                 @media (max-width: 600px) {
                     button {
                         padding: 12px;
@@ -17745,26 +18010,24 @@ select:hover, select:focus {
                 return iconMap[type] || '';
             };
 
-            // function to get country code from country name
-            const getCountryCode = (countryName) => {
-                // name to code name 2 letter name yea daskdha
-                const countryCodeMap = {
-                    'Australia': 'AU',
-                    'Brazil': 'BR',
-                    'Germany': 'DE',
-                    'France': 'FR',
-                    'United Kingdom': 'GB',
-                    'Hong Kong': 'HK',
-                    'India': 'IN',
-                    'Japan': 'JP',
-                    'Netherlands': 'NL',
-                    'Poland': 'PL',
-                    'Singapore': 'SG',
-                    'United States': 'US',
-                    'Ireland': 'IE'
-                };
+            // my bad chud
+            const countryCodeMap = {
+                'Australia': 'AU',
+                'Brazil': 'BR',
+                'Germany': 'DE',
+                'France': 'FR',
+                'United Kingdom': 'GB',
+                'Hong Kong': 'HK',
+                'India': 'IN',
+                'Japan': 'JP',
+                'Netherlands': 'NL',
+                'Poland': 'PL',
+                'Singapore': 'SG',
+                'United States': 'US',
+                'Ireland': 'IE'
+            };
 
-                // Return the country code or the first two letters of the country name as fallback
+            const getCountryCode = (countryName) => {
                 return countryCodeMap[countryName] || countryName.substring(0, 2).toUpperCase();
             };
 
@@ -19665,10 +19928,12 @@ select:hover, select:focus {
         name of function: nearest_server_official_api
         description: Automatically joins the nearest server with the best latency using the official roblox api.
         *******************************************************/
-        async function nearest_server_official_api() {
+        async function nearest_server_official_api(serverhop) {
             // disable the "Load More" button and show the loading bar
-            disableFilterButton(true);
-            disableLoadMoreButton();
+            if (!serverhop) {
+                disableFilterButton(true);
+                disableLoadMoreButton();
+            }
 
             // get the game ID from the URL
             const gameId = getCurrentGameId();
@@ -19725,7 +19990,9 @@ select:hover, select:focus {
                     }
                 }
             }
-            disableFilterButton(false);
+          if (!serverhop) {
+              disableFilterButton(false);
+          }
         }
         /*********************************************************************************************************************************************************************************************************************************************
                                                                  Functions for the 8th button. roblox borke it lmao. basically fillter code, might remove it one day
